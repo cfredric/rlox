@@ -1,5 +1,5 @@
 use std::io::{self, BufRead};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use structopt::StructOpt;
 
 mod chunk;
@@ -26,7 +26,7 @@ fn main() -> io::Result<()> {
     }
 }
 
-fn run_file(path: &PathBuf) {
+fn run_file(path: &Path) {
     let source = match std::fs::read_to_string(path) {
         Ok(source) => source,
         Err(_) => todo!(),

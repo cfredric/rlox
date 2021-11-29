@@ -104,6 +104,6 @@ pub fn interpret(chunk: &Chunk) -> InterpretResult {
 }
 
 pub fn interpret_source(source: &str) -> InterpretResult {
-    crate::compiler::compile(&source);
+    crate::compiler::compile(source);
     InterpretResult::Ok
 }
