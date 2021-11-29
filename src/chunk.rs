@@ -1,5 +1,6 @@
 use crate::value::Value;
 
+#[derive(Copy, Clone)]
 pub enum OpCode {
     Constant(usize),
     Return,
@@ -12,8 +13,8 @@ impl OpCode {
 }
 
 pub struct Chunk {
-    code: Vec<OpCode>,
-    constants: Vec<Value>,
+    pub code: Vec<OpCode>,
+    pub constants: Vec<Value>,
     lines: Vec<usize>,
 }
 

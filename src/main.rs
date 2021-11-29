@@ -1,6 +1,7 @@
 mod chunk;
 mod common;
 mod value;
+mod vm;
 
 use value::Value;
 
@@ -11,4 +12,6 @@ fn main() {
     chunk.write_chunk(chunk::OpCode::Constant(constant), 123);
     chunk.write_chunk(chunk::OpCode::Return, 123);
     chunk.disassemble_chunk("test chunk");
+
+    vm::interpret(&chunk);
 }
