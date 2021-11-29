@@ -9,8 +9,8 @@ pub struct VM<'a> {
 
 pub enum InterpretResult {
     Ok,
-    _CompileError,
-    _RuntimeError,
+    CompileError,
+    RuntimeError,
 }
 
 fn add(a: f64, b: f64) -> f64 {
@@ -101,4 +101,9 @@ impl<'a> VM<'a> {
 pub fn interpret(chunk: &Chunk) -> InterpretResult {
     let mut vm = VM::new(chunk);
     vm.run()
+}
+
+pub fn interpret_source(source: &str) -> InterpretResult {
+    crate::compiler::compile(&source);
+    InterpretResult::Ok
 }

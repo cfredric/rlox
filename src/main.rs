@@ -1,29 +1,54 @@
+use std::io::{self, BufRead};
+use std::path::PathBuf;
+use structopt::StructOpt;
+
 mod chunk;
 mod common;
+mod compiler;
 mod value;
 mod vm;
 
-use value::Value;
+#[derive(StructOpt, Debug)]
+struct Opt {
+    #[structopt(name = "PATH", parse(from_os_str))]
+    path: Option<PathBuf>,
+}
 
-fn main() {
-    let mut chunk = chunk::Chunk::new();
+fn main() -> io::Result<()> {
+    let opt = Opt::from_args();
 
-    let constant = chunk.add_constant(Value::Double(1.2));
-    chunk.write_chunk(chunk::OpCode::Constant(constant), 123);
+    match opt.path {
+        Some(path) => {
+            run_file(&path);
+            Ok(())
+        }
+        None => repl(),
+    }
+}
 
-    let constant = chunk.add_constant(Value::Double(3.4));
-    chunk.write_chunk(chunk::OpCode::Constant(constant), 123);
+fn run_file(path: &PathBuf) {
+    let source = match std::fs::read_to_string(path) {
+        Ok(source) => source,
+        Err(_) => todo!(),
+    };
+    let result = vm::interpret_source(&source);
 
-    chunk.write_chunk(chunk::OpCode::Add, 123);
+    match result {
+        vm::InterpretResult::Ok => {}
+        vm::InterpretResult::CompileError => std::process::exit(65),
+        vm::InterpretResult::RuntimeError => std::process::exit(70),
+    }
+}
 
-    let constant = chunk.add_constant(Value::Double(5.6));
-    chunk.write_chunk(chunk::OpCode::Constant(constant), 123);
+fn repl() -> io::Result<()> {
+    let mut buffer = String::new();
+    let stdin = std::io::stdin();
+    let mut handle = stdin.lock();
 
-    chunk.write_chunk(chunk::OpCode::Divide, 123);
+    loop {
+        print!("> ");
+        handle.read_line(&mut buffer)?;
 
-    chunk.write_chunk(chunk::OpCode::Negate, 123);
-    chunk.write_chunk(chunk::OpCode::Return, 123);
-    chunk.disassemble_chunk("test chunk");
-
-    vm::interpret(&chunk);
+        vm::interpret_source(&buffer);
+    }
 }
