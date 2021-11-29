@@ -1,1 +1,1 @@
-pub const debug_trace_execution: bool = true;
+pub const DEBUG_TRACE_EXECUTION: bool = true;
