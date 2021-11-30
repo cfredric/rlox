@@ -27,7 +27,6 @@ impl<'a> Scanner<'a> {
 
         let c = self.advance();
         if c.is_alphabetic() {
-            // dbg!(c);
             return self.identifier();
         }
         if c.is_digit(10) {
