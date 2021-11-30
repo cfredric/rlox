@@ -52,7 +52,7 @@ impl<'a> Parser<'a> {
             return;
         }
 
-        self.error(message);
+        self.error_at_current(message);
     }
 
     fn error_at_current(&mut self, message: &str) {
