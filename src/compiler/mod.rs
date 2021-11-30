@@ -1,14 +1,15 @@
 mod scanner;
 
 pub fn compile(source: &str) -> Option<crate::chunk::Chunk> {
-    let mut parser = Parser::new(scanner::Scanner::new(source));
+    let mut compiler = Compiler::new(scanner::Scanner::new(source));
 
-    parser.parse()
+    compiler.compile()
 }
 
+use crate::chunk::{Chunk, OpCode};
 use scanner::{Token, TokenType};
 
-struct Parser<'a> {
+struct Compiler<'a> {
     scanner: scanner::Scanner<'a>,
     current: Token<'a>,
     previous: Token<'a>,
@@ -16,9 +17,9 @@ struct Parser<'a> {
     panic_mode: bool,
 }
 
-impl<'a> Parser<'a> {
+impl<'a> Compiler<'a> {
     fn new(scanner: scanner::Scanner<'a>) -> Self {
-        Parser {
+        Self {
             scanner,
             current: Token::default(),
             previous: Token::default(),
@@ -27,7 +28,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse(&mut self) -> Option<crate::chunk::Chunk> {
+    fn compile(&mut self) -> Option<crate::chunk::Chunk> {
         self.advance();
         self.expression();
 
@@ -53,6 +54,19 @@ impl<'a> Parser<'a> {
         }
 
         self.error_at_current(message);
+    }
+
+    fn emit_opcode(&mut self, opcode: OpCode) {
+        let chunk = self.current_chunk_mut();
+        self.write_chunk(chunk, opcode, self.previous.line);
+    }
+
+    fn current_chunk_mut(&mut self) -> &'a mut Chunk {
+        todo!()
+    }
+
+    fn write_chunk(&mut self, chunk: &mut Chunk, opcode: OpCode, line: usize) {
+        todo!()
     }
 
     fn error_at_current(&mut self, message: &str) {
