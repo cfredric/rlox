@@ -98,12 +98,12 @@ impl<'a> VM<'a> {
     }
 }
 
-pub fn interpret(chunk: &Chunk) -> InterpretResult {
-    let mut vm = VM::new(chunk);
-    vm.run()
-}
+pub fn interpret(source: &str) -> InterpretResult {
+    let chunk = match crate::compiler::compile(source) {
+        Some(chunk) => chunk,
+        None => return InterpretResult::CompileError,
+    };
 
-pub fn interpret_source(source: &str) -> InterpretResult {
-    crate::compiler::compile(source);
-    InterpretResult::Ok
+    let mut vm = VM::new(&chunk);
+    vm.run()
 }

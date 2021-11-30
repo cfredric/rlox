@@ -14,7 +14,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn scan_token(&mut self) -> Token {
+    pub fn scan_token(&mut self) -> Token<'a> {
         use TokenType::*;
         self.skip_whitespace();
 
@@ -105,18 +105,18 @@ impl<'a> Scanner<'a> {
         self.source[self.current + 1] as char
     }
 
-    fn make_token(&self, ty: TokenType) -> Token {
+    fn make_token(&self, ty: TokenType) -> Token<'a> {
         Token {
             ty,
-            lexeme: self.source[0..self.current].to_vec(),
+            lexeme: std::str::from_utf8(&self.source[0..self.current]).unwrap(),
             line: self.line,
         }
     }
 
-    fn error_token(&self, message: &str) -> Token {
+    fn error_token<'s: 'a>(&self, message: &'s str) -> Token<'a> {
         Token {
             ty: TokenType::Error,
-            lexeme: message.as_bytes().to_vec(),
+            lexeme: message,
             line: self.line,
         }
     }
@@ -148,7 +148,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn identifier(&mut self) -> Token {
+    fn identifier(&mut self) -> Token<'a> {
         while self.peek().is_alphabetic() || self.peek().is_digit(10) {
             self.advance();
         }
@@ -156,7 +156,7 @@ impl<'a> Scanner<'a> {
         self.make_token(ty)
     }
 
-    fn number(&mut self) -> Token {
+    fn number(&mut self) -> Token<'a> {
         while self.peek().is_digit(10) {
             self.advance();
         }
@@ -170,7 +170,7 @@ impl<'a> Scanner<'a> {
         self.make_token(TokenType::Number)
     }
 
-    fn string(&mut self) -> Token {
+    fn string(&mut self) -> Token<'a> {
         while self.peek() != '"' && !self.is_at_end() {
             if self.peek() == '\n' {
                 self.line += 1;
@@ -211,14 +211,14 @@ impl<'a> Scanner<'a> {
     }
 }
 
-#[derive(Debug)]
-pub struct Token {
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Token<'a> {
     pub ty: TokenType,
-    pub lexeme: Vec<u8>,
+    pub lexeme: &'a str,
     pub line: usize,
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Copy, Clone)]
 pub enum TokenType {
     LeftParen,
     RightParen,
@@ -264,4 +264,10 @@ pub enum TokenType {
 
     Error,
     Eof,
+}
+
+impl Default for TokenType {
+    fn default() -> Self {
+        TokenType::Eof
+    }
 }

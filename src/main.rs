@@ -31,7 +31,7 @@ fn run_file(path: &Path) {
         Ok(source) => source,
         Err(_) => todo!(),
     };
-    let result = vm::interpret_source(&source);
+    let result = vm::interpret(&source);
 
     match result {
         vm::InterpretResult::Ok => {}
@@ -49,6 +49,6 @@ fn repl() -> io::Result<()> {
         print!("> ");
         handle.read_line(&mut buffer)?;
 
-        vm::interpret_source(&buffer);
+        vm::interpret(&buffer);
     }
 }
