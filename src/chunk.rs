@@ -17,6 +17,7 @@ impl OpCode {
     }
 }
 
+#[derive(Default)]
 pub struct Chunk {
     pub code: Vec<OpCode>,
     pub constants: Vec<Value>,

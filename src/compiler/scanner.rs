@@ -1,11 +1,11 @@
-pub struct Scanner<'a> {
-    source: &'a [u8],
+pub struct Scanner<'source> {
+    source: &'source [u8],
     current: usize,
     line: usize,
 }
 
-impl<'a> Scanner<'a> {
-    pub fn new(source: &'a str) -> Self {
+impl<'source> Scanner<'source> {
+    pub fn new(source: &'source str) -> Self {
         Scanner {
             source: source.as_bytes(),
             // Starts at 0. The next byte to be consumed.
@@ -14,7 +14,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn scan_token(&mut self) -> Token<'a> {
+    pub fn scan_token(&mut self) -> Token<'source> {
         use TokenType::*;
         self.skip_whitespace();
 
@@ -104,7 +104,7 @@ impl<'a> Scanner<'a> {
         self.source[self.current + 1] as char
     }
 
-    fn make_token(&self, ty: TokenType) -> Token<'a> {
+    fn make_token(&self, ty: TokenType) -> Token<'source> {
         Token {
             ty,
             lexeme: std::str::from_utf8(&self.source[0..self.current]).unwrap(),
@@ -112,7 +112,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn error_token<'s: 'a>(&self, message: &'s str) -> Token<'a> {
+    fn error_token<'s: 'source>(&self, message: &'s str) -> Token<'source> {
         Token {
             ty: TokenType::Error,
             lexeme: message,
@@ -147,7 +147,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn identifier(&mut self) -> Token<'a> {
+    fn identifier(&mut self) -> Token<'source> {
         while self.peek().is_alphabetic() || self.peek().is_digit(10) {
             self.advance();
         }
@@ -155,7 +155,7 @@ impl<'a> Scanner<'a> {
         self.make_token(ty)
     }
 
-    fn number(&mut self) -> Token<'a> {
+    fn number(&mut self) -> Token<'source> {
         while self.peek().is_digit(10) {
             self.advance();
         }
@@ -169,7 +169,7 @@ impl<'a> Scanner<'a> {
         self.make_token(TokenType::Number)
     }
 
-    fn string(&mut self) -> Token<'a> {
+    fn string(&mut self) -> Token<'source> {
         while self.peek() != '"' && !self.is_at_end() {
             if self.peek() == '\n' {
                 self.line += 1;
@@ -217,7 +217,7 @@ pub struct Token<'a> {
     pub line: usize,
 }
 
-#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+#[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
 pub enum TokenType {
     LeftParen,
     RightParen,

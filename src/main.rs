@@ -1,4 +1,4 @@
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 use structopt::StructOpt;
 
@@ -47,8 +47,10 @@ fn repl() -> io::Result<()> {
 
     loop {
         print!("> ");
+        std::io::stdout().flush()?;
         handle.read_line(&mut buffer)?;
 
         vm::interpret(&buffer);
+        buffer.clear();
     }
 }
