@@ -25,13 +25,6 @@ pub struct Chunk {
 }
 
 impl Chunk {
-    pub fn new() -> Self {
-        Self {
-            code: Vec::new(),
-            constants: Vec::new(),
-            lines: Vec::new(),
-        }
-    }
     pub fn write_chunk(&mut self, op: OpCode, line: usize) {
         self.code.push(op);
         self.lines.push(line);
