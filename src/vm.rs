@@ -26,6 +26,24 @@ fn div(a: f64, b: f64) -> f64 {
     a / b
 }
 
+macro_rules! binary_op {
+    ($self:ident, $op:ident, $value_type:ident) => {{
+        let b = $self.pop();
+        let a = $self.pop();
+        match (a, b) {
+            (Value::Double(ad), Value::Double(bd)) => {
+                $self.push($value_type($op(ad, bd)));
+            }
+            _ => {
+                $self.runtime_error("Operands must be numbers.");
+                $self.push(a);
+                $self.push(b);
+                return InterpretResult::RuntimeError;
+            }
+        }
+    }};
+}
+
 impl<'a> VM<'a> {
     pub fn new(chunk: &'a Chunk) -> Self {
         VM {
@@ -54,17 +72,11 @@ impl<'a> VM<'a> {
         self.stack.pop().unwrap()
     }
 
-    fn binary_op<F>(&mut self, op: F)
-    where
-        F: Fn(f64, f64) -> f64,
-    {
-        let b = self.pop();
-        let a = self.pop();
-        match (a, b) {
-            (Value::Double(ad), Value::Double(bd)) => {
-                self.push(Value::Double(op(ad, bd)));
-            }
-        }
+    fn runtime_error(&mut self, message: &str) {
+        eprintln!("{}", message);
+        let instruction = self.ip - 1;
+        let line = self.chunk.lines[instruction];
+        eprintln!("[line {}] in script", line)
     }
 
     fn run(&mut self) -> InterpretResult {
@@ -77,6 +89,7 @@ impl<'a> VM<'a> {
                 println!();
                 self.chunk.disassemble_instruction(self.ip);
             }
+            use crate::value::*;
             match &self.read_byte() {
                 OpCode::Constant(offset) => {
                     let constant = self.read_constant(*offset);
@@ -88,11 +101,21 @@ impl<'a> VM<'a> {
                 }
                 OpCode::Negate => match self.pop() {
                     Value::Double(d) => self.push(Value::Double(-d)),
+                    _ => {
+                        self.runtime_error("Operand must be a number.");
+                        return InterpretResult::RuntimeError;
+                    }
                 },
-                OpCode::Add => self.binary_op(add),
-                OpCode::Subtract => self.binary_op(sub),
-                OpCode::Multiply => self.binary_op(mul),
-                OpCode::Divide => self.binary_op(div),
+                OpCode::Add => binary_op!(self, add, double),
+                OpCode::Subtract => binary_op!(self, sub, double),
+                OpCode::Multiply => binary_op!(self, mul, double),
+                OpCode::Divide => binary_op!(self, div, double),
+                OpCode::Nil => self.push(Value::Nil),
+                OpCode::Bool(b) => self.push(Value::Bool(*b)),
+                OpCode::Not => {
+                    let falsey = self.pop().is_falsey();
+                    self.push(Value::Bool(falsey));
+                }
             }
         }
     }

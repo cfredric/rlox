@@ -98,6 +98,7 @@ impl<'source> Compiler<'source> {
         self.parse_precedence(Precedence::Unary);
         match op_ty {
             TokenType::Minus => self.emit_opcode(OpCode::Negate),
+            TokenType::Bang => self.emit_opcode(OpCode::Not),
             _ => unreachable!(),
         }
     }
@@ -113,6 +114,15 @@ impl<'source> Compiler<'source> {
             TokenType::Star => self.emit_opcode(OpCode::Multiply),
             TokenType::Slash => self.emit_opcode(OpCode::Divide),
             _ => {}
+        }
+    }
+
+    fn literal(&mut self) {
+        match self.previous.ty {
+            TokenType::False => self.emit_opcode(OpCode::Bool(false)),
+            TokenType::Nil => self.emit_opcode(OpCode::Nil),
+            TokenType::True => self.emit_opcode(OpCode::Bool(true)),
+            _ => unreachable!(),
         }
     }
 
@@ -186,11 +196,20 @@ lazy_static! {
             TokenType::LeftParen,
             Rule::new(Some(|c| c.grouping()), None, Precedence::None)
         ),
-        empty(TokenType::RightParen),
-        empty(TokenType::LeftBrace),
-        empty(TokenType::RightBrace),
-        empty(TokenType::Comma),
-        empty(TokenType::Dot),
+        (
+            TokenType::RightParen,
+            Rule::new(None, None, Precedence::None)
+        ),
+        (
+            TokenType::LeftBrace,
+            Rule::new(None, None, Precedence::None)
+        ),
+        (
+            TokenType::RightBrace,
+            Rule::new(None, None, Precedence::None)
+        ),
+        (TokenType::Comma, Rule::new(None, None, Precedence::None)),
+        (TokenType::Dot, Rule::new(None, None, Precedence::None)),
         (
             TokenType::Minus,
             Rule::new(Some(|c| c.unary()), Some(|c| c.binary()), Precedence::Term)
@@ -199,7 +218,10 @@ lazy_static! {
             TokenType::Plus,
             Rule::new(None, Some(|c| c.binary()), Precedence::Term)
         ),
-        empty(TokenType::Semicolon),
+        (
+            TokenType::Semicolon,
+            Rule::new(None, None, Precedence::None)
+        ),
         (
             TokenType::Slash,
             Rule::new(None, Some(|c| c.binary()), Precedence::Factor)
@@ -208,45 +230,69 @@ lazy_static! {
             TokenType::Star,
             Rule::new(None, Some(|c| c.binary()), Precedence::Factor)
         ),
-        empty(TokenType::Bang),
-        empty(TokenType::BangEqual),
-        empty(TokenType::Equal),
-        empty(TokenType::EqualEqual),
-        empty(TokenType::Greater),
-        empty(TokenType::GreaterEqual),
-        empty(TokenType::Less),
-        empty(TokenType::LessEqual),
-        empty(TokenType::Identifier),
-        empty(TokenType::String),
+        (
+            TokenType::Bang,
+            Rule::new(Some(|c| c.unary()), None, Precedence::None)
+        ),
+        (
+            TokenType::BangEqual,
+            Rule::new(None, None, Precedence::None)
+        ),
+        (TokenType::Equal, Rule::new(None, None, Precedence::None)),
+        (
+            TokenType::EqualEqual,
+            Rule::new(None, None, Precedence::None)
+        ),
+        (TokenType::Greater, Rule::new(None, None, Precedence::None)),
+        (
+            TokenType::GreaterEqual,
+            Rule::new(None, None, Precedence::None)
+        ),
+        (TokenType::Less, Rule::new(None, None, Precedence::None)),
+        (
+            TokenType::LessEqual,
+            Rule::new(None, None, Precedence::None)
+        ),
+        (
+            TokenType::Identifier,
+            Rule::new(None, None, Precedence::None)
+        ),
+        (TokenType::String, Rule::new(None, None, Precedence::None)),
         (
             TokenType::Number,
             Rule::new(Some(|c| c.number()), None, Precedence::None)
         ),
-        empty(TokenType::And),
-        empty(TokenType::Class),
-        empty(TokenType::Else),
-        empty(TokenType::False),
-        empty(TokenType::For),
-        empty(TokenType::If),
-        empty(TokenType::Nil),
-        empty(TokenType::Or),
-        empty(TokenType::Print),
-        empty(TokenType::Return),
-        empty(TokenType::Super),
-        empty(TokenType::This),
-        empty(TokenType::Var),
-        empty(TokenType::While),
-        empty(TokenType::Error),
-        empty(TokenType::Eof),
+        (TokenType::And, Rule::new(None, None, Precedence::None)),
+        (TokenType::Class, Rule::new(None, None, Precedence::None)),
+        (TokenType::Else, Rule::new(None, None, Precedence::None)),
+        (
+            TokenType::False,
+            Rule::new(Some(|c| c.literal()), None, Precedence::None)
+        ),
+        (TokenType::For, Rule::new(None, None, Precedence::None)),
+        (TokenType::If, Rule::new(None, None, Precedence::None)),
+        (
+            TokenType::Nil,
+            Rule::new(Some(|c| c.literal()), None, Precedence::None)
+        ),
+        (TokenType::Or, Rule::new(None, None, Precedence::None)),
+        (TokenType::Print, Rule::new(None, None, Precedence::None)),
+        (TokenType::Return, Rule::new(None, None, Precedence::None)),
+        (TokenType::Super, Rule::new(None, None, Precedence::None)),
+        (TokenType::This, Rule::new(None, None, Precedence::None)),
+        (
+            TokenType::True,
+            Rule::new(Some(|c| c.literal()), None, Precedence::None)
+        ),
+        (TokenType::Var, Rule::new(None, None, Precedence::None)),
+        (TokenType::While, Rule::new(None, None, Precedence::None)),
+        (TokenType::Error, Rule::new(None, None, Precedence::None)),
+        (TokenType::Eof, Rule::new(None, None, Precedence::None)),
     ]);
 }
 
 fn get_rule(ty: TokenType) -> &'static Rule {
     &RULES[&ty]
-}
-
-fn empty(ty: TokenType) -> (TokenType, Rule) {
-    (ty, Rule::new(None, None, Precedence::None))
 }
 
 #[derive(PartialOrd, Ord, Eq, PartialEq)]

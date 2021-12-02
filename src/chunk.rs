@@ -3,10 +3,13 @@ use crate::value::Value;
 #[derive(Copy, Clone)]
 pub enum OpCode {
     Constant(usize),
+    Nil,
+    Bool(bool),
     Add,
     Subtract,
     Multiply,
     Divide,
+    Not,
     Negate,
     Return,
 }
@@ -21,7 +24,7 @@ impl OpCode {
 pub struct Chunk {
     pub code: Vec<OpCode>,
     pub constants: Vec<Value>,
-    lines: Vec<usize>,
+    pub lines: Vec<usize>,
 }
 
 impl Chunk {
@@ -60,6 +63,11 @@ impl Chunk {
             OpCode::Subtract => op.simple_instruction("OP_SUBTRACT", offset),
             OpCode::Multiply => op.simple_instruction("OP_MULTIPLY", offset),
             OpCode::Divide => op.simple_instruction("OP_DIVIDE", offset),
+            OpCode::Nil => op.simple_instruction("OP_NIL", offset),
+            OpCode::Bool(b) => {
+                op.simple_instruction(if *b { "OP_TRUE" } else { "OP_FALSE" }, offset)
+            }
+            OpCode::Not => op.simple_instruction("OP_NOT", offset),
         }
     }
 
