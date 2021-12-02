@@ -50,7 +50,12 @@ fn repl() -> io::Result<()> {
         std::io::stdout().flush()?;
         handle.read_line(&mut buffer)?;
 
-        vm::interpret(&buffer);
+        if buffer.is_empty() {
+            return Ok(());
+        }
+        if buffer != "\n" {
+            vm::interpret(&buffer);
+        }
         buffer.clear();
     }
 }
