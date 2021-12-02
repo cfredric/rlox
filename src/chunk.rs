@@ -5,6 +5,9 @@ pub enum OpCode {
     Constant(usize),
     Nil,
     Bool(bool),
+    Equal,
+    Greater,
+    Less,
     Add,
     Subtract,
     Multiply,
@@ -68,6 +71,9 @@ impl Chunk {
                 op.simple_instruction(if *b { "OP_TRUE" } else { "OP_FALSE" }, offset)
             }
             OpCode::Not => op.simple_instruction("OP_NOT", offset),
+            OpCode::Equal => op.simple_instruction("OP_EQUAL", offset),
+            OpCode::Greater => op.simple_instruction("OP_GREATER", offset),
+            OpCode::Less => op.simple_instruction("OP_LESS", offset),
         }
     }
 

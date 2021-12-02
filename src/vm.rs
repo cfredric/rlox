@@ -25,6 +25,12 @@ fn mul(a: f64, b: f64) -> f64 {
 fn div(a: f64, b: f64) -> f64 {
     a / b
 }
+fn gt(a: f64, b: f64) -> bool {
+    a > b
+}
+fn lt(a: f64, b: f64) -> bool {
+    a < b
+}
 
 macro_rules! binary_op {
     ($self:ident, $op:ident, $value_type:ident) => {{
@@ -116,6 +122,13 @@ impl<'a> VM<'a> {
                     let falsey = self.pop().is_falsey();
                     self.push(Value::Bool(falsey));
                 }
+                OpCode::Equal => {
+                    let b = self.pop();
+                    let a = self.pop();
+                    self.push(Value::Bool(Value::equal(a, b)));
+                }
+                OpCode::Greater => binary_op!(self, gt, vbool),
+                OpCode::Less => binary_op!(self, lt, vbool),
             }
         }
     }

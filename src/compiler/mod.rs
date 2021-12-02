@@ -67,6 +67,11 @@ impl<'source> Compiler<'source> {
         self.error_at_current(message);
     }
 
+    fn emit_opcodes(&mut self, a: OpCode, b: OpCode) {
+        self.emit_opcode(a);
+        self.emit_opcode(b);
+    }
+
     fn emit_opcode(&mut self, opcode: OpCode) {
         let line = self.previous.line;
         self.current_chunk_mut().write_chunk(opcode, line);
@@ -106,6 +111,12 @@ impl<'source> Compiler<'source> {
         self.parse_precedence(rule.precedence.plus_one());
 
         match ty {
+            TokenType::BangEqual => self.emit_opcodes(OpCode::Equal, OpCode::Not),
+            TokenType::EqualEqual => self.emit_opcode(OpCode::Equal),
+            TokenType::Greater => self.emit_opcode(OpCode::Equal),
+            TokenType::GreaterEqual => self.emit_opcodes(OpCode::Not, OpCode::Less),
+            TokenType::Less => self.emit_opcode(OpCode::Less),
+            TokenType::LessEqual => self.emit_opcodes(OpCode::Not, OpCode::Greater),
             TokenType::Plus => self.emit_opcode(OpCode::Add),
             TokenType::Minus => self.emit_opcode(OpCode::Subtract),
             TokenType::Star => self.emit_opcode(OpCode::Multiply),
@@ -200,13 +211,13 @@ fn get_rule(ty: TokenType) -> Rule {
         TokenType::Slash => Rule::new(None, Some(|c| c.binary()), Precedence::Factor),
         TokenType::Star => Rule::new(None, Some(|c| c.binary()), Precedence::Factor),
         TokenType::Bang => Rule::new(Some(|c| c.unary()), None, Precedence::None),
-        TokenType::BangEqual => Rule::new(None, None, Precedence::None),
+        TokenType::BangEqual => Rule::new(None, Some(|c| c.binary()), Precedence::Equality),
         TokenType::Equal => Rule::new(None, None, Precedence::None),
-        TokenType::EqualEqual => Rule::new(None, None, Precedence::None),
-        TokenType::Greater => Rule::new(None, None, Precedence::None),
-        TokenType::GreaterEqual => Rule::new(None, None, Precedence::None),
-        TokenType::Less => Rule::new(None, None, Precedence::None),
-        TokenType::LessEqual => Rule::new(None, None, Precedence::None),
+        TokenType::EqualEqual => Rule::new(None, Some(|c| c.binary()), Precedence::Equality),
+        TokenType::Greater => Rule::new(None, Some(|c| c.binary()), Precedence::Comparison),
+        TokenType::GreaterEqual => Rule::new(None, Some(|c| c.binary()), Precedence::Comparison),
+        TokenType::Less => Rule::new(None, Some(|c| c.binary()), Precedence::Comparison),
+        TokenType::LessEqual => Rule::new(None, Some(|c| c.binary()), Precedence::Comparison),
         TokenType::Identifier => Rule::new(None, None, Precedence::None),
         TokenType::String => Rule::new(None, None, Precedence::None),
         TokenType::Number => Rule::new(Some(|c| c.number()), None, Precedence::None),
