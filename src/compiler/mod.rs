@@ -1,6 +1,3 @@
-use lazy_static::lazy_static;
-use std::collections::HashMap;
-
 mod scanner;
 
 pub fn compile(source: &str) -> Option<crate::chunk::Chunk> {
@@ -189,110 +186,49 @@ impl<'source> Compiler<'source> {
     }
 }
 
-// TODO: extract this to a giant match statement instead of a hashmap.
-lazy_static! {
-    static ref RULES: HashMap<TokenType, Rule> = HashMap::from([
-        (
-            TokenType::LeftParen,
-            Rule::new(Some(|c| c.grouping()), None, Precedence::None)
-        ),
-        (
-            TokenType::RightParen,
-            Rule::new(None, None, Precedence::None)
-        ),
-        (
-            TokenType::LeftBrace,
-            Rule::new(None, None, Precedence::None)
-        ),
-        (
-            TokenType::RightBrace,
-            Rule::new(None, None, Precedence::None)
-        ),
-        (TokenType::Comma, Rule::new(None, None, Precedence::None)),
-        (TokenType::Dot, Rule::new(None, None, Precedence::None)),
-        (
-            TokenType::Minus,
-            Rule::new(Some(|c| c.unary()), Some(|c| c.binary()), Precedence::Term)
-        ),
-        (
-            TokenType::Plus,
-            Rule::new(None, Some(|c| c.binary()), Precedence::Term)
-        ),
-        (
-            TokenType::Semicolon,
-            Rule::new(None, None, Precedence::None)
-        ),
-        (
-            TokenType::Slash,
-            Rule::new(None, Some(|c| c.binary()), Precedence::Factor)
-        ),
-        (
-            TokenType::Star,
-            Rule::new(None, Some(|c| c.binary()), Precedence::Factor)
-        ),
-        (
-            TokenType::Bang,
-            Rule::new(Some(|c| c.unary()), None, Precedence::None)
-        ),
-        (
-            TokenType::BangEqual,
-            Rule::new(None, None, Precedence::None)
-        ),
-        (TokenType::Equal, Rule::new(None, None, Precedence::None)),
-        (
-            TokenType::EqualEqual,
-            Rule::new(None, None, Precedence::None)
-        ),
-        (TokenType::Greater, Rule::new(None, None, Precedence::None)),
-        (
-            TokenType::GreaterEqual,
-            Rule::new(None, None, Precedence::None)
-        ),
-        (TokenType::Less, Rule::new(None, None, Precedence::None)),
-        (
-            TokenType::LessEqual,
-            Rule::new(None, None, Precedence::None)
-        ),
-        (
-            TokenType::Identifier,
-            Rule::new(None, None, Precedence::None)
-        ),
-        (TokenType::String, Rule::new(None, None, Precedence::None)),
-        (
-            TokenType::Number,
-            Rule::new(Some(|c| c.number()), None, Precedence::None)
-        ),
-        (TokenType::And, Rule::new(None, None, Precedence::None)),
-        (TokenType::Class, Rule::new(None, None, Precedence::None)),
-        (TokenType::Else, Rule::new(None, None, Precedence::None)),
-        (
-            TokenType::False,
-            Rule::new(Some(|c| c.literal()), None, Precedence::None)
-        ),
-        (TokenType::For, Rule::new(None, None, Precedence::None)),
-        (TokenType::If, Rule::new(None, None, Precedence::None)),
-        (
-            TokenType::Nil,
-            Rule::new(Some(|c| c.literal()), None, Precedence::None)
-        ),
-        (TokenType::Or, Rule::new(None, None, Precedence::None)),
-        (TokenType::Print, Rule::new(None, None, Precedence::None)),
-        (TokenType::Return, Rule::new(None, None, Precedence::None)),
-        (TokenType::Super, Rule::new(None, None, Precedence::None)),
-        (TokenType::This, Rule::new(None, None, Precedence::None)),
-        (
-            TokenType::True,
-            Rule::new(Some(|c| c.literal()), None, Precedence::None)
-        ),
-        (TokenType::Var, Rule::new(None, None, Precedence::None)),
-        (TokenType::While, Rule::new(None, None, Precedence::None)),
-        (TokenType::Error, Rule::new(None, None, Precedence::None)),
-        (TokenType::Eof, Rule::new(None, None, Precedence::None)),
-    ]);
-}
-
-fn get_rule(ty: TokenType) -> &'static Rule {
-    &RULES[&ty]
+fn get_rule(ty: TokenType) -> Rule {
+    match ty {
+        TokenType::LeftParen => Rule::new(Some(|c| c.grouping()), None, Precedence::None),
+        TokenType::RightParen => Rule::new(None, None, Precedence::None),
+        TokenType::LeftBrace => Rule::new(None, None, Precedence::None),
+        TokenType::RightBrace => Rule::new(None, None, Precedence::None),
+        TokenType::Comma => Rule::new(None, None, Precedence::None),
+        TokenType::Dot => Rule::new(None, None, Precedence::None),
+        TokenType::Minus => Rule::new(Some(|c| c.unary()), Some(|c| c.binary()), Precedence::Term),
+        TokenType::Plus => Rule::new(None, Some(|c| c.binary()), Precedence::Term),
+        TokenType::Semicolon => Rule::new(None, None, Precedence::None),
+        TokenType::Slash => Rule::new(None, Some(|c| c.binary()), Precedence::Factor),
+        TokenType::Star => Rule::new(None, Some(|c| c.binary()), Precedence::Factor),
+        TokenType::Bang => Rule::new(Some(|c| c.unary()), None, Precedence::None),
+        TokenType::BangEqual => Rule::new(None, None, Precedence::None),
+        TokenType::Equal => Rule::new(None, None, Precedence::None),
+        TokenType::EqualEqual => Rule::new(None, None, Precedence::None),
+        TokenType::Greater => Rule::new(None, None, Precedence::None),
+        TokenType::GreaterEqual => Rule::new(None, None, Precedence::None),
+        TokenType::Less => Rule::new(None, None, Precedence::None),
+        TokenType::LessEqual => Rule::new(None, None, Precedence::None),
+        TokenType::Identifier => Rule::new(None, None, Precedence::None),
+        TokenType::String => Rule::new(None, None, Precedence::None),
+        TokenType::Number => Rule::new(Some(|c| c.number()), None, Precedence::None),
+        TokenType::And => Rule::new(None, None, Precedence::None),
+        TokenType::Class => Rule::new(None, None, Precedence::None),
+        TokenType::Else => Rule::new(None, None, Precedence::None),
+        TokenType::False => Rule::new(Some(|c| c.literal()), None, Precedence::None),
+        TokenType::For => Rule::new(None, None, Precedence::None),
+        TokenType::If => Rule::new(None, None, Precedence::None),
+        TokenType::Nil => Rule::new(Some(|c| c.literal()), None, Precedence::None),
+        TokenType::Or => Rule::new(None, None, Precedence::None),
+        TokenType::Print => Rule::new(None, None, Precedence::None),
+        TokenType::Return => Rule::new(None, None, Precedence::None),
+        TokenType::Super => Rule::new(None, None, Precedence::None),
+        TokenType::This => Rule::new(None, None, Precedence::None),
+        TokenType::True => Rule::new(Some(|c| c.literal()), None, Precedence::None),
+        TokenType::Var => Rule::new(None, None, Precedence::None),
+        TokenType::While => Rule::new(None, None, Precedence::None),
+        TokenType::Error => Rule::new(None, None, Precedence::None),
+        TokenType::Fun => Rule::new(None, None, Precedence::None),
+        TokenType::Eof => Rule::new(None, None, Precedence::None),
+    }
 }
 
 #[derive(PartialOrd, Ord, Eq, PartialEq)]
