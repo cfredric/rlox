@@ -1,6 +1,11 @@
 mod scanner;
 
-pub fn compile(source: &str) -> Option<(Chunk, Vec<Obj>)> {
+pub struct CompiledResult {
+    pub chunk: Chunk,
+    pub heap: Vec<Obj>,
+}
+
+pub fn compile(source: &str) -> Option<CompiledResult> {
     let compiler = Compiler::new(scanner::Scanner::new(source));
 
     compiler.compile()
@@ -37,7 +42,7 @@ impl<'source> Compiler<'source> {
         }
     }
 
-    fn compile(mut self) -> Option<(Chunk, Vec<Obj>)> {
+    fn compile(mut self) -> Option<CompiledResult> {
         self.advance();
         self.expression();
 
@@ -46,7 +51,10 @@ impl<'source> Compiler<'source> {
         if self.had_error {
             None
         } else {
-            Some((self.compiling_chunk, self.heap))
+            Some(CompiledResult {
+                chunk: self.compiling_chunk,
+                heap: self.heap,
+            })
         }
     }
 

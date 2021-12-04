@@ -44,7 +44,7 @@ impl Value {
         }
     }
 
-    pub fn print(&self, heap: &[crate::obj::Obj]) -> String {
+    pub fn print(&self, heap: &[Obj]) -> String {
         match self {
             Value::Double(d) => d.to_string(),
             Value::Nil => "nil".to_string(),

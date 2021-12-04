@@ -1,11 +1,11 @@
-pub struct Scanner<'source> {
+pub(super) struct Scanner<'source> {
     source: &'source [u8],
     current: usize,
     line: usize,
 }
 
 impl<'source> Scanner<'source> {
-    pub fn new(source: &'source str) -> Self {
+    pub(super) fn new(source: &'source str) -> Self {
         Scanner {
             source: source.as_bytes(),
             // Starts at 0. The next byte to be consumed.
@@ -14,7 +14,7 @@ impl<'source> Scanner<'source> {
         }
     }
 
-    pub fn scan_token(&mut self) -> Token<'source> {
+    pub(super) fn scan_token(&mut self) -> Token<'source> {
         use TokenType::*;
         self.skip_whitespace();
 
@@ -211,14 +211,14 @@ impl<'source> Scanner<'source> {
 }
 
 #[derive(Debug, Default, Clone, Copy)]
-pub struct Token<'a> {
+pub(super) struct Token<'a> {
     pub ty: TokenType,
     pub lexeme: &'a str,
     pub line: usize,
 }
 
 #[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
-pub enum TokenType {
+pub(super) enum TokenType {
     LeftParen,
     RightParen,
     LeftBrace,

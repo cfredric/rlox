@@ -1,4 +1,5 @@
 use crate::chunk::{Chunk, OpCode};
+use crate::compiler::{compile, CompiledResult};
 use crate::obj::Obj;
 use crate::value::Value;
 
@@ -163,7 +164,7 @@ impl<'a> VM<'a> {
 }
 
 pub fn interpret(source: &str) -> InterpretResult {
-    let (chunk, heap) = match crate::compiler::compile(source) {
+    let CompiledResult { chunk, heap } = match compile(source) {
         Some(x) => x,
         None => return InterpretResult::CompileError,
     };
