@@ -26,20 +26,13 @@ impl Value {
         }
     }
 
-    pub fn equal(heap: &[Obj], a: Value, b: Value) -> bool {
+    pub fn equal(a: Value, b: Value) -> bool {
         use Value::*;
         match (a, b) {
             (Nil, Nil) => true,
             (Bool(a), Bool(b)) => a == b,
             (Double(f), Double(g)) => (f - g).abs() < ERROR_MARGIN,
-            (ObjIndex(i), ObjIndex(j)) => {
-                if i == j {
-                    return true;
-                }
-                match (&heap[i], &heap[j]) {
-                    (Obj::String(s1), Obj::String(s2)) => s1 == s2,
-                }
-            }
+            (ObjIndex(i), ObjIndex(j)) => i == j,
             _ => false,
         }
     }

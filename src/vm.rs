@@ -155,8 +155,7 @@ impl<'a> VM<'a> {
                 OpCode::Equal => {
                     let b = self.pop();
                     let a = self.pop();
-                    let eq = Value::equal(&self.heap, a, b);
-                    self.push(Value::Bool(eq));
+                    self.push(Value::Bool(Value::equal(a, b)));
                 }
                 OpCode::Greater => binary_op!(self, gt, vbool),
                 OpCode::Less => binary_op!(self, lt, vbool),

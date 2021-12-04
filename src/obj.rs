@@ -8,16 +8,24 @@ pub enum Obj {
 
 impl Obj {
     pub fn copy_string(heap: &mut Vec<Obj>, strings: &mut Table, s: &str) -> Value {
+        if let Some(v) = strings.get(s) {
+            return *v;
+        }
         Obj::allocate_string(heap, strings, s.to_string())
     }
 
     pub fn take_string(heap: &mut Vec<Obj>, strings: &mut Table, s: String) -> Value {
+        if let Some(v) = strings.get(&s) {
+            return *v;
+        }
         Obj::allocate_string(heap, strings, s)
     }
 
     fn allocate_string(heap: &mut Vec<Obj>, strings: &mut Table, s: String) -> Value {
-        strings.set(&s, Value::Nil);
-        Obj::allocate_object(heap, Obj::String(s))
+        let c = s.to_string();
+        let idx = Obj::allocate_object(heap, Obj::String(s));
+        strings.set(&c, idx);
+        idx
     }
 
     fn allocate_object(heap: &mut Vec<Obj>, obj: Obj) -> Value {
