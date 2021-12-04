@@ -6,6 +6,7 @@ mod chunk;
 mod common;
 mod compiler;
 mod obj;
+mod table;
 mod value;
 mod vm;
 

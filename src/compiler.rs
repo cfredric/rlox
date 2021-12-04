@@ -3,6 +3,7 @@ mod scanner;
 pub struct CompiledResult {
     pub chunk: Chunk,
     pub heap: Vec<Obj>,
+    pub strings: Table,
 }
 
 pub fn compile(source: &str) -> Option<CompiledResult> {
@@ -14,6 +15,7 @@ pub fn compile(source: &str) -> Option<CompiledResult> {
 use crate::chunk::{Chunk, OpCode};
 use crate::common::DEBUG_PRINT_CODE;
 use crate::obj::Obj;
+use crate::table::Table;
 use crate::value::Value;
 use scanner::{Token, TokenType};
 
@@ -27,6 +29,8 @@ struct Compiler<'source> {
     compiling_chunk: Chunk,
 
     heap: Vec<Obj>,
+
+    strings: Table,
 }
 
 impl<'source> Compiler<'source> {
@@ -39,6 +43,7 @@ impl<'source> Compiler<'source> {
             panic_mode: false,
             compiling_chunk: Chunk::default(),
             heap: Vec::new(),
+            strings: Table::new(),
         }
     }
 
@@ -54,6 +59,7 @@ impl<'source> Compiler<'source> {
             Some(CompiledResult {
                 chunk: self.compiling_chunk,
                 heap: self.heap,
+                strings: self.strings,
             })
         }
     }
@@ -109,7 +115,11 @@ impl<'source> Compiler<'source> {
 
     fn string(&mut self) {
         let len = self.previous.lexeme.len();
-        let value = Obj::copy_string(&mut self.heap, &self.previous.lexeme[1..len - 1]);
+        let value = Obj::copy_string(
+            &mut self.heap,
+            &mut self.strings,
+            &self.previous.lexeme[1..len - 1],
+        );
         self.emit_constant(value);
     }
 

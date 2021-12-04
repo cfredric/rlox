@@ -1,6 +1,7 @@
 use crate::chunk::{Chunk, OpCode};
 use crate::compiler::{compile, CompiledResult};
 use crate::obj::Obj;
+use crate::table::Table;
 use crate::value::Value;
 
 pub struct VM<'a> {
@@ -8,6 +9,7 @@ pub struct VM<'a> {
     heap: Vec<Obj>,
     ip: usize,
     stack: Vec<Value>,
+    strings: Table,
 }
 
 pub enum InterpretResult {
@@ -51,12 +53,13 @@ macro_rules! binary_op {
 }
 
 impl<'a> VM<'a> {
-    pub fn new(chunk: &'a Chunk, heap: Vec<Obj>) -> Self {
+    pub fn new(chunk: &'a Chunk, heap: Vec<Obj>, strings: Table) -> Self {
         Self {
             chunk,
             heap,
             ip: 0,
             stack: Vec::new(),
+            strings,
         }
     }
 
@@ -83,8 +86,7 @@ impl<'a> VM<'a> {
         let mut conc = String::new();
         conc.push_str(s);
         conc.push_str(t);
-        self.heap.push(Obj::String(conc));
-        Value::ObjIndex(self.heap.len() - 1)
+        Obj::take_string(&mut self.heap, &mut self.strings, conc)
     }
 
     fn runtime_error(&mut self, message: &str) {
@@ -164,11 +166,15 @@ impl<'a> VM<'a> {
 }
 
 pub fn interpret(source: &str) -> InterpretResult {
-    let CompiledResult { chunk, heap } = match compile(source) {
+    let CompiledResult {
+        chunk,
+        heap,
+        strings,
+    } = match compile(source) {
         Some(x) => x,
         None => return InterpretResult::CompileError,
     };
 
-    let mut vm = VM::new(&chunk, heap);
+    let mut vm = VM::new(&chunk, heap, strings);
     vm.run()
 }
