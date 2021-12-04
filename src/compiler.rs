@@ -1,17 +1,5 @@
 mod scanner;
 
-pub struct CompiledResult {
-    pub chunk: Chunk,
-    pub heap: Vec<Obj>,
-    pub strings: Table,
-}
-
-pub fn compile(source: &str) -> Option<CompiledResult> {
-    let compiler = Compiler::new(scanner::Scanner::new(source));
-
-    compiler.compile()
-}
-
 use crate::chunk::{Chunk, OpCode};
 use crate::common::DEBUG_PRINT_CODE;
 use crate::obj::Obj;
@@ -19,49 +7,46 @@ use crate::table::Table;
 use crate::value::Value;
 use scanner::{Token, TokenType};
 
-struct Compiler<'source> {
+pub struct Compiler<'source, 'vm> {
     scanner: scanner::Scanner<'source>,
     current: Token<'source>,
     previous: Token<'source>,
     had_error: bool,
     panic_mode: bool,
 
-    compiling_chunk: Chunk,
+    compiling_chunk: &'vm mut Chunk,
 
-    heap: Vec<Obj>,
+    heap: &'vm mut Vec<Obj>,
 
-    strings: Table,
+    strings: &'vm mut Table,
 }
 
-impl<'source> Compiler<'source> {
-    fn new(scanner: scanner::Scanner<'source>) -> Self {
+impl<'source, 'vm> Compiler<'source, 'vm> {
+    pub fn new(
+        source: &'source str,
+        chunk: &'vm mut Chunk,
+        heap: &'vm mut Vec<Obj>,
+        strings: &'vm mut Table,
+    ) -> Self {
         Self {
-            scanner,
+            scanner: scanner::Scanner::new(source),
             current: Token::default(),
             previous: Token::default(),
             had_error: false,
             panic_mode: false,
-            compiling_chunk: Chunk::default(),
-            heap: Vec::new(),
-            strings: Table::new(),
+            compiling_chunk: chunk,
+            heap,
+            strings,
         }
     }
 
-    fn compile(mut self) -> Option<CompiledResult> {
+    pub fn compile(mut self) -> bool {
         self.advance();
         self.expression();
 
         self.consume(TokenType::Eof, "Expect end of expression");
         self.end_compiler();
-        if self.had_error {
-            None
-        } else {
-            Some(CompiledResult {
-                chunk: self.compiling_chunk,
-                heap: self.heap,
-                strings: self.strings,
-            })
-        }
+        !self.had_error
     }
 
     fn advance(&mut self) -> Token<'source> {
@@ -99,7 +84,7 @@ impl<'source> Compiler<'source> {
         self.emit_return();
 
         if DEBUG_PRINT_CODE && !self.had_error {
-            self.current_chunk().disassemble_chunk("code", &self.heap);
+            self.current_chunk().disassemble_chunk("code", self.heap);
         }
     }
 
@@ -198,7 +183,7 @@ impl<'source> Compiler<'source> {
     }
 
     fn current_chunk(&self) -> &Chunk {
-        &self.compiling_chunk
+        self.compiling_chunk
     }
 
     fn error_at_current(&mut self, message: &str) {
@@ -308,7 +293,7 @@ impl Precedence {
     }
 }
 
-type ParseFn = Option<for<'c, 'source> fn(&'c mut Compiler<'source>)>;
+type ParseFn = Option<for<'c, 'source, 'vm> fn(&'c mut Compiler<'source, 'vm>)>;
 
 struct Rule {
     prefix: ParseFn,

@@ -33,7 +33,8 @@ fn run_file(path: &Path) {
         Ok(source) => source,
         Err(_) => todo!(),
     };
-    let result = vm::interpret(&source);
+    let mut vm = vm::VM::new();
+    let result = vm.interpret(&source);
 
     match result {
         vm::InterpretResult::Ok => {}
@@ -47,6 +48,8 @@ fn repl() -> io::Result<()> {
     let stdin = std::io::stdin();
     let mut handle = stdin.lock();
 
+    let mut vm = vm::VM::new();
+
     loop {
         print!("> ");
         std::io::stdout().flush()?;
@@ -56,7 +59,7 @@ fn repl() -> io::Result<()> {
             return Ok(());
         }
         if buffer != "\n" {
-            vm::interpret(&buffer);
+            vm.interpret(&buffer);
         }
         buffer.clear();
     }

@@ -1,11 +1,11 @@
 use crate::chunk::{Chunk, OpCode};
-use crate::compiler::{compile, CompiledResult};
+use crate::compiler::Compiler;
 use crate::obj::Obj;
 use crate::table::Table;
 use crate::value::Value;
 
-pub struct VM<'a> {
-    chunk: &'a Chunk,
+pub struct VM {
+    chunk: Chunk,
     heap: Vec<Obj>,
     ip: usize,
     stack: Vec<Value>,
@@ -52,14 +52,14 @@ macro_rules! binary_op {
     }};
 }
 
-impl<'a> VM<'a> {
-    pub fn new(chunk: &'a Chunk, heap: Vec<Obj>, strings: Table) -> Self {
+impl VM {
+    pub fn new() -> Self {
         Self {
-            chunk,
-            heap,
+            chunk: Chunk::default(),
+            heap: Vec::new(),
             ip: 0,
             stack: Vec::new(),
-            strings,
+            strings: Table::new(),
         }
     }
 
@@ -162,18 +162,13 @@ impl<'a> VM<'a> {
             }
         }
     }
-}
 
-pub fn interpret(source: &str) -> InterpretResult {
-    let CompiledResult {
-        chunk,
-        heap,
-        strings,
-    } = match compile(source) {
-        Some(x) => x,
-        None => return InterpretResult::CompileError,
-    };
+    pub fn interpret(&mut self, source: &str) -> InterpretResult {
+        let compiler = Compiler::new(source, &mut self.chunk, &mut self.heap, &mut self.strings);
+        if !compiler.compile() {
+            return InterpretResult::CompileError;
+        };
 
-    let mut vm = VM::new(&chunk, heap, strings);
-    vm.run()
+        self.run()
+    }
 }
