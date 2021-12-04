@@ -1,10 +1,11 @@
-use std::fmt::Display;
+use crate::obj::Obj;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Value {
     Nil,
     Bool(bool),
     Double(f64),
+    ObjIndex(usize),
 }
 
 pub fn double(f: f64) -> Value {
@@ -21,27 +22,34 @@ impl Value {
         match self {
             Value::Nil => true,
             Value::Bool(b) => !b,
-            Value::Double(_) => false,
+            _ => false,
         }
     }
 
-    pub fn equal(a: Value, b: Value) -> bool {
+    pub fn equal(heap: &[Obj], a: Value, b: Value) -> bool {
         use Value::*;
         match (a, b) {
             (Nil, Nil) => true,
             (Bool(a), Bool(b)) => a == b,
             (Double(f), Double(g)) => (f - g).abs() < ERROR_MARGIN,
+            (ObjIndex(i), ObjIndex(j)) => {
+                if i == j {
+                    return true;
+                }
+                match (&heap[i], &heap[j]) {
+                    (Obj::String(s1), Obj::String(s2)) => s1 == s2,
+                }
+            }
             _ => false,
         }
     }
-}
 
-impl Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    pub fn print(&self, heap: &[crate::obj::Obj]) -> String {
         match self {
-            Value::Double(d) => write!(f, "{}", d),
-            Value::Nil => write!(f, "nil"),
-            Value::Bool(b) => write!(f, "{}", b),
+            Value::Double(d) => d.to_string(),
+            Value::Nil => "nil".to_string(),
+            Value::Bool(b) => b.to_string(),
+            Value::ObjIndex(i) => heap[*i].to_string(),
         }
     }
 }

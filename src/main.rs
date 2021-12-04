@@ -5,6 +5,7 @@ use structopt::StructOpt;
 mod chunk;
 mod common;
 mod compiler;
+mod obj;
 mod value;
 mod vm;
 

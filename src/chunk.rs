@@ -1,3 +1,4 @@
+use crate::obj::Obj;
 use crate::value::Value;
 
 #[derive(Copy, Clone)]
@@ -40,15 +41,15 @@ impl Chunk {
         self.constants.len() - 1
     }
 
-    pub fn disassemble_chunk(&self, name: &str) {
+    pub fn disassemble_chunk(&self, name: &str, heap: &[Obj]) {
         println!("== {} ==", name);
 
         for offset in 0..self.code.len() {
-            self.disassemble_instruction(offset);
+            self.disassemble_instruction(heap, offset);
         }
     }
 
-    pub fn disassemble_instruction(&self, offset: usize) {
+    pub fn disassemble_instruction(&self, heap: &[Obj], offset: usize) {
         print!("{:04} ", offset);
 
         if offset > 0 && self.lines[offset] == self.lines[offset - 1] {
@@ -60,7 +61,7 @@ impl Chunk {
         let op = &self.code[offset];
         match op {
             OpCode::Return => op.simple_instruction("OP_RETURN", offset),
-            OpCode::Constant(_) => self.constant_instruction("OP_CONSTANT", offset),
+            OpCode::Constant(_) => self.constant_instruction("OP_CONSTANT", heap, offset),
             OpCode::Negate => op.simple_instruction("OP_NEGATE", offset),
             OpCode::Add => op.simple_instruction("OP_ADD", offset),
             OpCode::Subtract => op.simple_instruction("OP_SUBTRACT", offset),
@@ -77,9 +78,9 @@ impl Chunk {
         }
     }
 
-    fn constant_instruction(&self, name: &str, offset: usize) {
+    fn constant_instruction(&self, name: &str, heap: &[Obj], offset: usize) {
         if let OpCode::Constant(constant) = self.code[offset] {
-            println!("{:16} {}", name, self.constants[constant]);
+            println!("{:16} {}", name, self.constants[constant].print(heap));
         }
     }
 }

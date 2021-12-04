@@ -1,8 +1,10 @@
 use crate::chunk::{Chunk, OpCode};
+use crate::obj::Obj;
 use crate::value::Value;
 
 pub struct VM<'a> {
     chunk: &'a Chunk,
+    heap: Vec<Obj>,
     ip: usize,
     stack: Vec<Value>,
 }
@@ -13,9 +15,6 @@ pub enum InterpretResult {
     RuntimeError,
 }
 
-fn add(a: f64, b: f64) -> f64 {
-    a + b
-}
 fn sub(a: f64, b: f64) -> f64 {
     a - b
 }
@@ -51,9 +50,10 @@ macro_rules! binary_op {
 }
 
 impl<'a> VM<'a> {
-    pub fn new(chunk: &'a Chunk) -> Self {
-        VM {
+    pub fn new(chunk: &'a Chunk, heap: Vec<Obj>) -> Self {
+        Self {
             chunk,
+            heap,
             ip: 0,
             stack: Vec::new(),
         }
@@ -78,6 +78,14 @@ impl<'a> VM<'a> {
         self.stack.pop().unwrap()
     }
 
+    fn concatenate(&mut self, s: &str, t: &str) -> Value {
+        let mut conc = String::new();
+        conc.push_str(s);
+        conc.push_str(t);
+        self.heap.push(Obj::String(conc));
+        Value::ObjIndex(self.heap.len() - 1)
+    }
+
     fn runtime_error(&mut self, message: &str) {
         eprintln!("{}", message);
         let instruction = self.ip - 1;
@@ -90,10 +98,10 @@ impl<'a> VM<'a> {
             if crate::common::DEBUG_TRACE_EXECUTION {
                 print!("          ");
                 for val in &self.stack {
-                    print!("[ {} ]", val);
+                    print!("[ {} ]", val.print(&self.heap));
                 }
                 println!();
-                self.chunk.disassemble_instruction(self.ip);
+                self.chunk.disassemble_instruction(&self.heap, self.ip);
             }
             use crate::value::*;
             match &self.read_byte() {
@@ -102,7 +110,7 @@ impl<'a> VM<'a> {
                     self.push(constant);
                 }
                 OpCode::Return => {
-                    println!("{}", self.pop());
+                    println!("{}", self.pop().print(&self.heap));
                     return InterpretResult::Ok;
                 }
                 OpCode::Negate => match self.pop() {
@@ -112,7 +120,26 @@ impl<'a> VM<'a> {
                         return InterpretResult::RuntimeError;
                     }
                 },
-                OpCode::Add => binary_op!(self, add, double),
+                OpCode::Add => match (self.pop(), self.pop()) {
+                    (Value::Double(b), Value::Double(a)) => {
+                        self.push(Value::Double(a + b));
+                    }
+                    (Value::ObjIndex(i), Value::ObjIndex(j)) => {
+                        match (&self.heap[i], &self.heap[j]) {
+                            (Obj::String(t), Obj::String(s)) => {
+                                // Have to clone here, since adding to the heap
+                                // might invalidate references to s and t.
+                                let (s, t) = (s.clone(), t.clone());
+                                let val = self.concatenate(&s, &t);
+                                self.push(val);
+                            }
+                        }
+                    }
+                    _ => {
+                        self.runtime_error("Operands must be two numbers or two strings.");
+                        return InterpretResult::RuntimeError;
+                    }
+                },
                 OpCode::Subtract => binary_op!(self, sub, double),
                 OpCode::Multiply => binary_op!(self, mul, double),
                 OpCode::Divide => binary_op!(self, div, double),
@@ -125,7 +152,8 @@ impl<'a> VM<'a> {
                 OpCode::Equal => {
                     let b = self.pop();
                     let a = self.pop();
-                    self.push(Value::Bool(Value::equal(a, b)));
+                    let eq = Value::equal(&self.heap, a, b);
+                    self.push(Value::Bool(eq));
                 }
                 OpCode::Greater => binary_op!(self, gt, vbool),
                 OpCode::Less => binary_op!(self, lt, vbool),
@@ -135,11 +163,11 @@ impl<'a> VM<'a> {
 }
 
 pub fn interpret(source: &str) -> InterpretResult {
-    let chunk = match crate::compiler::compile(source) {
-        Some(chunk) => chunk,
+    let (chunk, heap) = match crate::compiler::compile(source) {
+        Some(x) => x,
         None => return InterpretResult::CompileError,
     };
 
-    let mut vm = VM::new(&chunk);
+    let mut vm = VM::new(&chunk, heap);
     vm.run()
 }

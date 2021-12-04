@@ -1,6 +1,6 @@
 mod scanner;
 
-pub fn compile(source: &str) -> Option<crate::chunk::Chunk> {
+pub fn compile(source: &str) -> Option<(Chunk, Vec<Obj>)> {
     let compiler = Compiler::new(scanner::Scanner::new(source));
 
     compiler.compile()
@@ -8,6 +8,7 @@ pub fn compile(source: &str) -> Option<crate::chunk::Chunk> {
 
 use crate::chunk::{Chunk, OpCode};
 use crate::common::DEBUG_PRINT_CODE;
+use crate::obj::Obj;
 use crate::value::Value;
 use scanner::{Token, TokenType};
 
@@ -19,6 +20,8 @@ struct Compiler<'source> {
     panic_mode: bool,
 
     compiling_chunk: Chunk,
+
+    heap: Vec<Obj>,
 }
 
 impl<'source> Compiler<'source> {
@@ -30,10 +33,11 @@ impl<'source> Compiler<'source> {
             had_error: false,
             panic_mode: false,
             compiling_chunk: Chunk::default(),
+            heap: Vec::new(),
         }
     }
 
-    fn compile(mut self) -> Option<crate::chunk::Chunk> {
+    fn compile(mut self) -> Option<(Chunk, Vec<Obj>)> {
         self.advance();
         self.expression();
 
@@ -42,7 +46,7 @@ impl<'source> Compiler<'source> {
         if self.had_error {
             None
         } else {
-            Some(self.compiling_chunk)
+            Some((self.compiling_chunk, self.heap))
         }
     }
 
@@ -81,7 +85,7 @@ impl<'source> Compiler<'source> {
         self.emit_return();
 
         if DEBUG_PRINT_CODE && !self.had_error {
-            self.current_chunk_mut().disassemble_chunk("code");
+            self.current_chunk().disassemble_chunk("code", &self.heap);
         }
     }
 
@@ -92,6 +96,12 @@ impl<'source> Compiler<'source> {
 
     fn number(&mut self) {
         let value = self.previous.lexeme.parse::<f64>().unwrap();
+        self.emit_constant(Value::Double(value));
+    }
+
+    fn string(&mut self) {
+        let len = self.previous.lexeme.len();
+        let value = Obj::copy_string(&mut self.heap, &self.previous.lexeme[1..len - 1]);
         self.emit_constant(value);
     }
 
@@ -160,13 +170,17 @@ impl<'source> Compiler<'source> {
         self.current_chunk_mut().add_constant(value)
     }
 
-    fn emit_constant(&mut self, value: f64) {
-        let idx = self.make_constant(Value::Double(value));
+    fn emit_constant(&mut self, value: Value) {
+        let idx = self.make_constant(value);
         self.emit_opcode(OpCode::Constant(idx));
     }
 
     fn current_chunk_mut(&mut self) -> &mut Chunk {
         &mut self.compiling_chunk
+    }
+
+    fn current_chunk(&self) -> &Chunk {
+        &self.compiling_chunk
     }
 
     fn error_at_current(&mut self, message: &str) {
@@ -219,7 +233,7 @@ fn get_rule(ty: TokenType) -> Rule {
         TokenType::Less => Rule::new(None, Some(|c| c.binary()), Precedence::Comparison),
         TokenType::LessEqual => Rule::new(None, Some(|c| c.binary()), Precedence::Comparison),
         TokenType::Identifier => Rule::new(None, None, Precedence::None),
-        TokenType::String => Rule::new(None, None, Precedence::None),
+        TokenType::String => Rule::new(Some(|c| c.string()), None, Precedence::None),
         TokenType::Number => Rule::new(Some(|c| c.number()), None, Precedence::None),
         TokenType::And => Rule::new(None, None, Precedence::None),
         TokenType::Class => Rule::new(None, None, Precedence::None),
