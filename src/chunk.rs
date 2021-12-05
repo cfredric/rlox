@@ -6,6 +6,8 @@ pub enum OpCode {
     Constant(usize),
     Nil,
     Bool(bool),
+    GetGlobal(usize),
+    DefineGlobal(usize),
     Equal,
     Greater,
     Less,
@@ -15,6 +17,8 @@ pub enum OpCode {
     Divide,
     Not,
     Negate,
+    Pop,
+    Print,
     Return,
 }
 
@@ -75,12 +79,19 @@ impl Chunk {
             OpCode::Equal => op.simple_instruction("OP_EQUAL", offset),
             OpCode::Greater => op.simple_instruction("OP_GREATER", offset),
             OpCode::Less => op.simple_instruction("OP_LESS", offset),
+            OpCode::Print => op.simple_instruction("OP_PRINT", offset),
+            OpCode::Pop => op.simple_instruction("OP_POP", offset),
+            OpCode::DefineGlobal(_) => self.constant_instruction("OP_DEFINE_GLOBAL", heap, offset),
+            OpCode::GetGlobal(_) => self.constant_instruction("OP_GET_GLOBAL", heap, offset),
         }
     }
 
     fn constant_instruction(&self, name: &str, heap: &[Obj], offset: usize) {
-        if let OpCode::Constant(constant) = self.code[offset] {
-            println!("{:16} {}", name, self.constants[constant].print(heap));
+        match self.code[offset] {
+            OpCode::Constant(i) | OpCode::DefineGlobal(i) | OpCode::GetGlobal(i) => {
+                println!("{:16} {}", name, self.constants[i].print(heap));
+            }
+            _ => unreachable!(),
         }
     }
 }

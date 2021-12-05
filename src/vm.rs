@@ -10,6 +10,7 @@ pub struct VM {
     ip: usize,
     stack: Vec<Value>,
     strings: Table,
+    globals: Table,
 }
 
 pub enum InterpretResult {
@@ -60,6 +61,7 @@ impl VM {
             ip: 0,
             stack: Vec::new(),
             strings: Table::new(),
+            globals: Table::new(),
         }
     }
 
@@ -72,6 +74,19 @@ impl VM {
 
     fn read_constant(&self, offset: usize) -> Value {
         self.chunk.constants[offset]
+    }
+
+    fn read_string(&self, offset: usize) -> &str {
+        self.as_string(self.read_constant(offset))
+    }
+
+    fn as_string(&self, val: Value) -> &str {
+        match val {
+            Value::ObjIndex(idx) => match &self.heap[idx] {
+                Obj::String(s) => s,
+            },
+            _ => unreachable!(),
+        }
     }
 
     fn push(&mut self, value: Value) {
@@ -113,7 +128,6 @@ impl VM {
                     self.push(constant);
                 }
                 OpCode::Return => {
-                    println!("{}", self.pop().print(&self.heap));
                     return InterpretResult::Ok;
                 }
                 OpCode::Negate => match self.pop() {
@@ -159,6 +173,27 @@ impl VM {
                 }
                 OpCode::Greater => binary_op!(self, gt, vbool),
                 OpCode::Less => binary_op!(self, lt, vbool),
+                OpCode::Print => {
+                    println!("{}", self.pop().print(&self.heap));
+                }
+                OpCode::Pop => {
+                    self.pop();
+                }
+                OpCode::DefineGlobal(index) => {
+                    let name = self.read_string(*index).to_string();
+                    let v = self.pop();
+                    self.globals.set(&name, v);
+                }
+                OpCode::GetGlobal(index) => {
+                    let name = self.read_string(*index).to_string();
+                    let v = self.globals.get(&name);
+                    if v.is_none() {
+                        self.runtime_error(&format!("Undefined variable '{}'.", name));
+                        return InterpretResult::RuntimeError;
+                    }
+                    let v = *v.unwrap();
+                    self.push(v);
+                }
             }
         }
     }

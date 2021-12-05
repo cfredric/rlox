@@ -42,7 +42,10 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
 
     pub fn compile(mut self) -> bool {
         self.advance();
-        self.expression();
+
+        while !self.matches(TokenType::Eof) {
+            self.declaration();
+        }
 
         self.consume(TokenType::Eof, "Expect end of expression");
         self.end_compiler();
@@ -70,6 +73,18 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
         self.error_at_current(message);
     }
 
+    fn matches(&mut self, ty: TokenType) -> bool {
+        if !self.check(ty) {
+            return false;
+        }
+        self.advance();
+        true
+    }
+
+    fn check(&self, ty: TokenType) -> bool {
+        self.current.ty == ty
+    }
+
     fn emit_opcodes(&mut self, a: OpCode, b: OpCode) {
         self.emit_opcode(a);
         self.emit_opcode(b);
@@ -86,6 +101,72 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
         if DEBUG_PRINT_CODE && !self.had_error {
             self.current_chunk().disassemble_chunk("code", self.heap);
         }
+    }
+
+    fn synchronize(&mut self) {
+        self.panic_mode = false;
+
+        while self.current.ty != TokenType::Eof {
+            if self.previous.ty == TokenType::Semicolon {
+                return;
+            }
+            use TokenType::*;
+            match self.current.ty {
+                Class | Fun | Var | For | If | While | Print | Return => {
+                    return;
+                }
+                _ => {}
+            }
+            self.advance();
+        }
+    }
+
+    fn declaration(&mut self) {
+        if self.matches(TokenType::Var) {
+            self.var_declaration();
+        } else {
+            self.statement();
+        }
+
+        if self.panic_mode {
+            self.synchronize();
+        }
+    }
+
+    fn var_declaration(&mut self) {
+        let global = self.parse_variable("Expect variable name.");
+
+        if self.matches(TokenType::Equal) {
+            self.expression();
+        } else {
+            self.emit_constant(Value::Nil);
+        }
+        self.consume(
+            TokenType::Semicolon,
+            "Expect ';' after variable declaration.",
+        );
+
+        self.define_variable(global);
+    }
+
+    fn statement(&mut self) {
+        if self.matches(TokenType::Print) {
+            self.print_statement();
+        } else {
+            self.expression_statement();
+        }
+    }
+
+    fn print_statement(&mut self) {
+        self.expression();
+        self.consume(TokenType::Semicolon, "Expect ';' after value.");
+        self.emit_opcode(OpCode::Print);
+    }
+
+    fn expression_statement(&mut self) {
+        self.expression();
+        self.consume(TokenType::Semicolon, "Expect ';' after expression.");
+        self.emit_opcode(OpCode::Pop);
     }
 
     fn grouping(&mut self) {
@@ -165,6 +246,30 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
         }
     }
 
+    fn parse_variable<'e: 'source>(&mut self, error_message: &'e str) -> usize {
+        self.consume(TokenType::Identifier, error_message);
+        let name = self.previous.lexeme;
+        self.identifier_constant(name)
+    }
+
+    fn identifier_constant(&mut self, name: &str) -> usize {
+        let idx = Obj::copy_string(self.heap, self.strings, name);
+        self.make_constant(idx)
+    }
+
+    fn define_variable(&mut self, global: usize) {
+        self.emit_opcode(OpCode::DefineGlobal(global))
+    }
+
+    fn variable(&mut self) {
+        self.named_variable(self.previous.lexeme)
+    }
+
+    fn named_variable(&mut self, name: &str) {
+        let arg = self.identifier_constant(name);
+        self.emit_opcode(OpCode::GetGlobal(arg));
+    }
+
     fn emit_return(&mut self) {
         self.emit_opcode(OpCode::Return);
     }
@@ -235,7 +340,7 @@ fn get_rule(ty: TokenType) -> Rule {
         TokenType::GreaterEqual => Rule::new(None, Some(|c| c.binary()), Precedence::Comparison),
         TokenType::Less => Rule::new(None, Some(|c| c.binary()), Precedence::Comparison),
         TokenType::LessEqual => Rule::new(None, Some(|c| c.binary()), Precedence::Comparison),
-        TokenType::Identifier => Rule::new(None, None, Precedence::None),
+        TokenType::Identifier => Rule::new(Some(|c| c.variable()), None, Precedence::None),
         TokenType::String => Rule::new(Some(|c| c.string()), None, Precedence::None),
         TokenType::Number => Rule::new(Some(|c| c.number()), None, Precedence::None),
         TokenType::And => Rule::new(None, None, Precedence::None),
