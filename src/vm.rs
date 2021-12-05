@@ -97,6 +97,10 @@ impl VM {
         self.stack.pop().unwrap()
     }
 
+    fn peek(&self, offset: usize) -> Value {
+        self.stack[self.stack.len() - 1 - offset]
+    }
+
     fn concatenate(&mut self, s: &str, t: &str) -> Value {
         let mut conc = String::new();
         conc.push_str(s);
@@ -114,11 +118,13 @@ impl VM {
     fn run(&mut self) -> InterpretResult {
         loop {
             if crate::common::DEBUG_TRACE_EXECUTION {
-                print!("          ");
-                for val in &self.stack {
-                    print!("[ {} ]", val.print(&self.heap));
-                }
-                println!();
+                println!(
+                    "stack:    {}",
+                    self.stack
+                        .iter()
+                        .map(|i| format!("[ {} ]", i.print(&self.heap)))
+                        .collect::<String>()
+                );
                 self.chunk.disassemble_instruction(&self.heap, self.ip);
             }
             use crate::value::*;
@@ -193,6 +199,14 @@ impl VM {
                     }
                     let v = *v.unwrap();
                     self.push(v);
+                }
+                OpCode::SetGlobal(index) => {
+                    let name = self.read_string(*index).to_string();
+                    if self.globals.set(&name, self.peek(0)) {
+                        self.globals.delete(&name);
+                        self.runtime_error(&format!("Undefined variable '{}'.", name));
+                        return InterpretResult::RuntimeError;
+                    }
                 }
             }
         }

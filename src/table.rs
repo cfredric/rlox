@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::value::Value;
 
+#[derive(Debug)]
 pub struct Table {
     table: HashMap<String, Value>,
 }
@@ -13,15 +14,17 @@ impl Table {
         }
     }
 
-    pub fn set(&mut self, key: &str, val: Value) {
+    pub fn set(&mut self, key: &str, val: Value) -> bool {
         match self.table.entry(key.to_string()) {
             std::collections::hash_map::Entry::Occupied(mut occ) => {
                 occ.insert(val);
+                false
             }
             std::collections::hash_map::Entry::Vacant(vac) => {
                 vac.insert(val);
+                true
             }
-        };
+        }
     }
 
     pub fn get(&mut self, key: &str) -> Option<&Value> {

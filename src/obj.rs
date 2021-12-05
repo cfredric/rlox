@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use crate::{table::Table, value::Value};
 
+#[derive(Debug)]
 pub enum Obj {
     String(String),
 }
