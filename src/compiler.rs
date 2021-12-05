@@ -1,13 +1,13 @@
 mod scanner;
 
 use crate::chunk::{Chunk, OpCode};
-use crate::common::DEBUG_PRINT_CODE;
 use crate::obj::Obj;
 use crate::table::Table;
 use crate::value::Value;
 use scanner::{Token, TokenType};
 
 pub struct Compiler<'source, 'vm> {
+    print_code: bool,
     scanner: scanner::Scanner<'source>,
     current: Token<'source>,
     previous: Token<'source>,
@@ -23,12 +23,14 @@ pub struct Compiler<'source, 'vm> {
 
 impl<'source, 'vm> Compiler<'source, 'vm> {
     pub fn new(
+        print_code: bool,
         source: &'source str,
         chunk: &'vm mut Chunk,
         heap: &'vm mut Vec<Obj>,
         strings: &'vm mut Table,
     ) -> Self {
         Self {
+            print_code,
             scanner: scanner::Scanner::new(source),
             current: Token::default(),
             previous: Token::default(),
@@ -98,7 +100,7 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
     fn end_compiler(&mut self) {
         self.emit_return();
 
-        if DEBUG_PRINT_CODE && !self.had_error {
+        if self.print_code && !self.had_error {
             self.current_chunk().disassemble_chunk("code", self.heap);
         }
     }

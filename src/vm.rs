@@ -5,6 +5,8 @@ use crate::table::Table;
 use crate::value::Value;
 
 pub struct VM {
+    trace_execution: bool,
+    print_code: bool,
     chunk: Chunk,
     heap: Vec<Obj>,
     ip: usize,
@@ -54,8 +56,10 @@ macro_rules! binary_op {
 }
 
 impl VM {
-    pub fn new() -> Self {
+    pub(crate) fn new(opt: &crate::Opt) -> Self {
         Self {
+            print_code: opt.print_code,
+            trace_execution: opt.trace_execution,
             chunk: Chunk::default(),
             heap: Vec::new(),
             ip: 0,
@@ -117,7 +121,7 @@ impl VM {
 
     fn run(&mut self) -> InterpretResult {
         loop {
-            if crate::common::DEBUG_TRACE_EXECUTION {
+            if self.trace_execution {
                 println!(
                     "stack:    {}",
                     self.stack
@@ -213,7 +217,13 @@ impl VM {
     }
 
     pub fn interpret(&mut self, source: &str) -> InterpretResult {
-        let compiler = Compiler::new(source, &mut self.chunk, &mut self.heap, &mut self.strings);
+        let compiler = Compiler::new(
+            self.print_code,
+            source,
+            &mut self.chunk,
+            &mut self.heap,
+            &mut self.strings,
+        );
         if !compiler.compile() {
             return InterpretResult::CompileError;
         };

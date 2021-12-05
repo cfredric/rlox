@@ -11,29 +11,35 @@ mod value;
 mod vm;
 
 #[derive(StructOpt, Debug)]
-struct Opt {
+pub(crate) struct Opt {
     #[structopt(name = "PATH", parse(from_os_str))]
     path: Option<PathBuf>,
+
+    #[structopt(short = "e", long = "trace_execution")]
+    trace_execution: bool,
+
+    #[structopt(short = "c", long = "print_code")]
+    print_code: bool,
 }
 
 fn main() -> io::Result<()> {
     let opt = Opt::from_args();
 
-    match opt.path {
+    match &opt.path {
         Some(path) => {
-            run_file(&path);
+            run_file(path, &opt);
             Ok(())
         }
-        None => repl(),
+        None => repl(&opt),
     }
 }
 
-fn run_file(path: &Path) {
+fn run_file(path: &Path, opt: &Opt) {
     let source = match std::fs::read_to_string(path) {
         Ok(source) => source,
         Err(_) => todo!(),
     };
-    let mut vm = vm::VM::new();
+    let mut vm = vm::VM::new(opt);
     let result = vm.interpret(&source);
 
     match result {
@@ -43,12 +49,12 @@ fn run_file(path: &Path) {
     }
 }
 
-fn repl() -> io::Result<()> {
+fn repl(opt: &Opt) -> io::Result<()> {
     let mut buffer = String::new();
     let stdin = std::io::stdin();
     let mut handle = stdin.lock();
 
-    let mut vm = vm::VM::new();
+    let mut vm = vm::VM::new(opt);
 
     loop {
         print!("> ");
