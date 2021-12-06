@@ -1,20 +1,18 @@
 use std::collections::HashMap;
 
-use crate::value::Value;
-
 #[derive(Debug)]
-pub struct Table {
-    table: HashMap<String, Value>,
+pub struct Table<V> {
+    table: HashMap<String, V>,
 }
 
-impl Table {
+impl<V> Table<V> {
     pub fn new() -> Self {
         Self {
             table: HashMap::new(),
         }
     }
 
-    pub fn set(&mut self, key: &str, val: Value) -> bool {
+    pub fn set(&mut self, key: &str, val: V) -> bool {
         match self.table.entry(key.to_string()) {
             std::collections::hash_map::Entry::Occupied(mut occ) => {
                 occ.insert(val);
@@ -27,11 +25,11 @@ impl Table {
         }
     }
 
-    pub fn get(&mut self, key: &str) -> Option<&Value> {
+    pub fn get(&mut self, key: &str) -> Option<&V> {
         self.table.get(key)
     }
 
-    pub fn delete(&mut self, key: &str) -> Option<Value> {
+    pub fn delete(&mut self, key: &str) -> Option<V> {
         self.table.remove(key)
     }
 }

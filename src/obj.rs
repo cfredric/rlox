@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::{table::Table, value::Value};
+use crate::table::Table;
 
 #[derive(Debug)]
 pub enum Obj {
@@ -8,30 +8,24 @@ pub enum Obj {
 }
 
 impl Obj {
-    pub fn copy_string(heap: &mut Vec<Obj>, strings: &mut Table, s: &str) -> usize {
+    pub fn copy_string(heap: &mut Vec<Obj>, strings: &mut Table<usize>, s: &str) -> usize {
         if let Some(v) = strings.get(s) {
-            match v {
-                Value::ObjIndex(i) => return *i,
-                _ => unreachable!(),
-            }
+            return *v;
         }
         Obj::allocate_string(heap, strings, s.to_string())
     }
 
-    pub fn take_string(heap: &mut Vec<Obj>, strings: &mut Table, s: String) -> usize {
+    pub fn take_string(heap: &mut Vec<Obj>, strings: &mut Table<usize>, s: String) -> usize {
         if let Some(v) = strings.get(&s) {
-            match v {
-                Value::ObjIndex(i) => return *i,
-                _ => unreachable!(),
-            }
+            return *v;
         }
         Obj::allocate_string(heap, strings, s)
     }
 
-    fn allocate_string(heap: &mut Vec<Obj>, strings: &mut Table, s: String) -> usize {
+    fn allocate_string(heap: &mut Vec<Obj>, strings: &mut Table<usize>, s: String) -> usize {
         let c = s.to_string();
         let idx = Obj::allocate_object(heap, Obj::String(s));
-        strings.set(&c, Value::ObjIndex(idx));
+        strings.set(&c, idx);
         idx
     }
 

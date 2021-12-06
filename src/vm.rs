@@ -11,8 +11,8 @@ pub struct VM {
     heap: Vec<Obj>,
     ip: usize,
     stack: Vec<Value>,
-    strings: Table,
-    globals: Table,
+    strings: Table<usize>,
+    globals: Table<Value>,
 }
 
 pub enum InterpretResult {

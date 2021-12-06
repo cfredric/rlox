@@ -18,7 +18,7 @@ pub struct Compiler<'source, 'vm> {
 
     heap: &'vm mut Vec<Obj>,
 
-    strings: &'vm mut Table,
+    strings: &'vm mut Table<usize>,
 
     locals: Vec<Local<'source>>,
     scope_depth: isize,
@@ -30,7 +30,7 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
         source: &'source str,
         chunk: &'vm mut Chunk,
         heap: &'vm mut Vec<Obj>,
-        strings: &'vm mut Table,
+        strings: &'vm mut Table<usize>,
     ) -> Self {
         Self {
             print_code,
