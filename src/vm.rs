@@ -109,7 +109,7 @@ impl VM {
         let mut conc = String::new();
         conc.push_str(s);
         conc.push_str(t);
-        Obj::take_string(&mut self.heap, &mut self.strings, conc)
+        Value::ObjIndex(Obj::take_string(&mut self.heap, &mut self.strings, conc))
     }
 
     fn runtime_error(&mut self, message: &str) {
@@ -211,6 +211,12 @@ impl VM {
                         self.runtime_error(&format!("Undefined variable '{}'.", name));
                         return InterpretResult::RuntimeError;
                     }
+                }
+                OpCode::SetLocal(slot) => {
+                    self.stack[*slot] = self.peek(0);
+                }
+                OpCode::GetLocal(slot) => {
+                    self.stack.push(self.stack[*slot]);
                 }
             }
         }

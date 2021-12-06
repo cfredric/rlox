@@ -3,3 +3,18 @@ var beverage = "cafe au lait";
 breakfast = "beignets with " + beverage;
 
 print breakfast;
+
+{
+  var a = "outer";
+  {
+    var a = a + " inner";
+    print a;
+  }
+}
+{
+  var a = "retuo";
+  {
+    var a = a + " renni";
+    print a;
+  }
+}

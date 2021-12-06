@@ -1,7 +1,7 @@
 use crate::obj::Obj;
 use crate::value::Value;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum OpCode {
     Constant(usize),
     Nil,
@@ -9,6 +9,8 @@ pub enum OpCode {
     GetGlobal(usize),
     DefineGlobal(usize),
     SetGlobal(usize),
+    GetLocal(usize),
+    SetLocal(usize),
     Equal,
     Greater,
     Less,
@@ -66,7 +68,7 @@ impl Chunk {
         let op = &self.code[offset];
         match op {
             OpCode::Return => op.simple_instruction("OP_RETURN", offset),
-            OpCode::Constant(_) => self.constant_instruction("OP_CONSTANT", heap, offset),
+            OpCode::Constant(i) => self.constant_instruction("OP_CONSTANT", heap, *i),
             OpCode::Negate => op.simple_instruction("OP_NEGATE", offset),
             OpCode::Add => op.simple_instruction("OP_ADD", offset),
             OpCode::Subtract => op.simple_instruction("OP_SUBTRACT", offset),
@@ -85,10 +87,16 @@ impl Chunk {
             OpCode::DefineGlobal(i) => self.constant_instruction("OP_DEFINE_GLOBAL", heap, *i),
             OpCode::GetGlobal(i) => self.constant_instruction("OP_GET_GLOBAL", heap, *i),
             OpCode::SetGlobal(i) => self.constant_instruction("OP_SET_GLOBAL", heap, *i),
+            OpCode::GetLocal(i) => self.byte_instruction("OP_GET_LOCAL", *i),
+            OpCode::SetLocal(i) => self.byte_instruction("OP_SET_LOCAL", *i),
         }
     }
 
     fn constant_instruction(&self, name: &str, heap: &[Obj], offset: usize) {
         println!("{:16} {}", name, self.constants[offset].print(heap));
+    }
+
+    fn byte_instruction(&self, name: &str, slot: usize) {
+        println!("{:16} {}", name, slot);
     }
 }

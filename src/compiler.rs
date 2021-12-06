@@ -19,6 +19,9 @@ pub struct Compiler<'source, 'vm> {
     heap: &'vm mut Vec<Obj>,
 
     strings: &'vm mut Table,
+
+    locals: Vec<Local<'source>>,
+    scope_depth: isize,
 }
 
 impl<'source, 'vm> Compiler<'source, 'vm> {
@@ -39,6 +42,8 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
             compiling_chunk: chunk,
             heap,
             strings,
+            locals: Vec::new(),
+            scope_depth: 0,
         }
     }
 
@@ -154,8 +159,33 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
     fn statement(&mut self) {
         if self.matches(TokenType::Print) {
             self.print_statement();
+        } else if self.matches(TokenType::LeftBrace) {
+            self.begin_scope();
+            self.block();
+            self.end_scope();
         } else {
             self.expression_statement();
+        }
+    }
+
+    fn block(&mut self) {
+        while !self.check(TokenType::RightBrace) && !self.check(TokenType::Eof) {
+            self.declaration();
+        }
+
+        self.consume(TokenType::RightBrace, "Expect '}' after block.");
+    }
+
+    fn begin_scope(&mut self) {
+        self.scope_depth += 1;
+    }
+
+    fn end_scope(&mut self) {
+        self.scope_depth -= 1;
+
+        while matches!(self.locals.last(), Some(local) if local.depth > self.scope_depth) {
+            self.emit_opcode(OpCode::Pop);
+            self.locals.pop();
         }
     }
 
@@ -183,12 +213,12 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
 
     fn string(&mut self) {
         let len = self.previous.lexeme.len();
-        let value = Obj::copy_string(
+        let index = Obj::copy_string(
             &mut self.heap,
             &mut self.strings,
             &self.previous.lexeme[1..len - 1],
         );
-        self.emit_constant(value);
+        self.emit_constant(Value::ObjIndex(index));
     }
 
     fn unary(&mut self) {
@@ -255,17 +285,58 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
 
     fn parse_variable<'e: 'source>(&mut self, error_message: &'e str) -> usize {
         self.consume(TokenType::Identifier, error_message);
+        self.declare_variable();
+        if self.scope_depth > 0 {
+            return 0;
+        }
         let name = self.previous.lexeme;
         self.identifier_constant(name)
     }
 
     fn identifier_constant(&mut self, name: &str) -> usize {
         let idx = Obj::copy_string(self.heap, self.strings, name);
-        self.make_constant(idx)
+        self.make_constant(Value::ObjIndex(idx))
+    }
+
+    fn identifiers_equal(&self, a: Token<'source>, b: Token<'source>) -> bool {
+        a.lexeme == b.lexeme
     }
 
     fn define_variable(&mut self, global: usize) {
+        if self.scope_depth > 0 {
+            self.mark_initialized();
+            return;
+        }
         self.emit_opcode(OpCode::DefineGlobal(global))
+    }
+
+    fn mark_initialized(&mut self) {
+        self.locals.last_mut().unwrap().depth = self.scope_depth;
+    }
+
+    fn declare_variable(&mut self) {
+        if self.scope_depth == 0 {
+            return;
+        }
+        let name = self.previous;
+        // TODO: don't clone here.
+        for local in self.locals.clone().iter().rev() {
+            if local.depth != -1 && local.depth < self.scope_depth {
+                break;
+            }
+            if self.identifiers_equal(name, local.name) {
+                self.error("Already a variable with this name in this scope.");
+            }
+        }
+        self.add_local(name);
+    }
+
+    fn add_local(&mut self, name: Token<'source>) {
+        if self.locals.len() > 256 {
+            self.error("Too many local variables in function.");
+            return;
+        }
+        self.locals.push(Local { name, depth: -1 });
     }
 
     fn variable(&mut self, can_assign: bool) {
@@ -273,13 +344,31 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
     }
 
     fn named_variable(&mut self, name: &str, can_assign: bool) {
-        let arg = self.identifier_constant(name);
+        let arg = self.resolve_local(name);
+        let (get_op, set_op) = if arg != -1 {
+            (
+                OpCode::GetLocal(arg as usize),
+                OpCode::SetLocal(arg as usize),
+            )
+        } else {
+            let arg = self.identifier_constant(name);
+            (OpCode::GetGlobal(arg), OpCode::SetGlobal(arg))
+        };
         if can_assign && self.matches(TokenType::Equal) {
             self.expression();
-            self.emit_opcode(OpCode::SetGlobal(arg));
+            self.emit_opcode(set_op);
         } else {
-            self.emit_opcode(OpCode::GetGlobal(arg));
+            self.emit_opcode(get_op);
         }
+    }
+
+    fn resolve_local(&mut self, name: &str) -> isize {
+        for (i, local) in self.locals.iter().enumerate().rev() {
+            if local.name.lexeme == name && local.depth != -1 {
+                return i as isize;
+            }
+        }
+        -1
     }
 
     fn emit_return(&mut self) {
@@ -441,4 +530,10 @@ impl Rule {
             precedence,
         }
     }
+}
+
+#[derive(Copy, Clone, Debug)]
+struct Local<'source> {
+    name: Token<'source>,
+    depth: isize,
 }
