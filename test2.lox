@@ -18,3 +18,45 @@ print breakfast;
     print a;
   }
 }
+
+if (true) {
+    print "should print";
+}
+if (false) {
+    print "should not print";
+} else {
+    print "should print (2)";
+}
+
+var breakfast = "beignets (again)";
+var beverage = "cafe au lait (again)";
+breakfast = "beignets with " + beverage;
+print breakfast;
+
+{
+  var i = 0;
+   while (i < 3) {
+      print i;
+      i = i + 1;
+  }
+
+  print "";
+  print "";
+
+  for (var j = 5; j < 10; j = j + 1) {
+      print j;
+  }
+}
+print "";
+var i = 0;
+ while (i < 0 or false) {
+    print i;
+    i = i + 1;
+}
+
+print "";
+print "";
+
+for (var j = 5; j < 10; j = j + 1) {
+    print j;
+}

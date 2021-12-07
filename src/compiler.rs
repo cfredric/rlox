@@ -97,6 +97,29 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
         self.emit_opcode(b);
     }
 
+    fn emit_jump(&mut self, opcode: OpCode) -> usize {
+        self.emit_opcode(opcode);
+        self.current_chunk().code.len() - 1
+    }
+
+    fn patch_jump(&mut self, jump_index: usize) {
+        let distance = self.current_chunk().code.len() - jump_index - 1;
+        match self.current_chunk().code[jump_index] {
+            OpCode::JumpIfFalse(_) => {
+                self.current_chunk_mut().code[jump_index] = OpCode::JumpIfFalse(distance);
+            }
+            OpCode::Jump(_) => {
+                self.current_chunk_mut().code[jump_index] = OpCode::Jump(distance);
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn emit_loop(&mut self, loop_start: usize) {
+        let distance = self.current_chunk().code.len() - loop_start + 1;
+        self.emit_opcode(OpCode::Loop(distance));
+    }
+
     fn emit_opcode(&mut self, opcode: OpCode) {
         let line = self.previous.line;
         self.current_chunk_mut().write_chunk(opcode, line);
@@ -159,6 +182,12 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
     fn statement(&mut self) {
         if self.matches(TokenType::Print) {
             self.print_statement();
+        } else if self.matches(TokenType::For) {
+            self.for_statement();
+        } else if self.matches(TokenType::If) {
+            self.if_statement();
+        } else if self.matches(TokenType::While) {
+            self.while_statement();
         } else if self.matches(TokenType::LeftBrace) {
             self.begin_scope();
             self.block();
@@ -166,6 +195,82 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
         } else {
             self.expression_statement();
         }
+    }
+
+    fn for_statement(&mut self) {
+        self.begin_scope();
+        self.consume(TokenType::LeftParen, "Expect '(' after 'for'.");
+        if self.matches(TokenType::Semicolon) {
+            // No initializer.
+        } else if self.matches(TokenType::Var) {
+            self.var_declaration();
+        } else {
+            self.expression_statement();
+        }
+
+        let mut loop_start = self.current_chunk().code.len();
+        let mut exit_jump = None;
+        if !self.matches(TokenType::Semicolon) {
+            self.expression();
+            self.consume(TokenType::Semicolon, "Expect ';' after loop condition.");
+
+            exit_jump = Some(self.emit_jump(OpCode::JumpIfFalse(0)));
+            self.emit_opcode(OpCode::Pop);
+        }
+
+        if !self.matches(TokenType::RightParen) {
+            let body_jump = self.emit_jump(OpCode::Jump(0));
+            let increment_start = self.current_chunk().code.len();
+            self.expression();
+            self.emit_opcode(OpCode::Pop);
+            self.consume(TokenType::RightParen, "Expect ')' after for clauses.");
+
+            self.emit_loop(loop_start);
+            loop_start = increment_start;
+            self.patch_jump(body_jump);
+        }
+
+        self.statement();
+        self.emit_loop(loop_start);
+
+        if let Some(offset) = exit_jump {
+            self.patch_jump(offset);
+            self.emit_opcode(OpCode::Pop);
+        }
+
+        self.end_scope();
+    }
+
+    fn if_statement(&mut self) {
+        self.consume(TokenType::LeftParen, "Expect '(' after 'if'.");
+        self.expression();
+        self.consume(TokenType::RightParen, "Expect ')' after condition.");
+
+        let then_jump = self.emit_jump(OpCode::JumpIfFalse(0));
+        self.emit_opcode(OpCode::Pop);
+        self.statement();
+        let else_jump = self.emit_jump(OpCode::Jump(0));
+        self.patch_jump(then_jump);
+        self.emit_opcode(OpCode::Pop);
+        if self.matches(TokenType::Else) {
+            self.statement();
+        }
+        self.patch_jump(else_jump);
+    }
+
+    fn while_statement(&mut self) {
+        let loop_start = self.current_chunk().code.len();
+        self.consume(TokenType::LeftParen, "Expect '(' after 'while'.");
+        self.expression();
+        self.consume(TokenType::RightParen, "Expect ')' after condition.");
+
+        let exit_jump = self.emit_jump(OpCode::JumpIfFalse(0));
+        self.emit_opcode(OpCode::Pop);
+        self.statement();
+        self.emit_loop(loop_start);
+
+        self.patch_jump(exit_jump);
+        self.emit_opcode(OpCode::Pop);
     }
 
     fn block(&mut self) {
@@ -308,6 +413,24 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
             return;
         }
         self.emit_opcode(OpCode::DefineGlobal(global))
+    }
+
+    fn and(&mut self) {
+        let end_jump = self.emit_jump(OpCode::JumpIfFalse(0));
+        self.emit_opcode(OpCode::Pop);
+        self.parse_precedence(Precedence::And);
+        self.patch_jump(end_jump);
+    }
+
+    fn or(&mut self) {
+        let else_jump = self.emit_jump(OpCode::JumpIfFalse(0));
+        let end_jump = self.emit_jump(OpCode::Jump(0));
+
+        self.patch_jump(else_jump);
+        self.emit_opcode(OpCode::Pop);
+
+        self.parse_precedence(Precedence::Or);
+        self.patch_jump(end_jump);
     }
 
     fn mark_initialized(&mut self) {
@@ -454,14 +577,14 @@ fn get_rule(ty: TokenType) -> Rule {
         ),
         TokenType::String => Rule::new(Some(|c, _ctx| c.string()), None, Precedence::None),
         TokenType::Number => Rule::new(Some(|c, _ctx| c.number()), None, Precedence::None),
-        TokenType::And => Rule::new(None, None, Precedence::None),
+        TokenType::And => Rule::new(None, Some(|c, _ctx| c.and()), Precedence::And),
         TokenType::Class => Rule::new(None, None, Precedence::None),
         TokenType::Else => Rule::new(None, None, Precedence::None),
         TokenType::False => Rule::new(Some(|c, _ctx| c.literal()), None, Precedence::None),
         TokenType::For => Rule::new(None, None, Precedence::None),
         TokenType::If => Rule::new(None, None, Precedence::None),
         TokenType::Nil => Rule::new(Some(|c, _ctx| c.literal()), None, Precedence::None),
-        TokenType::Or => Rule::new(None, None, Precedence::None),
+        TokenType::Or => Rule::new(None, Some(|c, _ctx| c.or()), Precedence::Or),
         TokenType::Print => Rule::new(None, None, Precedence::None),
         TokenType::Return => Rule::new(None, None, Precedence::None),
         TokenType::Super => Rule::new(None, None, Precedence::None),

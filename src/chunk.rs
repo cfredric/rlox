@@ -22,6 +22,9 @@ pub enum OpCode {
     Negate,
     Pop,
     Print,
+    JumpIfFalse(usize),
+    Jump(usize),
+    Loop(usize),
     Return,
 }
 
@@ -89,6 +92,11 @@ impl Chunk {
             OpCode::SetGlobal(i) => self.constant_instruction("OP_SET_GLOBAL", heap, *i),
             OpCode::GetLocal(i) => self.byte_instruction("OP_GET_LOCAL", *i),
             OpCode::SetLocal(i) => self.byte_instruction("OP_SET_LOCAL", *i),
+            OpCode::JumpIfFalse(distance) => {
+                self.jump_instruction("OP_JUMP_IF_FALSE", *distance, true)
+            }
+            OpCode::Jump(distance) => self.jump_instruction("OP_JUMP", *distance, true),
+            OpCode::Loop(distance) => self.jump_instruction("OP_LOOP", *distance, false),
         }
     }
 
@@ -98,5 +106,10 @@ impl Chunk {
 
     fn byte_instruction(&self, name: &str, slot: usize) {
         println!("{:16} {}", name, slot);
+    }
+
+    fn jump_instruction(&self, name: &str, distance: usize, positive: bool) {
+        let distance = distance as isize * if positive { 1 } else { -1 };
+        println!("{:16} {}", name, distance);
     }
 }

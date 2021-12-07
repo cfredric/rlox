@@ -218,6 +218,17 @@ impl VM {
                 OpCode::GetLocal(slot) => {
                     self.stack.push(self.stack[*slot]);
                 }
+                OpCode::JumpIfFalse(distance) => {
+                    if self.peek(0).is_falsey() {
+                        self.ip += distance;
+                    }
+                }
+                OpCode::Jump(distance) => {
+                    self.ip += distance;
+                }
+                OpCode::Loop(distance) => {
+                    self.ip -= distance;
+                }
             }
         }
     }
