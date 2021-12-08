@@ -18,7 +18,7 @@ pub struct Compiler<'source, 'vm> {
 
     strings: &'vm mut Table<usize>,
 
-    function: Function,
+    compiling_function: Function,
     function_type: FunctionType,
 
     locals: Vec<Local<'source>>,
@@ -42,7 +42,7 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
             panic_mode: false,
             heap,
             strings,
-            function: Function::new("script"),
+            compiling_function: Function::new("script"),
             function_type,
             locals: Vec::new(),
             scope_depth: 0,
@@ -136,11 +136,11 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
 
         if self.print_code && !self.had_error {
             self.current_chunk()
-                .disassemble_chunk(&self.function.name, self.heap);
+                .disassemble_chunk(&self.compiling_function.name, self.heap);
             return None;
         }
         Some(std::mem::replace(
-            &mut self.function,
+            &mut self.compiling_function,
             Function::new("<script>"),
         ))
     }
@@ -164,7 +164,9 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
     }
 
     fn declaration(&mut self) {
-        if self.matches(TokenType::Var) {
+        if self.matches(TokenType::Fun) {
+            self.fun_declaration();
+        } else if self.matches(TokenType::Var) {
             self.var_declaration();
         } else {
             self.statement();
@@ -173,6 +175,13 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
         if self.panic_mode {
             self.synchronize();
         }
+    }
+
+    fn fun_declaration(&mut self) {
+        let global = self.parse_variable("Expect function name.");
+        self.mark_initialized();
+        self.function(FunctionType::Function);
+        self.define_variable(global);
     }
 
     fn var_declaration(&mut self) {
@@ -292,6 +301,8 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
 
         self.consume(TokenType::RightBrace, "Expect '}' after block.");
     }
+
+    fn function(&mut self, ty: FunctionType) {}
 
     fn begin_scope(&mut self) {
         self.scope_depth += 1;
@@ -446,6 +457,9 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
     }
 
     fn mark_initialized(&mut self) {
+        if self.scope_depth == 0 {
+            return;
+        }
         self.locals.last_mut().unwrap().depth = self.scope_depth;
     }
 
@@ -520,11 +534,11 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
     }
 
     fn current_chunk_mut(&mut self) -> &mut Chunk {
-        &mut self.function.chunk
+        &mut self.compiling_function.chunk
     }
 
     fn current_chunk(&self) -> &Chunk {
-        &self.function.chunk
+        &self.compiling_function.chunk
     }
 
     fn error_at_current(&mut self, message: &str) {
