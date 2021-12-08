@@ -34,7 +34,7 @@ impl OpCode {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Chunk {
     pub code: Vec<OpCode>,
     pub constants: Vec<Value>,
@@ -42,6 +42,9 @@ pub struct Chunk {
 }
 
 impl Chunk {
+    pub fn new() -> Self {
+        Self::default()
+    }
     pub fn write_chunk(&mut self, op: OpCode, line: usize) {
         self.code.push(op);
         self.lines.push(line);

@@ -1,7 +1,7 @@
 mod scanner;
 
 use crate::chunk::{Chunk, OpCode};
-use crate::obj::Obj;
+use crate::obj::{Function, Obj};
 use crate::table::Table;
 use crate::value::Value;
 use scanner::{Token, TokenType};
@@ -14,11 +14,12 @@ pub struct Compiler<'source, 'vm> {
     had_error: bool,
     panic_mode: bool,
 
-    compiling_chunk: &'vm mut Chunk,
-
     heap: &'vm mut Vec<Obj>,
 
     strings: &'vm mut Table<usize>,
+
+    function: Function,
+    function_type: FunctionType,
 
     locals: Vec<Local<'source>>,
     scope_depth: isize,
@@ -28,8 +29,8 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
     pub fn new(
         print_code: bool,
         source: &'source str,
-        chunk: &'vm mut Chunk,
         heap: &'vm mut Vec<Obj>,
+        function_type: FunctionType,
         strings: &'vm mut Table<usize>,
     ) -> Self {
         Self {
@@ -39,15 +40,16 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
             previous: Token::default(),
             had_error: false,
             panic_mode: false,
-            compiling_chunk: chunk,
             heap,
             strings,
+            function: Function::new("script"),
+            function_type,
             locals: Vec::new(),
             scope_depth: 0,
         }
     }
 
-    pub fn compile(mut self) -> bool {
+    pub fn compile(mut self) -> Option<Function> {
         self.advance();
 
         while !self.matches(TokenType::Eof) {
@@ -55,8 +57,12 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
         }
 
         self.consume(TokenType::Eof, "Expect end of expression");
-        self.end_compiler();
-        !self.had_error
+        let f = self.end_compiler();
+        if !self.had_error {
+            f
+        } else {
+            None
+        }
     }
 
     fn advance(&mut self) -> Token<'source> {
@@ -125,12 +131,18 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
         self.current_chunk_mut().write_chunk(opcode, line);
     }
 
-    fn end_compiler(&mut self) {
+    fn end_compiler(&mut self) -> Option<Function> {
         self.emit_return();
 
         if self.print_code && !self.had_error {
-            self.current_chunk().disassemble_chunk("code", self.heap);
+            self.current_chunk()
+                .disassemble_chunk(&self.function.name, self.heap);
+            return None;
         }
+        Some(std::mem::replace(
+            &mut self.function,
+            Function::new("<script>"),
+        ))
     }
 
     fn synchronize(&mut self) {
@@ -508,11 +520,11 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
     }
 
     fn current_chunk_mut(&mut self) -> &mut Chunk {
-        &mut self.compiling_chunk
+        &mut self.function.chunk
     }
 
     fn current_chunk(&self) -> &Chunk {
-        self.compiling_chunk
+        &self.function.chunk
     }
 
     fn error_at_current(&mut self, message: &str) {
@@ -659,4 +671,9 @@ impl Rule {
 struct Local<'source> {
     name: Token<'source>,
     depth: isize,
+}
+
+pub enum FunctionType {
+    Function,
+    Script,
 }

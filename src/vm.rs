@@ -1,15 +1,16 @@
-use crate::chunk::{Chunk, OpCode};
+use crate::chunk::OpCode;
 use crate::compiler::Compiler;
-use crate::obj::Obj;
+use crate::obj::{Function, Obj};
 use crate::table::Table;
 use crate::value::Value;
 
 pub struct VM {
     trace_execution: bool,
     print_code: bool,
-    chunk: Chunk,
+
+    frames: Vec<CallFrame>,
+
     heap: Vec<Obj>,
-    ip: usize,
     stack: Vec<Value>,
     strings: Table<usize>,
     globals: Table<Value>,
@@ -60,24 +61,40 @@ impl VM {
         Self {
             print_code: opt.print_code,
             trace_execution: opt.trace_execution,
-            chunk: Chunk::default(),
+            frames: Vec::new(),
             heap: Vec::new(),
-            ip: 0,
             stack: Vec::new(),
             strings: Table::new(),
             globals: Table::new(),
         }
     }
 
+    fn function(&self) -> &Function {
+        match &self.heap[self.frame().heap_index] {
+            Obj::Function(f) => f,
+            Obj::String(_) => unreachable!(),
+        }
+    }
+
+    fn frame(&self) -> &CallFrame {
+        self.frames.last().expect("frames was unexpectedly empty")
+    }
+
+    fn frame_mut(&mut self) -> &mut CallFrame {
+        self.frames
+            .last_mut()
+            .expect("frames was unexpectedly empty")
+    }
+
     fn read_byte(&mut self) -> OpCode {
         // NB: this reads by OpCodes, not by bytes. Differs from the book.
-        let op = self.chunk.code[self.ip];
-        self.ip += 1;
+        let op = self.function().chunk.code[self.frame().ip];
+        self.frame_mut().ip += 1;
         op
     }
 
     fn read_constant(&self, offset: usize) -> Value {
-        self.chunk.constants[offset]
+        self.function().chunk.constants[offset]
     }
 
     fn read_string(&self, offset: usize) -> &str {
@@ -88,6 +105,7 @@ impl VM {
         match val {
             Value::ObjIndex(idx) => match &self.heap[idx] {
                 Obj::String(s) => s,
+                _ => unreachable!(),
             },
             _ => unreachable!(),
         }
@@ -97,6 +115,7 @@ impl VM {
         self.stack.push(value);
     }
 
+    /// Pops a value from the stack.
     fn pop(&mut self) -> Value {
         self.stack.pop().unwrap()
     }
@@ -114,8 +133,9 @@ impl VM {
 
     fn runtime_error(&mut self, message: &str) {
         eprintln!("{}", message);
-        let instruction = self.ip - 1;
-        let line = self.chunk.lines[instruction];
+        let frame = self.frame();
+        let instruction = frame.ip - 1;
+        let line = self.function().chunk.lines[instruction];
         eprintln!("[line {}] in script", line)
     }
 
@@ -129,7 +149,9 @@ impl VM {
                         .map(|i| format!("[ {} ]", i.print(&self.heap)))
                         .collect::<String>()
                 );
-                self.chunk.disassemble_instruction(&self.heap, self.ip);
+                self.function()
+                    .chunk
+                    .disassemble_instruction(&self.heap, self.frame().ip);
             }
             use crate::value::*;
             match &self.read_byte() {
@@ -159,6 +181,9 @@ impl VM {
                                 let (s, t) = (s.clone(), t.clone());
                                 let val = self.concatenate(&s, &t);
                                 self.push(val);
+                            }
+                            (_, _) => {
+                                unreachable!();
                             }
                         }
                     }
@@ -216,18 +241,19 @@ impl VM {
                     self.stack[*slot] = self.peek(0);
                 }
                 OpCode::GetLocal(slot) => {
-                    self.stack.push(self.stack[*slot]);
+                    let value = self.stack[self.frame().slot_start + slot];
+                    self.stack.push(value);
                 }
                 OpCode::JumpIfFalse(distance) => {
                     if self.peek(0).is_falsey() {
-                        self.ip += distance;
+                        self.frame_mut().ip += distance;
                     }
                 }
                 OpCode::Jump(distance) => {
-                    self.ip += distance;
+                    self.frame_mut().ip += distance;
                 }
                 OpCode::Loop(distance) => {
-                    self.ip -= distance;
+                    self.frame_mut().ip -= distance;
                 }
             }
         }
@@ -237,14 +263,41 @@ impl VM {
         let compiler = Compiler::new(
             self.print_code,
             source,
-            &mut self.chunk,
             &mut self.heap,
+            crate::compiler::FunctionType::Script,
             &mut self.strings,
         );
-        if !compiler.compile() {
-            return InterpretResult::CompileError;
+        let function = compiler.compile();
+        match function {
+            Some(function) => {
+                let heap_index = Obj::allocate_object(&mut self.heap, Obj::Function(function));
+                let frame = CallFrame::new(heap_index, self.stack.len());
+                self.frames.push(frame);
+            }
+            None => {
+                return InterpretResult::CompileError;
+            }
         };
 
         self.run()
+    }
+}
+
+struct CallFrame {
+    // Offset into heap.
+    heap_index: usize,
+    // Offset into function.chunk.code.
+    ip: usize,
+    // The first index of the stack that belongs to this frame.
+    slot_start: usize,
+}
+
+impl CallFrame {
+    fn new(heap_index: usize, slot_start: usize) -> Self {
+        Self {
+            heap_index,
+            ip: 0,
+            slot_start,
+        }
     }
 }
