@@ -1,8 +1,9 @@
+use enum_as_inner::EnumAsInner;
 use std::fmt::Display;
 
 use crate::{chunk::Chunk, table::Table};
 
-#[derive(Debug)]
+#[derive(Debug, EnumAsInner)]
 pub enum Obj {
     String(String),
     Function(Function),

@@ -7,6 +7,7 @@ use crate::value::Value;
 pub struct VM {
     trace_execution: bool,
     print_code: bool,
+    compile_only: bool,
 
     frames: Vec<CallFrame>,
 
@@ -15,6 +16,8 @@ pub struct VM {
     strings: Table<usize>,
     globals: Table<Value>,
 }
+
+const MAX_FRAMES: usize = 1024;
 
 pub enum InterpretResult {
     Ok,
@@ -59,8 +62,9 @@ macro_rules! binary_op {
 impl VM {
     pub(crate) fn new(opt: &crate::Opt) -> Self {
         Self {
-            print_code: opt.print_code,
+            print_code: opt.print_code || opt.compile_only,
             trace_execution: opt.trace_execution,
+            compile_only: opt.compile_only,
             frames: Vec::new(),
             heap: Vec::new(),
             stack: Vec::new(),
@@ -124,6 +128,10 @@ impl VM {
         self.stack[self.stack.len() - 1 - offset]
     }
 
+    fn reset_stack(&mut self) {
+        self.stack.clear();
+    }
+
     fn concatenate(&mut self, s: &str, t: &str) -> Value {
         let mut conc = String::new();
         conc.push_str(s);
@@ -133,10 +141,46 @@ impl VM {
 
     fn runtime_error(&mut self, message: &str) {
         eprintln!("{}", message);
-        let frame = self.frame();
-        let instruction = frame.ip - 1;
-        let line = self.function().chunk.lines[instruction];
-        eprintln!("[line {}] in script", line)
+
+        for frame in self.frames.iter().rev() {
+            let func = self.heap[frame.heap_index].as_function().unwrap();
+            let instruction = frame.ip;
+            eprintln!("[line {}] in {}", func.chunk.lines[instruction], func.name);
+        }
+
+        self.reset_stack();
+    }
+
+    fn call_value(&mut self, callee: Value, arg_count: usize) -> bool {
+        if let Value::ObjIndex(heap_index) = callee {
+            if let Obj::Function(_) = &self.heap[heap_index] {
+                return self.call(heap_index, arg_count);
+            }
+        }
+        self.runtime_error("Can only call functions and classes.");
+        false
+    }
+
+    fn call(&mut self, func_heap_index: usize, arg_count: usize) -> bool {
+        let arity = self.heap[func_heap_index].as_function().unwrap().arity;
+        if arg_count != arity {
+            self.runtime_error(&format!(
+                "Expected {} arguments but got {}.",
+                arity, arg_count
+            ));
+            return false;
+        }
+
+        if self.frames.len() == MAX_FRAMES {
+            self.runtime_error("Stack overflow.");
+            return false;
+        }
+
+        self.frames.push(CallFrame::new(
+            func_heap_index,
+            self.stack.len() - arg_count - 1,
+        ));
+        true
     }
 
     fn run(&mut self) -> InterpretResult {
@@ -149,9 +193,20 @@ impl VM {
                         .map(|i| format!("[ {} ]", i.print(&self.heap)))
                         .collect::<String>()
                 );
+
+                println!(
+                    "frame:    {}",
+                    self.stack
+                        .iter()
+                        .skip(self.frame().frame_start)
+                        .map(|i| format!("[ {} ]", i.print(&self.heap)))
+                        .collect::<String>()
+                );
                 self.function()
                     .chunk
                     .disassemble_instruction(&self.heap, self.frame().ip);
+
+                println!();
             }
             use crate::value::*;
             match &self.read_byte() {
@@ -160,7 +215,15 @@ impl VM {
                     self.push(constant);
                 }
                 OpCode::Return => {
-                    return InterpretResult::Ok;
+                    let result = self.pop();
+                    let finished_frame = self.frames.pop().unwrap();
+                    if self.frames.is_empty() {
+                        self.pop();
+                        return InterpretResult::Ok;
+                    }
+
+                    self.stack.truncate(finished_frame.frame_start);
+                    self.push(result);
                 }
                 OpCode::Negate => match self.pop() {
                     Value::Double(d) => self.push(Value::Double(-d)),
@@ -238,10 +301,11 @@ impl VM {
                     }
                 }
                 OpCode::SetLocal(slot) => {
-                    self.stack[*slot] = self.peek(0);
+                    let index = self.frame().slots(*slot);
+                    self.stack[index] = self.peek(0);
                 }
                 OpCode::GetLocal(slot) => {
-                    let value = self.stack[self.frame().slot_start + slot];
+                    let value = self.stack[self.frame().slots(*slot)];
                     self.stack.push(value);
                 }
                 OpCode::JumpIfFalse(distance) => {
@@ -254,6 +318,11 @@ impl VM {
                 }
                 OpCode::Loop(distance) => {
                     self.frame_mut().ip -= distance;
+                }
+                OpCode::Call(arity) => {
+                    if !self.call_value(self.peek(*arity), *arity) {
+                        return InterpretResult::RuntimeError;
+                    }
                 }
             }
         }
@@ -271,13 +340,17 @@ impl VM {
         match function {
             Some(function) => {
                 let heap_index = Obj::allocate_object(&mut self.heap, Obj::Function(function));
-                let frame = CallFrame::new(heap_index, self.stack.len());
-                self.frames.push(frame);
+                self.push(Value::ObjIndex(heap_index));
+                self.call(heap_index, 0);
             }
             None => {
                 return InterpretResult::CompileError;
             }
         };
+
+        if self.compile_only {
+            return InterpretResult::Ok;
+        }
 
         self.run()
     }
@@ -289,15 +362,19 @@ struct CallFrame {
     // Offset into function.chunk.code.
     ip: usize,
     // The first index of the stack that belongs to this frame.
-    slot_start: usize,
+    frame_start: usize,
 }
 
 impl CallFrame {
-    fn new(heap_index: usize, slot_start: usize) -> Self {
+    fn new(heap_index: usize, frame_start: usize) -> Self {
         Self {
             heap_index,
             ip: 0,
-            slot_start,
+            frame_start,
         }
+    }
+
+    fn slots(&self, offset: usize) -> usize {
+        self.frame_start + 1 + offset
     }
 }

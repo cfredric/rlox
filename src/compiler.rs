@@ -20,6 +20,7 @@ pub struct Compiler<'source, 'vm> {
     functions: Vec<FunctionState<'source>>,
 }
 
+#[derive(Debug)]
 struct FunctionState<'source> {
     function: Function,
     function_type: FunctionType,
@@ -64,6 +65,7 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
     }
 
     pub fn compile(mut self) -> Option<Function> {
+        dbg!("COMPILE");
         self.advance();
 
         while !self.matches(TokenType::Eof) {
@@ -151,6 +153,8 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
         if self.print_code && !self.had_error {
             self.current_chunk()
                 .disassemble_chunk(&self.function_state().function.name, self.heap);
+        }
+        if self.had_error {
             return None;
         }
         Some(self.functions.pop().unwrap().function)
@@ -218,6 +222,8 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
             self.for_statement();
         } else if self.matches(TokenType::If) {
             self.if_statement();
+        } else if self.matches(TokenType::Return) {
+            self.return_statement();
         } else if self.matches(TokenType::While) {
             self.while_statement();
         } else if self.matches(TokenType::LeftBrace) {
@@ -331,7 +337,7 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
                 let constant = self.parse_variable("Expect parameter name.");
                 self.define_variable(constant);
 
-                if self.matches(TokenType::Comma) {
+                if !self.matches(TokenType::Comma) {
                     break;
                 }
             }
@@ -363,6 +369,19 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
         self.expression();
         self.consume(TokenType::Semicolon, "Expect ';' after value.");
         self.emit_opcode(OpCode::Print);
+    }
+
+    fn return_statement(&mut self) {
+        if self.function_state().function_type == FunctionType::Script {
+            self.error("Can't return from top-level code.");
+        }
+        if self.matches(TokenType::Semicolon) {
+            self.emit_return();
+        } else {
+            self.expression();
+            self.consume(TokenType::Semicolon, "Expect ';' after return value.");
+            self.emit_opcode(OpCode::Return);
+        }
     }
 
     fn expression_statement(&mut self) {
@@ -419,6 +438,11 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
             TokenType::Slash => self.emit_opcode(OpCode::Divide),
             _ => {}
         }
+    }
+
+    fn call(&mut self) {
+        let arg_count = self.argument_list();
+        self.emit_opcode(OpCode::Call(arg_count));
     }
 
     fn literal(&mut self) {
@@ -478,6 +502,26 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
             return;
         }
         self.emit_opcode(OpCode::DefineGlobal(global))
+    }
+
+    fn argument_list(&mut self) -> usize {
+        let mut arg_count = 0;
+        if !self.check(TokenType::RightParen) {
+            loop {
+                self.expression();
+                if arg_count == 255 {
+                    self.error("Can't have more than 255 arguments.");
+                }
+                arg_count += 1;
+
+                if !self.matches(TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+
+        self.consume(TokenType::RightParen, "Expect ')' after arguments.");
+        arg_count
     }
 
     fn and(&mut self) {
@@ -566,6 +610,7 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
     }
 
     fn emit_return(&mut self) {
+        self.emit_opcode(OpCode::Nil);
         self.emit_opcode(OpCode::Return);
     }
 
@@ -613,7 +658,7 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
             _ => eprint!(" at {}", token.lexeme),
         }
 
-        eprint!(": {}", message);
+        eprintln!(": {}", message);
         self.had_error = true;
     }
 
@@ -624,7 +669,11 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
 
 fn get_rule(ty: TokenType) -> Rule {
     match ty {
-        TokenType::LeftParen => Rule::new(Some(|c, _ctx| c.grouping()), None, Precedence::None),
+        TokenType::LeftParen => Rule::new(
+            Some(|c, _ctx| c.grouping()),
+            Some(|c, _ctx| c.call()),
+            Precedence::Call,
+        ),
         TokenType::RightParen => Rule::new(None, None, Precedence::None),
         TokenType::LeftBrace => Rule::new(None, None, Precedence::None),
         TokenType::RightBrace => Rule::new(None, None, Precedence::None),
@@ -740,7 +789,7 @@ struct Local<'source> {
     depth: isize,
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum FunctionType {
     Function,
     Script,

@@ -18,8 +18,11 @@ pub(crate) struct Opt {
     #[structopt(short = "e", long = "trace_execution")]
     trace_execution: bool,
 
-    #[structopt(short = "c", long = "print_code")]
+    #[structopt(short = "p", long = "print_code")]
     print_code: bool,
+
+    #[structopt(short = "c", long = "compile_only")]
+    compile_only: bool,
 }
 
 fn main() -> io::Result<()> {
