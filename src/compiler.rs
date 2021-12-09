@@ -65,7 +65,6 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
     }
 
     pub fn compile(mut self) -> Option<Function> {
-        dbg!("COMPILE");
         self.advance();
 
         while !self.matches(TokenType::Eof) {
