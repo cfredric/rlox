@@ -17,12 +17,26 @@ pub struct Compiler<'source, 'vm> {
     heap: &'vm mut Vec<Obj>,
 
     strings: &'vm mut Table<usize>,
+    functions: Vec<FunctionState<'source>>,
+}
 
-    compiling_function: Function,
+struct FunctionState<'source> {
+    function: Function,
     function_type: FunctionType,
 
     locals: Vec<Local<'source>>,
     scope_depth: isize,
+}
+
+impl<'source> FunctionState<'source> {
+    fn new(function_type: FunctionType, name: &str) -> Self {
+        Self {
+            function: Function::new(name),
+            function_type,
+            locals: Vec::new(),
+            scope_depth: 0,
+        }
+    }
 }
 
 impl<'source, 'vm> Compiler<'source, 'vm> {
@@ -42,10 +56,7 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
             panic_mode: false,
             heap,
             strings,
-            compiling_function: Function::new("script"),
-            function_type,
-            locals: Vec::new(),
-            scope_depth: 0,
+            functions: vec![FunctionState::new(function_type, "script")],
         }
     }
 
@@ -136,11 +147,11 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
 
         if self.print_code && !self.had_error {
             self.current_chunk()
-                .disassemble_chunk(&self.compiling_function.name, self.heap);
+                .disassemble_chunk(&self.function_state().function.name, self.heap);
             return None;
         }
         Some(std::mem::replace(
-            &mut self.compiling_function,
+            &mut self.function_state_mut().function,
             Function::new("<script>"),
         ))
     }
@@ -305,15 +316,16 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
     fn function(&mut self, ty: FunctionType) {}
 
     fn begin_scope(&mut self) {
-        self.scope_depth += 1;
+        self.function_state_mut().scope_depth += 1;
     }
 
     fn end_scope(&mut self) {
-        self.scope_depth -= 1;
+        self.function_state_mut().scope_depth -= 1;
 
-        while matches!(self.locals.last(), Some(local) if local.depth > self.scope_depth) {
+        while matches!(self.function_state().locals.last(), Some(local) if local.depth > self.function_state().scope_depth)
+        {
             self.emit_opcode(OpCode::Pop);
-            self.locals.pop();
+            self.function_state_mut().locals.pop();
         }
     }
 
@@ -414,7 +426,7 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
     fn parse_variable<'e: 'source>(&mut self, error_message: &'e str) -> usize {
         self.consume(TokenType::Identifier, error_message);
         self.declare_variable();
-        if self.scope_depth > 0 {
+        if self.function_state().scope_depth > 0 {
             return 0;
         }
         let name = self.previous.lexeme;
@@ -431,7 +443,7 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
     }
 
     fn define_variable(&mut self, global: usize) {
-        if self.scope_depth > 0 {
+        if self.function_state().scope_depth > 0 {
             self.mark_initialized();
             return;
         }
@@ -457,20 +469,21 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
     }
 
     fn mark_initialized(&mut self) {
-        if self.scope_depth == 0 {
+        if self.function_state().scope_depth == 0 {
             return;
         }
-        self.locals.last_mut().unwrap().depth = self.scope_depth;
+        self.function_state_mut().locals.last_mut().unwrap().depth =
+            self.function_state().scope_depth;
     }
 
     fn declare_variable(&mut self) {
-        if self.scope_depth == 0 {
+        if self.function_state().scope_depth == 0 {
             return;
         }
         let name = self.previous;
         // TODO: don't clone here.
-        for local in self.locals.clone().iter().rev() {
-            if local.depth != -1 && local.depth < self.scope_depth {
+        for local in self.function_state().locals.clone().iter().rev() {
+            if local.depth != -1 && local.depth < self.function_state().scope_depth {
                 break;
             }
             if self.identifiers_equal(name, local.name) {
@@ -481,11 +494,13 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
     }
 
     fn add_local(&mut self, name: Token<'source>) {
-        if self.locals.len() > 256 {
+        if self.function_state().locals.len() > 256 {
             self.error("Too many local variables in function.");
             return;
         }
-        self.locals.push(Local { name, depth: -1 });
+        self.function_state_mut()
+            .locals
+            .push(Local { name, depth: -1 });
     }
 
     fn variable(&mut self, can_assign: bool) {
@@ -512,7 +527,7 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
     }
 
     fn resolve_local(&mut self, name: &str) -> isize {
-        for (i, local) in self.locals.iter().enumerate().rev() {
+        for (i, local) in self.function_state().locals.iter().enumerate().rev() {
             if local.name.lexeme == name && local.depth != -1 {
                 return i as isize;
             }
@@ -534,11 +549,19 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
     }
 
     fn current_chunk_mut(&mut self) -> &mut Chunk {
-        &mut self.compiling_function.chunk
+        &mut self.function_state_mut().function.chunk
     }
 
     fn current_chunk(&self) -> &Chunk {
-        &self.compiling_function.chunk
+        &self.function_state().function.chunk
+    }
+
+    fn function_state(&self) -> &FunctionState<'source> {
+        self.functions.last().unwrap()
+    }
+
+    fn function_state_mut(&mut self) -> &mut FunctionState<'source> {
+        self.functions.last_mut().unwrap()
     }
 
     fn error_at_current(&mut self, message: &str) {
