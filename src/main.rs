@@ -23,6 +23,9 @@ pub(crate) struct Opt {
 
     #[structopt(short = "c", long = "compile_only")]
     compile_only: bool,
+
+    #[structopt(short = "s", long = "slow_execution")]
+    slow_execution: bool,
 }
 
 fn main() -> io::Result<()> {

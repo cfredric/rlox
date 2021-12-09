@@ -8,6 +8,7 @@ pub struct VM {
     trace_execution: bool,
     print_code: bool,
     compile_only: bool,
+    slow_execution: bool,
 
     frames: Vec<CallFrame>,
 
@@ -65,6 +66,7 @@ impl VM {
             print_code: opt.print_code || opt.compile_only,
             trace_execution: opt.trace_execution,
             compile_only: opt.compile_only,
+            slow_execution: opt.trace_execution && opt.slow_execution,
             frames: Vec::new(),
             heap: Vec::new(),
             stack: Vec::new(),
@@ -207,6 +209,9 @@ impl VM {
                     .disassemble_instruction(&self.heap, self.frame().ip);
 
                 println!();
+            }
+            if self.slow_execution {
+                std::thread::sleep(std::time::Duration::new(1, 0));
             }
             use crate::value::*;
             match &self.read_byte() {
