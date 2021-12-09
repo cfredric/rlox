@@ -60,3 +60,9 @@ print "";
 for (var j = 5; j < 10; j = j + 1) {
     print j;
 }
+
+fun areWeHavingItYet() {
+  print "Yes we are!";
+}
+
+print areWeHavingItYet;

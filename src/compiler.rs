@@ -29,7 +29,10 @@ struct FunctionState<'source> {
 }
 
 impl<'source> FunctionState<'source> {
-    fn new(function_type: FunctionType, name: &str) -> Self {
+    fn new(function_type: FunctionType) -> Self {
+        Self::with_name(function_type, "")
+    }
+    fn with_name(function_type: FunctionType, name: &str) -> Self {
         Self {
             function: Function::new(name),
             function_type,
@@ -56,7 +59,7 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
             panic_mode: false,
             heap,
             strings,
-            functions: vec![FunctionState::new(function_type, "script")],
+            functions: vec![FunctionState::with_name(function_type, "script")],
         }
     }
 
@@ -150,10 +153,7 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
                 .disassemble_chunk(&self.function_state().function.name, self.heap);
             return None;
         }
-        Some(std::mem::replace(
-            &mut self.function_state_mut().function,
-            Function::new("<script>"),
-        ))
+        Some(self.functions.pop().unwrap().function)
     }
 
     fn synchronize(&mut self) {
@@ -313,7 +313,37 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
         self.consume(TokenType::RightBrace, "Expect '}' after block.");
     }
 
-    fn function(&mut self, ty: FunctionType) {}
+    fn function(&mut self, ty: FunctionType) {
+        self.functions.push(if ty == FunctionType::Script {
+            FunctionState::new(ty)
+        } else {
+            FunctionState::with_name(ty, self.previous.lexeme)
+        });
+        self.begin_scope();
+
+        self.consume(TokenType::LeftParen, "Expect '(' after function name.");
+        if !self.check(TokenType::RightParen) {
+            loop {
+                self.function_state_mut().function.arity += 1;
+                if self.function_state().function.arity > 255 {
+                    self.error_at_current("Can't have more than 255 parameters.");
+                }
+                let constant = self.parse_variable("Expect parameter name.");
+                self.define_variable(constant);
+
+                if self.matches(TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+        self.consume(TokenType::RightParen, "Expect ')' after parameters.");
+        self.consume(TokenType::LeftBrace, "Expect '{' before function body.");
+        self.block();
+
+        let function = self.end_compiler().unwrap();
+        let heap_index = Obj::allocate_object(self.heap, Obj::Function(function));
+        self.emit_constant(Value::ObjIndex(heap_index));
+    }
 
     fn begin_scope(&mut self) {
         self.function_state_mut().scope_depth += 1;
@@ -710,6 +740,7 @@ struct Local<'source> {
     depth: isize,
 }
 
+#[derive(Eq, PartialEq)]
 pub enum FunctionType {
     Function,
     Script,
