@@ -4,10 +4,11 @@ use crate::chunk::{Chunk, OpCode};
 use crate::obj::{Function, Obj};
 use crate::table::Table;
 use crate::value::Value;
+use crate::Opt;
 use scanner::{Token, TokenType};
 
-pub struct Compiler<'source, 'vm> {
-    print_code: bool,
+pub(crate) struct Compiler<'source, 'vm> {
+    opt: Opt,
     scanner: scanner::Scanner<'source>,
     current: Token<'source>,
     previous: Token<'source>,
@@ -45,14 +46,14 @@ impl<'source> FunctionState<'source> {
 
 impl<'source, 'vm> Compiler<'source, 'vm> {
     pub fn new(
-        print_code: bool,
+        opt: &Opt,
         source: &'source str,
         heap: &'vm mut Vec<Obj>,
         function_type: FunctionType,
         strings: &'vm mut Table<usize>,
     ) -> Self {
         Self {
-            print_code,
+            opt: opt.clone(),
             scanner: scanner::Scanner::new(source),
             current: Token::default(),
             previous: Token::default(),
@@ -149,7 +150,7 @@ impl<'source, 'vm> Compiler<'source, 'vm> {
     fn end_compiler(&mut self) -> Option<Function> {
         self.emit_return();
 
-        if self.print_code && !self.had_error {
+        if self.opt.print_code && !self.had_error {
             self.current_chunk()
                 .disassemble_chunk(&self.function_state().function.name, self.heap);
         }

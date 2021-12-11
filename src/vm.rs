@@ -3,12 +3,10 @@ use crate::compiler::Compiler;
 use crate::obj::{Function, NativeFn, Obj};
 use crate::table::Table;
 use crate::value::Value;
+use crate::Opt;
 
 pub struct VM {
-    trace_execution: bool,
-    print_code: bool,
-    compile_only: bool,
-    slow_execution: bool,
+    opt: Opt,
 
     frames: Vec<CallFrame>,
 
@@ -74,10 +72,7 @@ macro_rules! binary_op {
 impl VM {
     pub(crate) fn new(opt: &crate::Opt) -> Self {
         let mut vm = Self {
-            print_code: opt.print_code || opt.compile_only,
-            trace_execution: opt.trace_execution,
-            compile_only: opt.compile_only,
-            slow_execution: opt.trace_execution && opt.slow_execution,
+            opt: opt.clone(),
             frames: Vec::new(),
             heap: Vec::new(),
             stack: Vec::new(),
@@ -220,7 +215,7 @@ impl VM {
 
     fn run(&mut self) -> InterpretResult {
         loop {
-            if self.trace_execution {
+            if self.opt.trace_execution {
                 println!(
                     "stack:    {}",
                     self.stack
@@ -243,7 +238,7 @@ impl VM {
 
                 println!();
             }
-            if self.slow_execution {
+            if self.opt.slow_execution {
                 std::thread::sleep(std::time::Duration::new(1, 0));
             }
             use crate::value::*;
@@ -368,7 +363,7 @@ impl VM {
 
     pub fn interpret(&mut self, source: &str) -> InterpretResult {
         let compiler = Compiler::new(
-            self.print_code,
+            &self.opt,
             source,
             &mut self.heap,
             crate::compiler::FunctionType::Script,
@@ -386,7 +381,7 @@ impl VM {
             }
         };
 
-        if self.compile_only {
+        if self.opt.compile_only {
             return InterpretResult::Ok;
         }
 

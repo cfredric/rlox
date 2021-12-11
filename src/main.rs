@@ -10,7 +10,7 @@ mod table;
 mod value;
 mod vm;
 
-#[derive(StructOpt, Debug)]
+#[derive(StructOpt, Debug, Clone)]
 pub(crate) struct Opt {
     #[structopt(name = "PATH", parse(from_os_str))]
     path: Option<PathBuf>,
@@ -29,7 +29,13 @@ pub(crate) struct Opt {
 }
 
 fn main() -> io::Result<()> {
-    let opt = Opt::from_args();
+    let mut opt = Opt::from_args();
+    if opt.slow_execution {
+        opt.trace_execution = true;
+    }
+    if opt.compile_only {
+        opt.print_code = true;
+    }
 
     match &opt.path {
         Some(path) => {
