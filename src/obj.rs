@@ -1,12 +1,13 @@
 use enum_as_inner::EnumAsInner;
 use std::fmt::Display;
 
-use crate::{chunk::Chunk, table::Table};
+use crate::{chunk::Chunk, table::Table, value::Value};
 
 #[derive(Debug, EnumAsInner)]
 pub enum Obj {
     String(String),
     Function(Function),
+    NativeFn(NativeFn),
 }
 
 impl Obj {
@@ -31,6 +32,11 @@ impl Obj {
         idx
     }
 
+    pub fn new_native(heap: &mut Vec<Obj>, f: NativeFn) -> usize {
+        heap.push(Obj::NativeFn(f));
+        heap.len() - 1
+    }
+
     pub fn allocate_object(heap: &mut Vec<Obj>, obj: Obj) -> usize {
         heap.push(obj);
         heap.len() - 1
@@ -42,6 +48,7 @@ impl Display for Obj {
         match self {
             Obj::String(s) => write!(f, "{}", s.to_string()),
             Obj::Function(fun) => write!(f, "<fn {}>", fun.name),
+            Obj::NativeFn(_) => write!(f, "<native fn>"),
         }
     }
 }
@@ -62,3 +69,5 @@ impl Function {
         }
     }
 }
+
+pub type NativeFn = fn(args: Vec<Value>) -> Value;

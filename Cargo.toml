@@ -7,4 +7,5 @@ edition = "2018"
 
 [dependencies]
 enum-as-inner = "0.3.3"
+libc = "0.2.109"
 structopt = "0.3.25"

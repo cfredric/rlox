@@ -84,3 +84,7 @@ fun sum(a, b, c) {
 }
 
 print 4 + sum(5, 6, 7);
+
+var start = clock();
+print fibonacci(25);
+print clock() - start;

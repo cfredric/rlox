@@ -1,6 +1,8 @@
+use enum_as_inner::EnumAsInner;
+
 use crate::obj::Obj;
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Copy, Clone, EnumAsInner)]
 pub enum Value {
     Nil,
     Bool(bool),

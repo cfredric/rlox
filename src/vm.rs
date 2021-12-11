@@ -1,6 +1,6 @@
 use crate::chunk::OpCode;
 use crate::compiler::Compiler;
-use crate::obj::{Function, Obj};
+use crate::obj::{Function, NativeFn, Obj};
 use crate::table::Table;
 use crate::value::Value;
 
@@ -42,6 +42,17 @@ fn lt(a: f64, b: f64) -> bool {
     a < b
 }
 
+mod ffi {
+    extern "C" {
+        pub fn clock() -> libc::clock_t;
+    }
+}
+
+fn clock_native(_args: Vec<Value>) -> Value {
+    let t = unsafe { ffi::clock() };
+    Value::Double(t as f64 / 1_000_000_f64)
+}
+
 macro_rules! binary_op {
     ($self:ident, $op:ident, $value_type:ident) => {{
         let b = $self.pop();
@@ -62,7 +73,7 @@ macro_rules! binary_op {
 
 impl VM {
     pub(crate) fn new(opt: &crate::Opt) -> Self {
-        Self {
+        let mut vm = Self {
             print_code: opt.print_code || opt.compile_only,
             trace_execution: opt.trace_execution,
             compile_only: opt.compile_only,
@@ -72,14 +83,14 @@ impl VM {
             stack: Vec::new(),
             strings: Table::new(),
             globals: Table::new(),
-        }
+        };
+        vm.define_native("clock", clock_native);
+
+        vm
     }
 
     fn function(&self) -> &Function {
-        match &self.heap[self.frame().heap_index] {
-            Obj::Function(f) => f,
-            Obj::String(_) => unreachable!(),
-        }
+        self.heap[self.frame().heap_index].as_function().unwrap()
     }
 
     fn frame(&self) -> &CallFrame {
@@ -153,10 +164,32 @@ impl VM {
         self.reset_stack();
     }
 
+    fn define_native(&mut self, name: &str, function: NativeFn) {
+        let index = Value::ObjIndex(Obj::copy_string(&mut self.heap, &mut self.strings, name));
+        self.push(index);
+        let index = Value::ObjIndex(Obj::new_native(&mut self.heap, function));
+        self.push(index);
+
+        let key = self.as_string(self.stack[0]).to_string();
+        let value = self.stack[1];
+        self.globals.set(&key, value);
+    }
+
     fn call_value(&mut self, callee: Value, arg_count: usize) -> bool {
         if let Value::ObjIndex(heap_index) = callee {
-            if let Obj::Function(_) = &self.heap[heap_index] {
-                return self.call(heap_index, arg_count);
+            match &self.heap[heap_index] {
+                Obj::String(_) => {}
+                Obj::Function(_) => {
+                    return self.call(heap_index, arg_count);
+                }
+                Obj::NativeFn(native) => {
+                    let result = native(self.stack.iter().rev().take(arg_count).cloned().collect());
+                    for _ in 0..arg_count + 1 {
+                        self.pop();
+                    }
+                    self.push(result);
+                    return true;
+                }
             }
         }
         self.runtime_error("Can only call functions and classes.");
