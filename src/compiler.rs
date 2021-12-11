@@ -765,8 +765,9 @@ struct ParseFnCtx {
     can_assign: bool,
 }
 
-type ParseFn =
-    Option<for<'c, 'opt, 'source, 'vm> fn(&'c mut Compiler<'opt, 'source, 'vm>, ParseFnCtx)>;
+type ParseFn = Option<
+    for<'compiler, 'opt, 'source, 'vm> fn(&'compiler mut Compiler<'opt, 'source, 'vm>, ParseFnCtx),
+>;
 
 struct Rule {
     prefix: ParseFn,
