@@ -27,7 +27,7 @@ struct FunctionState<'source> {
     function_type: FunctionType,
 
     locals: Vec<Local<'source>>,
-    scope_depth: isize,
+    scope_depth: usize,
 }
 
 impl<'source> FunctionState<'source> {
@@ -358,7 +358,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     fn end_scope(&mut self) {
         self.function_state_mut().scope_depth -= 1;
 
-        while matches!(self.function_state().locals.last(), Some(local) if local.depth > self.function_state().scope_depth)
+        while matches!(self.function_state().locals.last(), Some(local) if local.depth.map_or(false, |d| d > self.function_state().scope_depth))
         {
             self.emit_opcode(OpCode::Pop);
             self.function_state_mut().locals.pop();
@@ -547,7 +547,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             return;
         }
         self.function_state_mut().locals.last_mut().unwrap().depth =
-            self.function_state().scope_depth;
+            Some(self.function_state().scope_depth);
     }
 
     fn declare_variable(&mut self) {
@@ -557,7 +557,10 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         let name = self.previous;
         // TODO: don't clone here.
         for local in self.function_state().locals.clone().iter().rev() {
-            if local.depth != -1 && local.depth < self.function_state().scope_depth {
+            if local
+                .depth
+                .map_or(false, |d| d < self.function_state().scope_depth)
+            {
                 break;
             }
             if self.identifiers_equal(name, local.name) {
@@ -574,7 +577,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         }
         self.function_state_mut()
             .locals
-            .push(Local { name, depth: -1 });
+            .push(Local { name, depth: None });
     }
 
     fn variable(&mut self, can_assign: bool) {
@@ -582,15 +585,12 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn named_variable(&mut self, name: &str, can_assign: bool) {
-        let arg = self.resolve_local(name);
-        let (get_op, set_op) = if arg != -1 {
-            (
-                OpCode::GetLocal(arg as usize),
-                OpCode::SetLocal(arg as usize),
-            )
-        } else {
-            let arg = self.identifier_constant(name);
-            (OpCode::GetGlobal(arg), OpCode::SetGlobal(arg))
+        let (get_op, set_op) = match self.resolve_local(name) {
+            Some(arg) => (OpCode::GetLocal(arg), OpCode::SetLocal(arg)),
+            None => {
+                let arg = self.identifier_constant(name);
+                (OpCode::GetGlobal(arg), OpCode::SetGlobal(arg))
+            }
         };
         if can_assign && self.matches(TokenType::Equal) {
             self.expression();
@@ -600,13 +600,13 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         }
     }
 
-    fn resolve_local(&mut self, name: &str) -> isize {
+    fn resolve_local(&mut self, name: &str) -> Option<usize> {
         for (i, local) in self.function_state().locals.iter().enumerate().rev() {
-            if local.name.lexeme == name && local.depth != -1 {
-                return i as isize;
+            if local.name.lexeme == name && local.depth.is_some() {
+                return Some(i);
             }
         }
-        -1
+        None
     }
 
     fn emit_return(&mut self) {
@@ -788,7 +788,7 @@ impl Rule {
 #[derive(Copy, Clone, Debug)]
 struct Local<'source> {
     name: Token<'source>,
-    depth: isize,
+    depth: Option<usize>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
