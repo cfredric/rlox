@@ -5,8 +5,8 @@ use crate::table::Table;
 use crate::value::Value;
 use crate::Opt;
 
-pub struct VM {
-    opt: Opt,
+pub struct VM<'opt> {
+    opt: &'opt Opt,
 
     frames: Vec<CallFrame>,
 
@@ -69,10 +69,10 @@ macro_rules! binary_op {
     }};
 }
 
-impl VM {
-    pub(crate) fn new(opt: &crate::Opt) -> Self {
+impl<'opt> VM<'opt> {
+    pub(crate) fn new(opt: &'opt Opt) -> Self {
         let mut vm = Self {
-            opt: opt.clone(),
+            opt,
             frames: Vec::new(),
             heap: Vec::new(),
             stack: Vec::new(),
@@ -363,7 +363,7 @@ impl VM {
 
     pub fn interpret(&mut self, source: &str) -> InterpretResult {
         let compiler = Compiler::new(
-            &self.opt,
+            self.opt,
             source,
             &mut self.heap,
             crate::compiler::FunctionType::Script,

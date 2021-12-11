@@ -7,8 +7,8 @@ use crate::value::Value;
 use crate::Opt;
 use scanner::{Token, TokenType};
 
-pub(crate) struct Compiler<'source, 'vm> {
-    opt: Opt,
+pub(crate) struct Compiler<'opt, 'source, 'vm> {
+    opt: &'opt Opt,
     scanner: scanner::Scanner<'source>,
     current: Token<'source>,
     previous: Token<'source>,
@@ -44,16 +44,16 @@ impl<'source> FunctionState<'source> {
     }
 }
 
-impl<'source, 'vm> Compiler<'source, 'vm> {
+impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     pub fn new(
-        opt: &Opt,
+        opt: &'opt Opt,
         source: &'source str,
         heap: &'vm mut Vec<Obj>,
         function_type: FunctionType,
         strings: &'vm mut Table<usize>,
     ) -> Self {
         Self {
-            opt: opt.clone(),
+            opt,
             scanner: scanner::Scanner::new(source),
             current: Token::default(),
             previous: Token::default(),
@@ -765,7 +765,8 @@ struct ParseFnCtx {
     can_assign: bool,
 }
 
-type ParseFn = Option<for<'c, 'source, 'vm> fn(&'c mut Compiler<'source, 'vm>, ParseFnCtx)>;
+type ParseFn =
+    Option<for<'c, 'opt, 'source, 'vm> fn(&'c mut Compiler<'opt, 'source, 'vm>, ParseFnCtx)>;
 
 struct Rule {
     prefix: ParseFn,

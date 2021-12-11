@@ -10,7 +10,7 @@ mod table;
 mod value;
 mod vm;
 
-#[derive(StructOpt, Debug, Clone)]
+#[derive(StructOpt, Debug)]
 pub(crate) struct Opt {
     #[structopt(name = "PATH", parse(from_os_str))]
     path: Option<PathBuf>,
