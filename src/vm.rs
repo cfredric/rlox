@@ -85,7 +85,8 @@ impl<'opt> VM<'opt> {
     }
 
     fn function(&self) -> &Function {
-        self.heap[self.frame().heap_index].as_function().unwrap()
+        let closure = self.heap[self.frame().heap_index].as_closure().unwrap();
+        self.heap[closure.function_index].as_function().unwrap()
     }
 
     fn frame(&self) -> &CallFrame {
@@ -151,7 +152,8 @@ impl<'opt> VM<'opt> {
         eprintln!("{}", message);
 
         for frame in self.frames.iter().rev() {
-            let func = self.heap[frame.heap_index].as_function().unwrap();
+            let closure = self.heap[frame.heap_index].as_closure().unwrap();
+            let func = self.heap[closure.function_index].as_function().unwrap();
             let instruction = frame.ip;
             eprintln!("[line {}] in {}", func.chunk.lines[instruction], func.name);
         }
@@ -173,8 +175,9 @@ impl<'opt> VM<'opt> {
     fn call_value(&mut self, callee: Value, arg_count: usize) -> bool {
         if let Value::ObjIndex(heap_index) = callee {
             match &self.heap[heap_index] {
-                Obj::String(_) => {}
-                Obj::Function(_) => {
+                Obj::String(_) => unreachable!(),
+                Obj::Function(_) => unreachable!(),
+                Obj::Closure(_) => {
                     return self.call(heap_index, arg_count);
                 }
                 Obj::NativeFn(native) => {
@@ -191,8 +194,12 @@ impl<'opt> VM<'opt> {
         false
     }
 
-    fn call(&mut self, func_heap_index: usize, arg_count: usize) -> bool {
-        let arity = self.heap[func_heap_index].as_function().unwrap().arity;
+    fn call(&mut self, closure_heap_index: usize, arg_count: usize) -> bool {
+        let closure = self.heap[closure_heap_index].as_closure().unwrap();
+        let arity = self.heap[closure.function_index]
+            .as_function()
+            .unwrap()
+            .arity;
         if arg_count != arity {
             self.runtime_error(&format!(
                 "Expected {} arguments but got {}.",
@@ -207,7 +214,7 @@ impl<'opt> VM<'opt> {
         }
 
         self.frames.push(CallFrame::new(
-            func_heap_index,
+            closure_heap_index,
             self.stack.len() - arg_count - 1,
         ));
         true
@@ -357,6 +364,12 @@ impl<'opt> VM<'opt> {
                         return InterpretResult::RuntimeError;
                     }
                 }
+                OpCode::Closure(constant) => {
+                    let value = self.read_constant(*constant);
+                    let function_heap_index = value.as_obj_index().unwrap();
+                    let closure_heap_index = Obj::new_closure(&mut self.heap, *function_heap_index);
+                    self.push(Value::ObjIndex(closure_heap_index));
+                }
             }
         }
     }
@@ -372,9 +385,13 @@ impl<'opt> VM<'opt> {
         let function = compiler.compile();
         match function {
             Some(function) => {
-                let heap_index = Obj::allocate_object(&mut self.heap, Obj::Function(function));
-                self.push(Value::ObjIndex(heap_index));
-                self.call(heap_index, 0);
+                let function_heap_index =
+                    Obj::allocate_object(&mut self.heap, Obj::Function(function));
+                self.push(Value::ObjIndex(function_heap_index));
+                let closure_heap_index = Obj::new_closure(&mut self.heap, function_heap_index);
+                self.pop();
+                self.push(Value::ObjIndex(closure_heap_index));
+                self.call(closure_heap_index, 0);
             }
             None => {
                 return InterpretResult::CompileError;
@@ -390,7 +407,7 @@ impl<'opt> VM<'opt> {
 }
 
 struct CallFrame {
-    // Offset into heap.
+    // Offset into heap. Points to a Closure.
     heap_index: usize,
     // Offset into function.chunk.code.
     ip: usize,

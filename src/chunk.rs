@@ -26,6 +26,7 @@ pub enum OpCode {
     Jump(usize),
     Loop(usize),
     Call(usize),
+    Closure(usize),
     Return,
 }
 
@@ -102,6 +103,11 @@ impl Chunk {
             OpCode::Jump(distance) => self.jump_instruction("OP_JUMP", *distance, true),
             OpCode::Loop(distance) => self.jump_instruction("OP_LOOP", *distance, false),
             OpCode::Call(arity) => self.byte_instruction("OP_CALL", *arity),
+            OpCode::Closure(constant) => {
+                print!("{:16} {} ", "OP_CLOSURE", constant);
+                print!("{}", self.constants[*constant].print(heap));
+                println!();
+            }
         }
     }
 

@@ -347,8 +347,9 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.block();
 
         let function = self.end_compiler().unwrap();
-        let heap_index = Obj::allocate_object(self.heap, Obj::Function(function));
-        self.emit_constant(Value::ObjIndex(heap_index));
+        let function_heap_index = Obj::allocate_object(self.heap, Obj::Function(function));
+        let function_constant_index = self.make_constant(Value::ObjIndex(function_heap_index));
+        self.emit_opcode(OpCode::Closure(function_constant_index));
     }
 
     fn begin_scope(&mut self) {
