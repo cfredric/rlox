@@ -1,6 +1,6 @@
 use crate::chunk::OpCode;
 use crate::compiler::Compiler;
-use crate::obj::{Function, NativeFn, Obj, UpValue};
+use crate::obj::{Function, NativeFn, Obj, OpenOrClosed, UpValue};
 use crate::table::Table;
 use crate::value::Value;
 use crate::Opt;
@@ -198,11 +198,18 @@ impl<'opt> VM<'opt> {
         false
     }
 
+    /// Captures the given stack slot as a local upvalue. Inserts the new
+    /// upvalue into the linked list of upvalues on the heap, sorted by stack
+    /// slot (higher first). May insert below previously-closed upvalues, since
+    /// they don't have a meaningful stack index.
     fn capture_upvalue(&mut self, local: usize) -> usize {
         let mut prev_upvalue = None;
         let mut upvalue = self.open_upvalues;
-        while !upvalue.is_none()
-            && self.heap[upvalue.unwrap()].as_up_value().unwrap().location > local
+        while upvalue.is_some()
+            && self.heap[upvalue.unwrap()]
+                .as_up_value()
+                .unwrap()
+                .is_at_or_above(local)
         {
             prev_upvalue = upvalue;
             upvalue = self.heap[upvalue.unwrap()].as_up_value().unwrap().next;
@@ -211,9 +218,8 @@ impl<'opt> VM<'opt> {
         let created_upvalue = Obj::new_upvalue(
             &mut self.heap,
             UpValue {
-                location: local,
+                value: OpenOrClosed::Open(local),
                 next: upvalue,
-                closed: None,
             },
         );
 
@@ -226,15 +232,22 @@ impl<'opt> VM<'opt> {
         created_upvalue
     }
 
-    fn close_upvalues(&mut self, last_stack_slot: usize) {
+    /// Closes upvalues that point to or above the given stack slot. Upvalues
+    /// that are already closed are ignored.
+    fn close_upvalues(&mut self, stack_slot: usize) {
         while matches!(
             self.open_upvalues,
-            Some(ptr) if self.heap[ptr].as_up_value().unwrap().location >= last_stack_slot
+            Some(ptr) if self.heap[ptr].as_up_value().unwrap().is_at_or_above(stack_slot)
         ) {
             let upvalue = self.heap[self.open_upvalues.unwrap()]
                 .as_up_value_mut()
                 .unwrap();
-            upvalue.closed = Some(self.stack[upvalue.location]);
+            match upvalue.value {
+                OpenOrClosed::Open(loc) => {
+                    upvalue.value = OpenOrClosed::Closed(loc, self.stack[loc]);
+                }
+                OpenOrClosed::Closed(_, _) => {}
+            }
             self.open_upvalues = upvalue.next;
         }
     }
@@ -434,7 +447,10 @@ impl<'opt> VM<'opt> {
                     let closure = self.heap[self.frame().heap_index].as_closure().unwrap();
                     let uv_index = closure.upvalues[*slot];
                     let uv = self.heap[uv_index].as_up_value().unwrap();
-                    let val = uv.closed.unwrap_or_else(|| self.stack[uv.location]);
+                    let val = match uv.value {
+                        OpenOrClosed::Open(loc) => self.stack[loc],
+                        OpenOrClosed::Closed(_, val) => val,
+                    };
                     self.push(val);
                 }
                 OpCode::SetUpvalue(slot) => {
@@ -442,11 +458,10 @@ impl<'opt> VM<'opt> {
                     let uv_index = closure.upvalues[*slot];
                     let val = self.peek(0);
                     let uv = self.heap[uv_index].as_up_value_mut().unwrap();
-                    if uv.closed.is_some() {
-                        uv.closed = Some(val);
-                    } else {
-                        self.stack[uv.location] = val;
-                    }
+                    match uv.value {
+                        OpenOrClosed::Open(loc) => self.stack[loc] = val,
+                        OpenOrClosed::Closed(loc, _) => uv.value = OpenOrClosed::Closed(loc, val),
+                    };
                 }
                 OpCode::CloseUpvalue => {
                     self.close_upvalues(self.stack.len() - 1);

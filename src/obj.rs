@@ -102,12 +102,34 @@ impl Closure {
 
 #[derive(Copy, Clone, Debug)]
 pub struct UpValue {
-    /// Location is a pointer into the stack.
-    pub location: usize,
-
+    /// The value.
+    pub value: OpenOrClosed,
     /// next is a pointer into the heap, to another UpValue object. This forms a linked list.
     pub next: Option<usize>,
+}
 
-    /// Closed may hold a Value that was closed over, if the value was moved off the stack.
-    pub closed: Option<Value>,
+impl UpValue {
+    /// Returns true iff this upvalue points (or used to point) at or above the
+    /// given stack slot.
+    pub fn is_at_or_above(&self, stack_slot: usize) -> bool {
+        self.value.is_at_or_above(stack_slot)
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum OpenOrClosed {
+    /// Open holds a pointer into the stack.
+    Open(usize),
+    /// Value holds the old stack slot (for sorting), and a closed-over value.
+    Closed(usize, Value),
+}
+
+impl OpenOrClosed {
+    fn is_at_or_above(&self, stack_slot: usize) -> bool {
+        let loc = match self {
+            OpenOrClosed::Open(loc) => *loc,
+            OpenOrClosed::Closed(loc, _) => *loc,
+        };
+        loc >= stack_slot
+    }
 }
