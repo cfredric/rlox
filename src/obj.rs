@@ -27,9 +27,8 @@ impl Obj {
     }
 
     fn allocate_string(heap: &mut Vec<Obj>, strings: &mut Table<usize>, s: String) -> usize {
-        let c = s.to_string();
         let idx = Obj::allocate_object(heap, Obj::String(s));
-        strings.set(&c, idx);
+        strings.set(heap[idx].as_string().unwrap(), idx);
         idx
     }
 
