@@ -482,8 +482,7 @@ impl<'opt> VM<'opt> {
         let function = compiler.compile();
         match function {
             Some(function) => {
-                let function_heap_index =
-                    Obj::allocate_object(&mut self.heap, Obj::Function(function));
+                let function_heap_index = Obj::new_function(&mut self.heap, function);
                 self.push(Value::ObjIndex(function_heap_index));
                 let closure_heap_index =
                     Obj::new_closure(&mut self.heap, function_heap_index, Vec::new());

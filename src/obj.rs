@@ -33,6 +33,10 @@ impl Obj {
         idx
     }
 
+    pub fn new_function(heap: &mut Vec<Obj>, f: Function) -> usize {
+        Self::allocate_object(heap, Obj::Function(f))
+    }
+
     pub fn new_native(heap: &mut Vec<Obj>, f: NativeFn) -> usize {
         Self::allocate_object(heap, Obj::NativeFn(f))
     }

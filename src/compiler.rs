@@ -350,7 +350,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.block();
 
         let (function, upvalues) = self.end_compiler().unwrap();
-        let function_heap_index = Obj::allocate_object(self.heap, Obj::Function(function));
+        let function_heap_index = Obj::new_function(self.heap, function);
         let function_constant_index = self.make_constant(Value::ObjIndex(function_heap_index));
         self.emit_opcode(OpCode::Closure(function_constant_index, upvalues));
     }
