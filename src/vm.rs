@@ -13,6 +13,9 @@ pub struct VM<'opt> {
     heap: Vec<Obj>,
     stack: Vec<Value>,
     strings: Table<usize>,
+    /// open_upvalues is a pointer into the heap, to the head of the linked list
+    /// of upvalue objects.
+    open_upvalues: Option<usize>,
     globals: Table<Value>,
 }
 
@@ -77,6 +80,7 @@ impl<'opt> VM<'opt> {
             heap: Vec::new(),
             stack: Vec::new(),
             strings: Table::new(),
+            open_upvalues: None,
             globals: Table::new(),
         };
         vm.define_native("clock", clock_native);
@@ -139,6 +143,7 @@ impl<'opt> VM<'opt> {
 
     fn reset_stack(&mut self) {
         self.stack.clear();
+        self.open_upvalues = None;
     }
 
     fn concatenate(&mut self, s: &str, t: &str) -> Value {
@@ -193,9 +198,45 @@ impl<'opt> VM<'opt> {
         false
     }
 
-    fn capture_upvalue(&mut self, slot: usize) -> usize {
-        let created_upvalue = Obj::new_upvalue(&mut self.heap, UpValue { location: slot });
+    fn capture_upvalue(&mut self, local: usize) -> usize {
+        let mut prev_upvalue = None;
+        let mut upvalue = self.open_upvalues;
+        while !upvalue.is_none()
+            && self.heap[upvalue.unwrap()].as_up_value().unwrap().location > local
+        {
+            prev_upvalue = upvalue;
+            upvalue = self.heap[upvalue.unwrap()].as_up_value().unwrap().next;
+        }
+
+        let created_upvalue = Obj::new_upvalue(
+            &mut self.heap,
+            UpValue {
+                location: local,
+                next: upvalue,
+                closed: None,
+            },
+        );
+
+        if let Some(prev) = prev_upvalue {
+            self.heap[prev].as_up_value_mut().unwrap().next = Some(created_upvalue);
+        } else {
+            self.open_upvalues = Some(created_upvalue);
+        }
+
         created_upvalue
+    }
+
+    fn close_upvalues(&mut self, last_stack_slot: usize) {
+        while matches!(
+            self.open_upvalues,
+            Some(ptr) if self.heap[ptr].as_up_value().unwrap().location >= last_stack_slot
+        ) {
+            let upvalue = self.heap[self.open_upvalues.unwrap()]
+                .as_up_value_mut()
+                .unwrap();
+            upvalue.closed = Some(self.stack[upvalue.location]);
+            self.open_upvalues = upvalue.next;
+        }
     }
 
     fn call(&mut self, closure_heap_index: usize, arg_count: usize) -> bool {
@@ -260,6 +301,7 @@ impl<'opt> VM<'opt> {
                 }
                 OpCode::Return => {
                     let result = self.pop();
+                    self.close_upvalues(self.frame().slots());
                     let finished_frame = self.frames.pop().unwrap();
                     if self.frames.is_empty() {
                         self.pop();
@@ -392,16 +434,23 @@ impl<'opt> VM<'opt> {
                     let closure = self.heap[self.frame().heap_index].as_closure().unwrap();
                     let uv_index = closure.upvalues[*slot];
                     let uv = self.heap[uv_index].as_up_value().unwrap();
-                    // TODO: this assumes the upvalue points into the stack.
-                    let val = self.stack[uv.location];
+                    let val = uv.closed.unwrap_or_else(|| self.stack[uv.location]);
                     self.push(val);
                 }
                 OpCode::SetUpvalue(slot) => {
                     let closure = self.heap[self.frame().heap_index].as_closure().unwrap();
                     let uv_index = closure.upvalues[*slot];
-                    let uv = self.heap[uv_index].as_up_value().unwrap();
-                    // TODO: this assumes the upvalue points into the stack.
-                    self.stack[uv.location] = self.peek(0);
+                    let val = self.peek(0);
+                    let uv = self.heap[uv_index].as_up_value_mut().unwrap();
+                    if uv.closed.is_some() {
+                        uv.closed = Some(val);
+                    } else {
+                        self.stack[uv.location] = val;
+                    }
+                }
+                OpCode::CloseUpvalue => {
+                    self.close_upvalues(self.stack.len() - 1);
+                    self.pop();
                 }
             }
         }

@@ -44,7 +44,7 @@ impl Value {
             Value::Double(d) => d.to_string(),
             Value::Nil => "nil".to_string(),
             Value::Bool(b) => b.to_string(),
-            Value::ObjIndex(i) => heap[*i].to_string(),
+            Value::ObjIndex(i) => heap[*i].print(heap),
         }
     }
 }

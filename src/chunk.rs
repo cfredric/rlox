@@ -28,6 +28,7 @@ pub enum OpCode {
     Loop(usize),
     Call(usize),
     Closure(usize, Vec<Upvalue>),
+    CloseUpvalue,
     /// Operand is the index into the closure's upvalue array.
     GetUpvalue(usize),
     /// Operand is the index into the closure's upvalue array.
@@ -127,6 +128,7 @@ impl Chunk {
             }
             OpCode::GetUpvalue(index) => self.byte_instruction("OP_GET_UPVALUE", *index),
             OpCode::SetUpvalue(index) => self.byte_instruction("OP_SET_UPVALUE", *index),
+            OpCode::CloseUpvalue => op.simple_instruction("OP_CLOSE_UPVALUE", offset),
         }
     }
 

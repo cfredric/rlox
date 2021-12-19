@@ -364,7 +364,11 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
         while matches!(self.current().locals.last(), Some(local) if local.depth.map_or(false, |d| d > self.current().scope_depth))
         {
-            self.emit_opcode(OpCode::Pop);
+            if self.current().locals.last().unwrap().is_captured {
+                self.emit_opcode(OpCode::CloseUpvalue);
+            } else {
+                self.emit_opcode(OpCode::Pop);
+            }
             self.current_mut().locals.pop();
         }
     }
@@ -578,7 +582,11 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             self.error("Too many local variables in function.");
             return;
         }
-        self.current_mut().locals.push(Local { name, depth: None });
+        self.current_mut().locals.push(Local {
+            name,
+            depth: None,
+            is_captured: false,
+        });
     }
 
     fn variable(&mut self, can_assign: bool) {
@@ -647,6 +655,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
         let enclosing = state_index - 1;
         if let Some(local) = Self::resolve_local(&self.functions[enclosing], name) {
+            self.functions[enclosing].locals[local].is_captured = true;
             return Some(self.add_upvalue(local, true));
         }
 
@@ -837,6 +846,7 @@ impl Rule {
 struct Local<'source> {
     name: Token<'source>,
     depth: Option<usize>,
+    is_captured: bool,
 }
 
 #[derive(Debug, Eq, PartialEq)]

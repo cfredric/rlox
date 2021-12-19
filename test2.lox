@@ -99,3 +99,26 @@ fun outer() {
   print x;
 }
 outer();
+
+fun foo() {
+  var x = 123;
+  print x;
+}
+
+foo();
+
+fun outer2() {
+  var y = "outside";
+  var z = "outside2";
+  fun inner() {
+    print y;
+    print z;
+    z = "modified";
+  }
+
+  return inner;
+}
+
+var closure = outer2();
+closure();
+closure();

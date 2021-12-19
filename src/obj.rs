@@ -1,5 +1,4 @@
 use enum_as_inner::EnumAsInner;
-use std::fmt::Display;
 
 use crate::{chunk::Chunk, table::Table, value::Value};
 
@@ -50,16 +49,17 @@ impl Obj {
         heap.push(obj);
         heap.len() - 1
     }
-}
 
-impl Display for Obj {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    pub fn print(&self, heap: &[Obj]) -> String {
         match self {
-            Obj::String(s) => write!(f, "{}", s.to_string()),
-            Obj::Function(fun) => write!(f, "<fn {}>", fun.name),
-            Obj::NativeFn(_) => write!(f, "<native fn>"),
-            Obj::Closure(fun) => write!(f, "<closure (fn {})>", fun.function_index),
-            Obj::UpValue(_) => write!(f, "upvalue"),
+            Obj::String(s) => s.to_string(),
+            Obj::Function(fun) => format!("<fn {}>", fun.name),
+            Obj::NativeFn(_) => "<native fn>".to_string(),
+            Obj::Closure(fun) => format!(
+                "<closure (fn {})>",
+                heap[fun.function_index].as_function().unwrap().name
+            ),
+            Obj::UpValue(upvalue) => format!("upvalue {:?}", upvalue),
         }
     }
 }
@@ -102,6 +102,12 @@ impl Closure {
 
 #[derive(Copy, Clone, Debug)]
 pub struct UpValue {
-    /// Location is a pointer into the heap.
+    /// Location is a pointer into the stack.
     pub location: usize,
+
+    /// next is a pointer into the heap, to another UpValue object. This forms a linked list.
+    pub next: Option<usize>,
+
+    /// Closed may hold a Value that was closed over, if the value was moved off the stack.
+    pub closed: Option<Value>,
 }
