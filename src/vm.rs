@@ -1,6 +1,6 @@
 use crate::chunk::OpCode;
 use crate::compiler::Compiler;
-use crate::obj::{Function, NativeFn, Obj};
+use crate::obj::{Function, NativeFn, Obj, UpValue};
 use crate::table::Table;
 use crate::value::Value;
 use crate::Opt;
@@ -101,7 +101,7 @@ impl<'opt> VM<'opt> {
 
     fn read_byte(&mut self) -> OpCode {
         // NB: this reads by OpCodes, not by bytes. Differs from the book.
-        let op = self.function().chunk.code[self.frame().ip];
+        let op = self.function().chunk.code[self.frame().ip].clone();
         self.frame_mut().ip += 1;
         op
     }
@@ -175,8 +175,7 @@ impl<'opt> VM<'opt> {
     fn call_value(&mut self, callee: Value, arg_count: usize) -> bool {
         if let Value::ObjIndex(heap_index) = callee {
             match &self.heap[heap_index] {
-                Obj::String(_) => unreachable!(),
-                Obj::Function(_) => unreachable!(),
+                Obj::String(_) | Obj::Function(_) | Obj::UpValue(_) => unreachable!(),
                 Obj::Closure(_) => {
                     return self.call(heap_index, arg_count);
                 }
@@ -192,6 +191,11 @@ impl<'opt> VM<'opt> {
         }
         self.runtime_error("Can only call functions and classes.");
         false
+    }
+
+    fn capture_upvalue(&mut self, slot: usize) -> usize {
+        let created_upvalue = Obj::new_upvalue(&mut self.heap, UpValue { location: slot });
+        created_upvalue
     }
 
     fn call(&mut self, closure_heap_index: usize, arg_count: usize) -> bool {
@@ -341,11 +345,11 @@ impl<'opt> VM<'opt> {
                     }
                 }
                 OpCode::SetLocal(slot) => {
-                    let index = self.frame().slots(*slot);
+                    let index = self.frame().slots() + *slot;
                     self.stack[index] = self.peek(0);
                 }
                 OpCode::GetLocal(slot) => {
-                    let value = self.stack[self.frame().slots(*slot)];
+                    let value = self.stack[self.frame().slots() + *slot];
                     self.stack.push(value);
                 }
                 OpCode::JumpIfFalse(distance) => {
@@ -364,11 +368,40 @@ impl<'opt> VM<'opt> {
                         return InterpretResult::RuntimeError;
                     }
                 }
-                OpCode::Closure(constant) => {
+                OpCode::Closure(constant, upvalues) => {
                     let value = self.read_constant(*constant);
                     let function_heap_index = value.as_obj_index().unwrap();
-                    let closure_heap_index = Obj::new_closure(&mut self.heap, *function_heap_index);
+                    let upvalues = upvalues
+                        .iter()
+                        .map(|uv| {
+                            if uv.is_local {
+                                self.capture_upvalue(self.frame().slots() + uv.index)
+                            } else {
+                                self.heap[self.frame().heap_index]
+                                    .as_closure()
+                                    .unwrap()
+                                    .upvalues[uv.index]
+                            }
+                        })
+                        .collect();
+                    let closure_heap_index =
+                        Obj::new_closure(&mut self.heap, *function_heap_index, upvalues);
                     self.push(Value::ObjIndex(closure_heap_index));
+                }
+                OpCode::GetUpvalue(slot) => {
+                    let closure = self.heap[self.frame().heap_index].as_closure().unwrap();
+                    let uv_index = closure.upvalues[*slot];
+                    let uv = self.heap[uv_index].as_up_value().unwrap();
+                    // TODO: this assumes the upvalue points into the stack.
+                    let val = self.stack[uv.location];
+                    self.push(val);
+                }
+                OpCode::SetUpvalue(slot) => {
+                    let closure = self.heap[self.frame().heap_index].as_closure().unwrap();
+                    let uv_index = closure.upvalues[*slot];
+                    let uv = self.heap[uv_index].as_up_value().unwrap();
+                    // TODO: this assumes the upvalue points into the stack.
+                    self.stack[uv.location] = self.peek(0);
                 }
             }
         }
@@ -388,7 +421,8 @@ impl<'opt> VM<'opt> {
                 let function_heap_index =
                     Obj::allocate_object(&mut self.heap, Obj::Function(function));
                 self.push(Value::ObjIndex(function_heap_index));
-                let closure_heap_index = Obj::new_closure(&mut self.heap, function_heap_index);
+                let closure_heap_index =
+                    Obj::new_closure(&mut self.heap, function_heap_index, Vec::new());
                 self.pop();
                 self.push(Value::ObjIndex(closure_heap_index));
                 self.call(closure_heap_index, 0);
@@ -424,7 +458,7 @@ impl CallFrame {
         }
     }
 
-    fn slots(&self, offset: usize) -> usize {
-        self.frame_start + 1 + offset
+    fn slots(&self) -> usize {
+        self.frame_start + 1
     }
 }

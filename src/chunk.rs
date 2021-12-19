@@ -1,7 +1,8 @@
+use crate::compiler::Upvalue;
 use crate::obj::Obj;
 use crate::value::Value;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub enum OpCode {
     Constant(usize),
     Nil,
@@ -26,7 +27,11 @@ pub enum OpCode {
     Jump(usize),
     Loop(usize),
     Call(usize),
-    Closure(usize),
+    Closure(usize, Vec<Upvalue>),
+    /// Operand is the index into the closure's upvalue array.
+    GetUpvalue(usize),
+    /// Operand is the index into the closure's upvalue array.
+    SetUpvalue(usize),
     Return,
 }
 
@@ -103,11 +108,25 @@ impl Chunk {
             OpCode::Jump(distance) => self.jump_instruction("OP_JUMP", *distance, true),
             OpCode::Loop(distance) => self.jump_instruction("OP_LOOP", *distance, false),
             OpCode::Call(arity) => self.byte_instruction("OP_CALL", *arity),
-            OpCode::Closure(constant) => {
+            OpCode::Closure(constant, upvalues) => {
                 print!("{:16} {} ", "OP_CLOSURE", constant);
                 print!("{}", self.constants[*constant].print(heap));
                 println!();
+
+                println!(
+                    "{}",
+                    upvalues
+                        .iter()
+                        .map(|upvalue| format!(
+                            "        |   {} {}",
+                            if upvalue.is_local { "local" } else { "upvalue" },
+                            upvalue.index
+                        ))
+                        .collect::<String>()
+                );
             }
+            OpCode::GetUpvalue(index) => self.byte_instruction("OP_GET_UPVALUE", *index),
+            OpCode::SetUpvalue(index) => self.byte_instruction("OP_SET_UPVALUE", *index),
         }
     }
 

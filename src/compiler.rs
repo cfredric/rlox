@@ -28,6 +28,8 @@ struct FunctionState<'source> {
 
     locals: Vec<Local<'source>>,
     scope_depth: usize,
+
+    upvalues: Vec<Upvalue>,
 }
 
 impl<'source> FunctionState<'source> {
@@ -40,6 +42,7 @@ impl<'source> FunctionState<'source> {
             function_type,
             locals: Vec::new(),
             scope_depth: 0,
+            upvalues: Vec::new(),
         }
     }
 }
@@ -73,7 +76,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         }
 
         self.consume(TokenType::Eof, "Expect end of expression");
-        let f = self.end_compiler();
+        let f = self.end_compiler().map(|f| f.0);
         if !self.had_error {
             f
         } else {
@@ -147,17 +150,17 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.current_chunk_mut().write_chunk(opcode, line);
     }
 
-    fn end_compiler(&mut self) -> Option<Function> {
+    fn end_compiler(&mut self) -> Option<(Function, Vec<Upvalue>)> {
         self.emit_return();
 
         if self.opt.print_code && !self.had_error {
             self.current_chunk()
-                .disassemble_chunk(&self.function_state().function.name, self.heap);
+                .disassemble_chunk(&self.current().function.name, self.heap);
         }
         if self.had_error {
             return None;
         }
-        Some(self.functions.pop().unwrap().function)
+        self.functions.pop().map(|f| (f.function, f.upvalues))
     }
 
     fn synchronize(&mut self) {
@@ -330,8 +333,8 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.consume(TokenType::LeftParen, "Expect '(' after function name.");
         if !self.check(TokenType::RightParen) {
             loop {
-                self.function_state_mut().function.arity += 1;
-                if self.function_state().function.arity > 255 {
+                self.current_mut().function.arity += 1;
+                if self.current().function.arity > 255 {
                     self.error_at_current("Can't have more than 255 parameters.");
                 }
                 let constant = self.parse_variable("Expect parameter name.");
@@ -346,23 +349,23 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.consume(TokenType::LeftBrace, "Expect '{' before function body.");
         self.block();
 
-        let function = self.end_compiler().unwrap();
+        let (function, upvalues) = self.end_compiler().unwrap();
         let function_heap_index = Obj::allocate_object(self.heap, Obj::Function(function));
         let function_constant_index = self.make_constant(Value::ObjIndex(function_heap_index));
-        self.emit_opcode(OpCode::Closure(function_constant_index));
+        self.emit_opcode(OpCode::Closure(function_constant_index, upvalues));
     }
 
     fn begin_scope(&mut self) {
-        self.function_state_mut().scope_depth += 1;
+        self.current_mut().scope_depth += 1;
     }
 
     fn end_scope(&mut self) {
-        self.function_state_mut().scope_depth -= 1;
+        self.current_mut().scope_depth -= 1;
 
-        while matches!(self.function_state().locals.last(), Some(local) if local.depth.map_or(false, |d| d > self.function_state().scope_depth))
+        while matches!(self.current().locals.last(), Some(local) if local.depth.map_or(false, |d| d > self.current().scope_depth))
         {
             self.emit_opcode(OpCode::Pop);
-            self.function_state_mut().locals.pop();
+            self.current_mut().locals.pop();
         }
     }
 
@@ -373,7 +376,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn return_statement(&mut self) {
-        if self.function_state().function_type == FunctionType::Script {
+        if self.current().function_type == FunctionType::Script {
             self.error("Can't return from top-level code.");
         }
         if self.matches(TokenType::Semicolon) {
@@ -481,7 +484,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     fn parse_variable<'e: 'source>(&mut self, error_message: &'e str) -> usize {
         self.consume(TokenType::Identifier, error_message);
         self.declare_variable();
-        if self.function_state().scope_depth > 0 {
+        if self.current().scope_depth > 0 {
             return 0;
         }
         let name = self.previous.lexeme;
@@ -498,7 +501,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn define_variable(&mut self, global: usize) {
-        if self.function_state().scope_depth > 0 {
+        if self.current().scope_depth > 0 {
             self.mark_initialized();
             return;
         }
@@ -544,23 +547,22 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn mark_initialized(&mut self) {
-        if self.function_state().scope_depth == 0 {
+        if self.current().scope_depth == 0 {
             return;
         }
-        self.function_state_mut().locals.last_mut().unwrap().depth =
-            Some(self.function_state().scope_depth);
+        self.current_mut().locals.last_mut().unwrap().depth = Some(self.current().scope_depth);
     }
 
     fn declare_variable(&mut self) {
-        if self.function_state().scope_depth == 0 {
+        if self.current().scope_depth == 0 {
             return;
         }
         let name = self.previous;
         // TODO: don't clone here.
-        for local in self.function_state().locals.clone().iter().rev() {
+        for local in self.current().locals.clone().iter().rev() {
             if local
                 .depth
-                .map_or(false, |d| d < self.function_state().scope_depth)
+                .map_or(false, |d| d < self.current().scope_depth)
             {
                 break;
             }
@@ -572,13 +574,11 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn add_local(&mut self, name: Token<'source>) {
-        if self.function_state().locals.len() > 256 {
+        if self.current().locals.len() > 256 {
             self.error("Too many local variables in function.");
             return;
         }
-        self.function_state_mut()
-            .locals
-            .push(Local { name, depth: None });
+        self.current_mut().locals.push(Local { name, depth: None });
     }
 
     fn variable(&mut self, can_assign: bool) {
@@ -586,12 +586,15 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn named_variable(&mut self, name: &str, can_assign: bool) {
-        let (get_op, set_op) = match self.resolve_local(name) {
+        let (get_op, set_op) = match Self::resolve_local(self.current(), name) {
             Some(arg) => (OpCode::GetLocal(arg), OpCode::SetLocal(arg)),
-            None => {
-                let arg = self.identifier_constant(name);
-                (OpCode::GetGlobal(arg), OpCode::SetGlobal(arg))
-            }
+            None => match self.resolve_upvalue(self.functions.len() - 1, name) {
+                Some(arg) => (OpCode::GetUpvalue(arg), OpCode::SetUpvalue(arg)),
+                None => {
+                    let arg = self.identifier_constant(name);
+                    (OpCode::GetGlobal(arg), OpCode::SetGlobal(arg))
+                }
+            },
         };
         if can_assign && self.matches(TokenType::Equal) {
             self.expression();
@@ -601,12 +604,56 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         }
     }
 
-    fn resolve_local(&mut self, name: &str) -> Option<usize> {
-        for (i, local) in self.function_state().locals.iter().enumerate().rev() {
+    fn resolve_local(state: &FunctionState, name: &str) -> Option<usize> {
+        for (i, local) in state.locals.iter().enumerate().rev() {
             if local.name.lexeme == name && local.depth.is_some() {
                 return Some(i);
             }
         }
+        None
+    }
+
+    fn add_upvalue(&mut self, index: usize, is_local: bool) -> usize {
+        if let Some(index) =
+            self.current()
+                .upvalues
+                .iter()
+                .enumerate()
+                .find_map(|(idx, upvalue)| {
+                    if upvalue.index == index && upvalue.is_local == is_local {
+                        Some(idx)
+                    } else {
+                        None
+                    }
+                })
+        {
+            return index;
+        }
+
+        if self.current().upvalues.len() >= 256 {
+            self.error("Too many closure variables in function.");
+            return 0;
+        }
+        self.current_mut()
+            .upvalues
+            .push(Upvalue { index, is_local });
+        self.current().upvalues.len() - 1
+    }
+
+    fn resolve_upvalue(&mut self, state_index: usize, name: &str) -> Option<usize> {
+        if state_index == 0 {
+            return None;
+        }
+
+        let enclosing = state_index - 1;
+        if let Some(local) = Self::resolve_local(&self.functions[enclosing], name) {
+            return Some(self.add_upvalue(local, true));
+        }
+
+        if let Some(upvalue) = self.resolve_upvalue(state_index - 1, name) {
+            return Some(self.add_upvalue(upvalue, false));
+        }
+
         None
     }
 
@@ -625,18 +672,18 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn current_chunk_mut(&mut self) -> &mut Chunk {
-        &mut self.function_state_mut().function.chunk
+        &mut self.current_mut().function.chunk
     }
 
     fn current_chunk(&self) -> &Chunk {
-        &self.function_state().function.chunk
+        &self.current().function.chunk
     }
 
-    fn function_state(&self) -> &FunctionState<'source> {
+    fn current(&self) -> &FunctionState<'source> {
         self.functions.last().unwrap()
     }
 
-    fn function_state_mut(&mut self) -> &mut FunctionState<'source> {
+    fn current_mut(&mut self) -> &mut FunctionState<'source> {
         self.functions.last_mut().unwrap()
     }
 
@@ -796,4 +843,10 @@ struct Local<'source> {
 pub enum FunctionType {
     Function,
     Script,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Upvalue {
+    pub index: usize,
+    pub is_local: bool,
 }

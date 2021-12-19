@@ -88,3 +88,14 @@ print 4 + sum(5, 6, 7);
 var start = clock();
 print fibonacci(5);
 print clock() - start;
+
+fun outer() {
+  var x = "outside";
+  fun inner() {
+    print x;
+    x = "from inside";
+  }
+  inner();
+  print x;
+}
+outer();

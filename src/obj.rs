@@ -9,6 +9,7 @@ pub enum Obj {
     Function(Function),
     Closure(Closure),
     NativeFn(NativeFn),
+    UpValue(UpValue),
 }
 
 impl Obj {
@@ -34,12 +35,15 @@ impl Obj {
     }
 
     pub fn new_native(heap: &mut Vec<Obj>, f: NativeFn) -> usize {
-        heap.push(Obj::NativeFn(f));
-        heap.len() - 1
+        Self::allocate_object(heap, Obj::NativeFn(f))
     }
 
-    pub fn new_closure(heap: &mut Vec<Obj>, func_index: usize) -> usize {
-        Self::allocate_object(heap, Obj::Closure(Closure::new(func_index)))
+    pub fn new_closure(heap: &mut Vec<Obj>, func_index: usize, upvalues: Vec<usize>) -> usize {
+        Self::allocate_object(heap, Obj::Closure(Closure::new(func_index, upvalues)))
+    }
+
+    pub fn new_upvalue(heap: &mut Vec<Obj>, upvalue: UpValue) -> usize {
+        Self::allocate_object(heap, Obj::UpValue(upvalue))
     }
 
     pub fn allocate_object(heap: &mut Vec<Obj>, obj: Obj) -> usize {
@@ -55,6 +59,7 @@ impl Display for Obj {
             Obj::Function(fun) => write!(f, "<fn {}>", fun.name),
             Obj::NativeFn(_) => write!(f, "<native fn>"),
             Obj::Closure(fun) => write!(f, "<closure (fn {})>", fun.function_index),
+            Obj::UpValue(_) => write!(f, "upvalue"),
         }
     }
 }
@@ -80,12 +85,23 @@ pub type NativeFn = fn(args: Vec<Value>) -> Value;
 
 #[derive(Debug)]
 pub struct Closure {
-    // The heap index of the underlying function.
+    /// The heap index of the underlying function.
     pub function_index: usize,
+    /// Pointers into the heap.
+    pub upvalues: Vec<usize>,
 }
 
 impl Closure {
-    fn new(function_index: usize) -> Self {
-        Self { function_index }
+    fn new(function_index: usize, upvalues: Vec<usize>) -> Self {
+        Self {
+            function_index,
+            upvalues,
+        }
     }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct UpValue {
+    /// Location is a pointer into the heap.
+    pub location: usize,
 }
