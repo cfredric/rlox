@@ -402,7 +402,7 @@ impl<'opt> VM<'opt> {
 
     fn mark_roots(&mut self) {
         for slot in 0..self.stack.len() {
-            self.mark_stack_value(slot);
+            self.mark_value(self.stack[slot]);
         }
 
         for index in self.frames.iter().map(|f| f.heap_index).collect::<Vec<_>>() {
@@ -427,10 +427,6 @@ impl<'opt> VM<'opt> {
         // Not marking compiler roots, since the compiler doesn't exist after
         // the call to `compile` completes. This implementation has no static
         // state, unlike clox.
-    }
-
-    fn mark_stack_value(&mut self, stack_slot: usize) {
-        self.mark_value(self.stack[stack_slot]);
     }
 
     fn mark_value(&mut self, value: Value) {
