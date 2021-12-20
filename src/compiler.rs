@@ -606,12 +606,18 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn resolve_local(state: &FunctionState, name: &str) -> Option<usize> {
-        for (i, local) in state.locals.iter().enumerate().rev() {
-            if local.name.lexeme == name && local.depth.is_some() {
-                return Some(i);
-            }
-        }
-        None
+        state
+            .locals
+            .iter()
+            .enumerate()
+            .rev()
+            .find_map(|(i, local)| {
+                if local.name.lexeme == name && local.depth.is_some() {
+                    Some(i)
+                } else {
+                    None
+                }
+            })
     }
 
     fn add_upvalue(&mut self, index: usize, is_local: bool) -> usize {
