@@ -1,9 +1,15 @@
 use enum_as_inner::EnumAsInner;
 
-use crate::{chunk::Chunk, table::Table, value::Value};
+use crate::{chunk::Chunk, value::Value};
+
+#[derive(Debug)]
+pub struct Obj {
+    pub is_marked: bool,
+    pub variant: ObjVariant,
+}
 
 #[derive(Debug, EnumAsInner)]
-pub enum Obj {
+pub enum ObjVariant {
     String(String),
     Function(Function),
     Closure(Closure),
@@ -12,57 +18,27 @@ pub enum Obj {
 }
 
 impl Obj {
-    pub fn copy_string(heap: &mut Vec<Obj>, strings: &mut Table<usize>, s: &str) -> usize {
-        if let Some(v) = strings.get(s) {
-            return *v;
+    pub fn new(variant: ObjVariant) -> Self {
+        Self {
+            is_marked: false,
+            variant,
         }
-        Obj::allocate_string(heap, strings, s.to_string())
     }
 
-    pub fn take_string(heap: &mut Vec<Obj>, strings: &mut Table<usize>, s: String) -> usize {
-        if let Some(v) = strings.get(&s) {
-            return *v;
-        }
-        Obj::allocate_string(heap, strings, s)
-    }
-
-    fn allocate_string(heap: &mut Vec<Obj>, strings: &mut Table<usize>, s: String) -> usize {
-        let idx = Obj::allocate_object(heap, Obj::String(s));
-        strings.set(heap[idx].as_string().unwrap(), idx);
-        idx
-    }
-
-    pub fn new_function(heap: &mut Vec<Obj>, f: Function) -> usize {
-        Self::allocate_object(heap, Obj::Function(f))
-    }
-
-    pub fn new_native(heap: &mut Vec<Obj>, f: NativeFn) -> usize {
-        Self::allocate_object(heap, Obj::NativeFn(f))
-    }
-
-    pub fn new_closure(heap: &mut Vec<Obj>, func_index: usize, upvalues: Vec<usize>) -> usize {
-        Self::allocate_object(heap, Obj::Closure(Closure::new(func_index, upvalues)))
-    }
-
-    pub fn new_upvalue(heap: &mut Vec<Obj>, upvalue: UpValue) -> usize {
-        Self::allocate_object(heap, Obj::UpValue(upvalue))
-    }
-
-    pub fn allocate_object(heap: &mut Vec<Obj>, obj: Obj) -> usize {
-        heap.push(obj);
-        heap.len() - 1
+    pub fn mark(&mut self) {
+        self.is_marked = true;
     }
 
     pub fn print(&self, heap: &[Obj]) -> String {
-        match self {
-            Obj::String(s) => s.to_string(),
-            Obj::Function(fun) => format!("<fn {}>", fun.name),
-            Obj::NativeFn(_) => "<native fn>".to_string(),
-            Obj::Closure(fun) => format!(
+        match &self.variant {
+            ObjVariant::String(s) => s.to_string(),
+            ObjVariant::Function(fun) => format!("<fn {}>", fun.name),
+            ObjVariant::NativeFn(_) => "<native fn>".to_string(),
+            ObjVariant::Closure(fun) => format!(
                 "<closure (fn {})>",
-                heap[fun.function_index].as_function().unwrap().name
+                heap[fun.function_index].variant.as_function().unwrap().name
             ),
-            Obj::UpValue(upvalue) => format!("upvalue {:?}", upvalue),
+            ObjVariant::UpValue(upvalue) => format!("upvalue {:?}", upvalue),
         }
     }
 }
@@ -95,7 +71,7 @@ pub struct Closure {
 }
 
 impl Closure {
-    fn new(function_index: usize, upvalues: Vec<usize>) -> Self {
+    pub fn new(function_index: usize, upvalues: Vec<usize>) -> Self {
         Self {
             function_index,
             upvalues,

@@ -1,9 +1,9 @@
 mod scanner;
 
 use crate::chunk::{Chunk, OpCode};
-use crate::obj::{Function, Obj};
-use crate::table::Table;
+use crate::obj::Function;
 use crate::value::Value;
+use crate::vm::VM;
 use crate::Opt;
 use scanner::{Token, TokenType};
 
@@ -15,9 +15,8 @@ pub(crate) struct Compiler<'opt, 'source, 'vm> {
     had_error: bool,
     panic_mode: bool,
 
-    heap: &'vm mut Vec<Obj>,
+    vm: &'vm mut VM<'opt>,
 
-    strings: &'vm mut Table<usize>,
     functions: Vec<FunctionState<'source>>,
 }
 
@@ -51,9 +50,8 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     pub fn new(
         opt: &'opt Opt,
         source: &'source str,
-        heap: &'vm mut Vec<Obj>,
+        vm: &'vm mut VM<'opt>,
         function_type: FunctionType,
-        strings: &'vm mut Table<usize>,
     ) -> Self {
         Self {
             opt,
@@ -62,8 +60,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             previous: Token::default(),
             had_error: false,
             panic_mode: false,
-            heap,
-            strings,
+            vm,
             functions: vec![FunctionState::with_name(function_type, "script")],
         }
     }
@@ -155,7 +152,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
         if self.opt.print_code && !self.had_error {
             self.current_chunk()
-                .disassemble_chunk(&self.current().function.name, self.heap);
+                .disassemble_chunk(&self.current().function.name, &self.vm.heap);
         }
         if self.had_error {
             return None;
@@ -350,7 +347,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.block();
 
         let (function, upvalues) = self.end_compiler().unwrap();
-        let function_heap_index = Obj::new_function(self.heap, function);
+        let function_heap_index = self.vm.new_function(function);
         let function_constant_index = self.make_constant(Value::ObjIndex(function_heap_index));
         self.emit_opcode(OpCode::Closure(function_constant_index, upvalues));
     }
@@ -410,11 +407,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
     fn string(&mut self) {
         let len = self.previous.lexeme.len();
-        let index = Obj::copy_string(
-            &mut self.heap,
-            &mut self.strings,
-            &self.previous.lexeme[1..len - 1],
-        );
+        let index = self.vm.copy_string(&self.previous.lexeme[1..len - 1]);
         self.emit_constant(Value::ObjIndex(index));
     }
 
@@ -496,7 +489,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn identifier_constant(&mut self, name: &str) -> usize {
-        let idx = Obj::copy_string(self.heap, self.strings, name);
+        let idx = self.vm.copy_string(name);
         self.make_constant(Value::ObjIndex(idx))
     }
 

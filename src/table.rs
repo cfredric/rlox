@@ -2,7 +2,9 @@ use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct Table<V> {
-    table: HashMap<String, V>,
+    // TODO: use GC'ed strings as keys, in order to allow pruning of unused
+    // (unmarked) strings during garbage collection.
+    pub table: HashMap<String, V>,
 }
 
 impl<V> Table<V> {

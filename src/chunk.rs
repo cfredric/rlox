@@ -23,8 +23,11 @@ pub enum OpCode {
     Negate,
     Pop,
     Print,
+    /// Operand is the distance to jump.
     JumpIfFalse(usize),
+    /// Operand is the distance to jump.
     Jump(usize),
+    /// Operand is the distance to jump backwards.
     Loop(usize),
     Call(usize),
     Closure(usize, Vec<Upvalue>),

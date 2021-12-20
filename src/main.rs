@@ -11,7 +11,7 @@ mod value;
 mod vm;
 
 #[derive(StructOpt, Debug)]
-pub(crate) struct Opt {
+pub struct Opt {
     #[structopt(name = "PATH", parse(from_os_str))]
     path: Option<PathBuf>,
 
@@ -26,6 +26,12 @@ pub(crate) struct Opt {
 
     #[structopt(short = "s", long = "slow_execution")]
     slow_execution: bool,
+
+    #[structopt(short = "g", long = "stress_garbage_collector")]
+    stress_garbage_collector: bool,
+
+    #[structopt(short = "l", long = "log_garbage_collection")]
+    log_garbage_collection: bool,
 }
 
 fn main() -> io::Result<()> {
