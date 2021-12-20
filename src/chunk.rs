@@ -4,13 +4,22 @@ use crate::value::Value;
 
 #[derive(Clone, Debug)]
 pub enum OpCode {
+    /// Operand is the index into the constants table.
     Constant(usize),
     Nil,
+    /// Operand is the boolean value itself.
     Bool(bool),
+    /// Operand is the index into the constants table.
     GetGlobal(usize),
+    /// Operand is the index into the constants table.
     DefineGlobal(usize),
+    /// Operand is the index into the constants table.
     SetGlobal(usize),
+    /// Operand is the stack frame's slot. Starts counting from the start of the
+    /// frame.
     GetLocal(usize),
+    /// Operand is the stack frame's slot. Starts counting from the start of the
+    /// frame.
     SetLocal(usize),
     Equal,
     Greater,
@@ -29,7 +38,10 @@ pub enum OpCode {
     Jump(usize),
     /// Operand is the distance to jump backwards.
     Loop(usize),
+    /// Operand is the number of arguments passed to the callee.
     Call(usize),
+    /// First operand is the index into the constants table for the function;
+    /// second operand is the list of upvalue metadata used by the closure.
     Closure(usize, Vec<Upvalue>),
     CloseUpvalue,
     /// Operand is the index into the closure's upvalue array.
