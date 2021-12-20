@@ -558,25 +558,24 @@ impl<'opt> VM<'opt> {
         }
     }
 
+    fn print_stack_slice(&self, label: &str, skip: usize) {
+        eprintln!(
+            "{}:    {}",
+            label,
+            self.stack
+                .iter()
+                .skip(skip)
+                .map(|i| format!("[ {} ]", i.print(&self.heap)))
+                .collect::<String>()
+        );
+    }
+
     fn run(&mut self) -> InterpretResult {
         loop {
             if self.opt.trace_execution {
-                eprintln!(
-                    "stack:    {}",
-                    self.stack
-                        .iter()
-                        .map(|i| format!("[ {} ]", i.print(&self.heap)))
-                        .collect::<String>()
-                );
+                self.print_stack_slice("stack", 0);
+                self.print_stack_slice("frame", self.frame().frame_start);
 
-                eprintln!(
-                    "frame:    {}",
-                    self.stack
-                        .iter()
-                        .skip(self.frame().frame_start)
-                        .map(|i| format!("[ {} ]", i.print(&self.heap)))
-                        .collect::<String>()
-                );
                 self.function()
                     .chunk
                     .disassemble_instruction(&self.heap, self.frame().ip);
@@ -598,6 +597,9 @@ impl<'opt> VM<'opt> {
                     let finished_frame = self.frames.pop().unwrap();
                     if self.frames.is_empty() {
                         self.pop();
+                        if self.opt.trace_execution {
+                            self.print_stack_slice("stack", 0);
+                        }
                         return InterpretResult::Ok;
                     }
 
