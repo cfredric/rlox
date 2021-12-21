@@ -2,7 +2,9 @@ use std::collections::HashMap;
 
 use crate::chunk::{Chunk, OpCode};
 use crate::compiler::Compiler;
-use crate::obj::{Closure, Function, NativeFn, Obj, ObjVariant, OpenOrClosed, UpValue};
+use crate::obj::{
+    Class, Closure, Function, Instance, NativeFn, Obj, ObjVariant, OpenOrClosed, UpValue,
+};
 use crate::table::Table;
 use crate::value::Value;
 use crate::Opt;
@@ -141,6 +143,17 @@ impl<'opt> VM<'opt> {
         ))))
     }
 
+    pub fn new_class(&mut self, name: &str) -> usize {
+        self.allocate_object(Obj::new(ObjVariant::Class(Class::new(name))))
+    }
+
+    pub fn new_instance(&mut self, class_index: usize) -> usize {
+        self.allocate_object(Obj::new(ObjVariant::Instance(Instance::new(
+            class_index,
+            Table::new(),
+        ))))
+    }
+
     pub fn new_upvalue(&mut self, upvalue: UpValue) -> usize {
         self.allocate_object(Obj::new(ObjVariant::UpValue(upvalue)))
     }
@@ -189,10 +202,12 @@ impl<'opt> VM<'opt> {
         op
     }
 
+    // Reads a constant from the constants table.
     fn read_constant(&self, offset: usize) -> Value {
         self.function().chunk.constants[offset]
     }
 
+    /// Reads a string from the constants table.
     fn read_string(&self, offset: usize) -> &str {
         self.as_string(self.read_constant(offset))
     }
@@ -270,6 +285,16 @@ impl<'opt> VM<'opt> {
                     self.push(result);
                     true
                 }
+                ObjVariant::Class(_) => {
+                    // Eat args, for now.
+                    for _ in 0..arg_count + 1 {
+                        self.pop();
+                    }
+                    let instance = self.new_instance(heap_index);
+                    self.push(Value::ObjIndex(instance));
+                    true
+                }
+                ObjVariant::Instance(_) => todo!(),
             };
         }
         self.runtime_error("Can only call functions and classes.");
@@ -441,7 +466,7 @@ impl<'opt> VM<'opt> {
         }
 
         match &self.heap[index].variant {
-            ObjVariant::String(_) | ObjVariant::NativeFn(_) => {}
+            ObjVariant::String(_) | ObjVariant::NativeFn(_) | ObjVariant::Class(_) => {}
             ObjVariant::Function(f) => {
                 // TODO: don't clone here.
                 for v in f.chunk.constants.clone().iter_mut() {
@@ -459,6 +484,14 @@ impl<'opt> VM<'opt> {
             ObjVariant::UpValue(upvalue) => {
                 if let OpenOrClosed::Closed(_, v) = upvalue.value {
                     self.mark_value(v);
+                }
+            }
+            ObjVariant::Instance(i) => {
+                let idx = i.class_index;
+                let field_values = i.fields.table.values().copied().collect::<Vec<_>>();
+                self.mark_object(idx);
+                for value in field_values {
+                    self.mark_value(value);
                 }
             }
         }
@@ -512,7 +545,7 @@ impl<'opt> VM<'opt> {
         for obj in self.heap.iter_mut() {
             obj.is_marked = false;
             match &mut obj.variant {
-                ObjVariant::String(_) | ObjVariant::NativeFn(_) => {
+                ObjVariant::String(_) | ObjVariant::NativeFn(_) | ObjVariant::Class(_) => {
                     // Nothing to do here.
                 }
                 ObjVariant::Function(f) => {
@@ -528,6 +561,9 @@ impl<'opt> VM<'opt> {
                     if let Some(ptr) = uv.next {
                         uv.next = Some(mapping[&ptr]);
                     }
+                }
+                ObjVariant::Instance(i) => {
+                    i.class_index = mapping[&i.class_index];
                 }
             }
         }
@@ -590,6 +626,7 @@ impl<'opt> VM<'opt> {
                         if self.opt.trace_execution {
                             self.print_stack_slice("stack", 0);
                         }
+                        assert!(self.stack.is_empty());
                         return InterpretResult::Ok;
                     }
 
@@ -740,6 +777,50 @@ impl<'opt> VM<'opt> {
                 OpCode::CloseUpvalue => {
                     self.close_upvalues(self.stack.len() - 1);
                     self.pop();
+                }
+                OpCode::Class(index) => {
+                    let name = self.read_string(*index).to_string();
+                    let heap_index = self.new_class(&name);
+                    self.push(Value::ObjIndex(heap_index));
+                }
+                OpCode::GetProperty(constant) => {
+                    let instance_idx = *self.peek(0).as_obj_index().unwrap();
+                    if self.heap[instance_idx].variant.as_instance().is_none() {
+                        self.runtime_error("Only instances have properties.");
+                        return InterpretResult::RuntimeError;
+                    }
+                    let name = self.read_string(*constant).to_string();
+                    if let Some(v) = self.heap[instance_idx]
+                        .variant
+                        .as_instance()
+                        .unwrap()
+                        .fields
+                        .get(&name)
+                        .cloned()
+                    {
+                        self.pop(); // Instance.
+                        self.push(v);
+                    } else {
+                        self.runtime_error(&format!("Undefined property '{}'.", name));
+                    }
+                }
+                OpCode::SetProperty(constant) => {
+                    let instance_idx = *self.peek(1).as_obj_index().unwrap();
+                    if self.heap[instance_idx].variant.as_instance().is_none() {
+                        self.runtime_error("Only instances have properties.");
+                        return InterpretResult::RuntimeError;
+                    }
+                    let name = self.read_string(*constant).to_string();
+                    let value = self.peek(0);
+                    self.heap[instance_idx]
+                        .variant
+                        .as_instance_mut()
+                        .unwrap()
+                        .fields
+                        .set(&name, value);
+                    self.pop(); // Value.
+                    self.pop(); // Instance.
+                    self.push(value);
                 }
             }
         }

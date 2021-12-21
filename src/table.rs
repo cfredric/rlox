@@ -27,7 +27,7 @@ impl<V> Table<V> {
         }
     }
 
-    pub fn get(&mut self, key: &str) -> Option<&V> {
+    pub fn get(&self, key: &str) -> Option<&V> {
         self.table.get(key)
     }
 

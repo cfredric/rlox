@@ -175,7 +175,9 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn declaration(&mut self) {
-        if self.matches(TokenType::Fun) {
+        if self.matches(TokenType::Class) {
+            self.class_declaration();
+        } else if self.matches(TokenType::Fun) {
             self.fun_declaration();
         } else if self.matches(TokenType::Var) {
             self.var_declaration();
@@ -186,6 +188,18 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         if self.panic_mode {
             self.synchronize();
         }
+    }
+
+    fn class_declaration(&mut self) {
+        self.consume(TokenType::Identifier, "Expect class name.");
+        let name_constant = self.identifier_constant(self.previous.lexeme);
+        self.declare_variable();
+
+        self.emit_opcode(OpCode::Class(name_constant));
+        self.define_variable(name_constant);
+
+        self.consume(TokenType::LeftBrace, "Expect '{' before class body.");
+        self.consume(TokenType::RightBrace, "Expect '}' after class body.");
     }
 
     fn fun_declaration(&mut self) {
@@ -440,6 +454,18 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     fn call(&mut self) {
         let arg_count = self.argument_list();
         self.emit_opcode(OpCode::Call(arg_count));
+    }
+
+    fn dot(&mut self, can_assign: bool) {
+        self.consume(TokenType::Identifier, "Expect property name after '.'.");
+        let name = self.identifier_constant(self.previous.lexeme);
+
+        if can_assign && self.matches(TokenType::Equal) {
+            self.expression();
+            self.emit_opcode(OpCode::SetProperty(name));
+        } else {
+            self.emit_opcode(OpCode::GetProperty(name));
+        }
     }
 
     fn literal(&mut self) {
@@ -728,7 +754,7 @@ fn get_rule(ty: TokenType) -> Rule {
         TokenType::LeftBrace => Rule::new(None, None, Precedence::None),
         TokenType::RightBrace => Rule::new(None, None, Precedence::None),
         TokenType::Comma => Rule::new(None, None, Precedence::None),
-        TokenType::Dot => Rule::new(None, None, Precedence::None),
+        TokenType::Dot => Rule::new(None, Some(|c, ctx| c.dot(ctx.can_assign)), Precedence::Call),
         TokenType::Minus => Rule::new(
             Some(|c, _ctx| c.unary()),
             Some(|c, _ctx| c.binary()),

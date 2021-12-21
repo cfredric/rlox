@@ -48,7 +48,13 @@ pub enum OpCode {
     GetUpvalue(usize),
     /// Operand is the index into the closure's upvalue array.
     SetUpvalue(usize),
+    /// Operand is the index into the constants table for the property name.
+    GetProperty(usize),
+    /// Operand is the index into the constants table for the property name.
+    SetProperty(usize),
     Return,
+    /// Operand is the index into the constants table for the class name.
+    Class(usize),
 }
 
 #[derive(Default, Debug)]
@@ -135,6 +141,13 @@ impl Chunk {
             OpCode::GetUpvalue(index) => self.byte_instruction("OP_GET_UPVALUE", *index),
             OpCode::SetUpvalue(index) => self.byte_instruction("OP_SET_UPVALUE", *index),
             OpCode::CloseUpvalue => Self::simple_instruction("OP_CLOSE_UPVALUE"),
+            OpCode::Class(index) => self.constant_instruction("OP_CLASS", heap, *index),
+            OpCode::GetProperty(constant) => {
+                self.constant_instruction("OP_GET_PROPERTY", heap, *constant)
+            }
+            OpCode::SetProperty(constant) => {
+                self.constant_instruction("OP_SET_PROPERTY", heap, *constant)
+            }
         }
     }
 

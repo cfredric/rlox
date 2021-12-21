@@ -122,3 +122,12 @@ fun outer2() {
 var closure = outer2();
 closure();
 closure();
+
+class Brioche{}
+print Brioche;
+print Brioche();
+
+class Toast {}
+var toast = Toast();
+print toast.jam = "grape";
+print toast.jam;

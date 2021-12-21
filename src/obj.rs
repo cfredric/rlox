@@ -1,6 +1,6 @@
 use enum_as_inner::EnumAsInner;
 
-use crate::{chunk::Chunk, value::Value};
+use crate::{chunk::Chunk, table::Table, value::Value};
 
 #[derive(Debug)]
 pub struct Obj {
@@ -15,6 +15,8 @@ pub enum ObjVariant {
     Closure(Closure),
     NativeFn(NativeFn),
     UpValue(UpValue),
+    Class(Class),
+    Instance(Instance),
 }
 
 impl Obj {
@@ -39,6 +41,13 @@ impl Obj {
                 heap[fun.function_index].variant.as_function().unwrap().name
             ),
             ObjVariant::UpValue(upvalue) => format!("upvalue {:?}", upvalue),
+            ObjVariant::Class(c) => c.name.to_string(),
+            ObjVariant::Instance(i) => {
+                format!(
+                    "{} instance",
+                    heap[i.class_index].variant.as_class().unwrap().name
+                )
+            }
         }
     }
 }
@@ -75,6 +84,34 @@ impl Closure {
         Self {
             function_index,
             upvalues,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Class {
+    name: String,
+}
+
+impl Class {
+    pub fn new(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Instance {
+    pub class_index: usize,
+    pub fields: Table<Value>,
+}
+
+impl Instance {
+    pub fn new(class_index: usize, fields: Table<Value>) -> Self {
+        Self {
+            class_index,
+            fields,
         }
     }
 }
