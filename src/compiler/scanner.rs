@@ -25,14 +25,9 @@ impl<'source> Scanner<'source> {
             return self.make_token(Eof);
         }
 
-        let c = self.advance();
-        if c.is_alphabetic() {
-            return self.identifier();
-        }
-        if c.is_digit(10) {
-            return self.number();
-        }
-        match c {
+        match self.advance() {
+            c if c.is_alphabetic() => self.identifier(),
+            c if c.is_digit(10) => self.number(),
             '(' => self.make_token(LeftParen),
             ')' => self.make_token(RightParen),
             '{' => self.make_token(LeftBrace),
@@ -72,16 +67,13 @@ impl<'source> Scanner<'source> {
     }
 
     fn matches(&mut self, expected: char) -> bool {
-        if self.is_at_end() {
-            return false;
+        if self.is_at_end() || self.source[self.current] as char != expected {
+            false
+        } else {
+            self.source = &self.source[self.current + 1..];
+            self.current = 0;
+            true
         }
-        if self.source[self.current] as char != expected {
-            return false;
-        }
-
-        self.source = &self.source[self.current + 1..];
-        self.current = 0;
-        true
     }
 
     fn is_at_end(&self) -> bool {
@@ -151,8 +143,7 @@ impl<'source> Scanner<'source> {
         while self.peek().is_alphabetic() || self.peek().is_digit(10) {
             self.advance();
         }
-        let ty = self.identifier_type();
-        self.make_token(ty)
+        self.make_token(self.identifier_type())
     }
 
     fn number(&mut self) -> Token<'source> {
@@ -187,8 +178,7 @@ impl<'source> Scanner<'source> {
 
     fn identifier_type(&self) -> TokenType {
         use TokenType::*;
-        let ident = std::str::from_utf8(&self.source[0..self.current]).unwrap();
-        match ident {
+        match std::str::from_utf8(&self.source[0..self.current]).unwrap() {
             "and" => And,
             "class" => Class,
             "else" => Else,

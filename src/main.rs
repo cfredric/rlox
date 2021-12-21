@@ -57,8 +57,7 @@ fn run_file(path: &Path, opt: &Opt) {
         Ok(source) => source,
         Err(_) => todo!(),
     };
-    let mut vm = vm::VM::new(opt);
-    let result = vm.interpret(&source);
+    let result = vm::VM::new(opt).interpret(&source);
 
     match result {
         vm::InterpretResult::Ok => {}

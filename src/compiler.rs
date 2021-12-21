@@ -126,13 +126,9 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
     fn patch_jump(&mut self, jump_index: usize) {
         let distance = self.current_chunk().code.len() - jump_index - 1;
-        match self.current_chunk().code[jump_index] {
-            OpCode::JumpIfFalse(_) => {
-                self.current_chunk_mut().code[jump_index] = OpCode::JumpIfFalse(distance);
-            }
-            OpCode::Jump(_) => {
-                self.current_chunk_mut().code[jump_index] = OpCode::Jump(distance);
-            }
+        self.current_chunk_mut().code[jump_index] = match self.current_chunk().code[jump_index] {
+            OpCode::JumpIfFalse(_) => OpCode::JumpIfFalse(distance),
+            OpCode::Jump(_) => OpCode::Jump(distance),
             _ => unreachable!(),
         }
     }
@@ -587,15 +583,13 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn named_variable(&mut self, name: &str, can_assign: bool) {
-        let (get_op, set_op) = match Self::resolve_local(self.current(), name) {
-            Some(arg) => (OpCode::GetLocal(arg), OpCode::SetLocal(arg)),
-            None => match self.resolve_upvalue(self.functions.len() - 1, name) {
-                Some(arg) => (OpCode::GetUpvalue(arg), OpCode::SetUpvalue(arg)),
-                None => {
-                    let arg = self.identifier_constant(name);
-                    (OpCode::GetGlobal(arg), OpCode::SetGlobal(arg))
-                }
-            },
+        let (get_op, set_op) = if let Some(arg) = Self::resolve_local(self.current(), name) {
+            (OpCode::GetLocal(arg), OpCode::SetLocal(arg))
+        } else if let Some(arg) = self.resolve_upvalue(self.functions.len() - 1, name) {
+            (OpCode::GetUpvalue(arg), OpCode::SetUpvalue(arg))
+        } else {
+            let arg = self.identifier_constant(name);
+            (OpCode::GetGlobal(arg), OpCode::SetGlobal(arg))
         };
         if can_assign && self.matches(TokenType::Equal) {
             self.expression();

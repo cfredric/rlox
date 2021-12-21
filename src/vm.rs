@@ -159,11 +159,7 @@ impl<'opt> VM<'opt> {
     }
 
     fn function(&self) -> &Function {
-        let closure = self.heap[self.frame().heap_index]
-            .variant
-            .as_closure()
-            .unwrap();
-        self.heap[closure.function_index]
+        self.heap[self.closure().function_index]
             .variant
             .as_function()
             .unwrap()
@@ -177,6 +173,13 @@ impl<'opt> VM<'opt> {
         self.frames
             .last_mut()
             .expect("frames was unexpectedly empty")
+    }
+
+    fn closure(&self) -> &Closure {
+        self.heap[self.frame().heap_index]
+            .variant
+            .as_closure()
+            .unwrap()
     }
 
     fn read_byte(&mut self) -> OpCode {
@@ -195,13 +198,10 @@ impl<'opt> VM<'opt> {
     }
 
     fn as_string(&self, val: Value) -> &str {
-        match val {
-            Value::ObjIndex(idx) => match &self.heap[idx].variant {
-                ObjVariant::String(s) => s,
-                _ => unreachable!(),
-            },
-            _ => unreachable!(),
-        }
+        self.heap[*val.as_obj_index().unwrap()]
+            .variant
+            .as_string()
+            .unwrap()
     }
 
     fn push(&mut self, value: Value) {
@@ -233,11 +233,7 @@ impl<'opt> VM<'opt> {
         eprintln!("{}", message);
 
         for frame in self.frames.iter().rev() {
-            let closure = self.heap[frame.heap_index].variant.as_closure().unwrap();
-            let func = self.heap[closure.function_index]
-                .variant
-                .as_function()
-                .unwrap();
+            let func = self.function();
             let instruction = frame.ip;
             eprintln!("[line {}] in {}", func.chunk.lines[instruction], func.name);
         }
@@ -261,22 +257,20 @@ impl<'opt> VM<'opt> {
 
     fn call_value(&mut self, callee: Value, arg_count: usize) -> bool {
         if let Value::ObjIndex(heap_index) = callee {
-            match &self.heap[heap_index].variant {
+            return match &self.heap[heap_index].variant {
                 ObjVariant::String(_) | ObjVariant::Function(_) | ObjVariant::UpValue(_) => {
                     unreachable!()
                 }
-                ObjVariant::Closure(_) => {
-                    return self.call(heap_index, arg_count);
-                }
+                ObjVariant::Closure(_) => self.call(heap_index, arg_count),
                 ObjVariant::NativeFn(native) => {
                     let result = native(self.stack.iter().rev().take(arg_count).cloned().collect());
                     for _ in 0..arg_count + 1 {
                         self.pop();
                     }
                     self.push(result);
-                    return true;
+                    true
                 }
-            }
+            };
         }
         self.runtime_error("Can only call functions and classes.");
         false
@@ -726,11 +720,7 @@ impl<'opt> VM<'opt> {
                     self.push(Value::ObjIndex(closure_heap_index));
                 }
                 OpCode::GetUpvalue(slot) => {
-                    let closure = self.heap[self.frame().heap_index]
-                        .variant
-                        .as_closure()
-                        .unwrap();
-                    let uv_index = closure.upvalues[*slot];
+                    let uv_index = self.closure().upvalues[*slot];
                     let uv = self.heap[uv_index].variant.as_up_value().unwrap();
                     let val = match uv.value {
                         OpenOrClosed::Open(loc) => self.stack[loc],
@@ -739,11 +729,7 @@ impl<'opt> VM<'opt> {
                     self.push(val);
                 }
                 OpCode::SetUpvalue(slot) => {
-                    let closure = self.heap[self.frame().heap_index]
-                        .variant
-                        .as_closure()
-                        .unwrap();
-                    let uv_index = closure.upvalues[*slot];
+                    let uv_index = self.closure().upvalues[*slot];
                     let val = self.peek(0);
                     let uv = self.heap[uv_index].variant.as_up_value_mut().unwrap();
                     match uv.value {
