@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::chunk::{Chunk, OpCode};
 use crate::compiler::Compiler;
@@ -248,7 +248,9 @@ impl<'opt> VM<'opt> {
     }
 
     fn define_native(&mut self, name: &str, function: NativeFn) {
-        let index = Value::ObjIndex(self.copy_string(name));
+        let index = self.copy_string(name);
+        self.heap[index].set_gc_exempt();
+        let index = Value::ObjIndex(index);
         self.push(index);
         let index = Value::ObjIndex(self.new_native(function));
         self.push(index);
@@ -378,9 +380,9 @@ impl<'opt> VM<'opt> {
 
         self.mark_roots();
         self.trace_references();
-        self.sweep();
+        let removed = self.sweep();
 
-        self.bytes_allocated = self.heap.len() * std::mem::size_of::<Obj>();
+        self.bytes_allocated -= removed * std::mem::size_of::<Obj>();
         self.next_gc = self.bytes_allocated * GC_HEAP_GROWTH_FACTOR;
 
         if self.opt.log_garbage_collection {
@@ -422,9 +424,6 @@ impl<'opt> VM<'opt> {
             // TODO: mark keys? Have to store them as string objects first.
             self.mark_value(*v);
         }
-
-        // TODO: mark the strings table. Every key whose heap-equivalent is
-        // reachable is reachable.
 
         // Not marking compiler roots, since the compiler doesn't exist after
         // the call to `compile` completes. This implementation has no static
@@ -502,9 +501,11 @@ impl<'opt> VM<'opt> {
     /// indices, and we're moving objects around, we also have to rewrite
     /// pointers within objects.
     ///
+    /// Returns the number of items removed from the heap.
+    ///
     /// Differs from the book, since clox doesn't do compaction (since it uses
     /// C's heap, rather than manually managing a separate heap).
-    fn sweep(&mut self) {
+    fn sweep(&mut self) -> usize {
         // Build the mapping from pre-sweep pointers to post-sweep pointers.
         let mapping = {
             let mut mapping = HashMap::new();
@@ -521,9 +522,8 @@ impl<'opt> VM<'opt> {
             mapping
         };
 
-        // TODO: prune from strings table.
-
         // Remove unreachable objects.
+        let before = self.heap.len();
         self.heap.retain(|obj| obj.is_marked());
 
         // Now apply pointer rewriting.
@@ -552,6 +552,18 @@ impl<'opt> VM<'opt> {
                 }
             }
         }
+
+        let reachable_strings = self
+            .heap
+            .iter()
+            .filter_map(|o| o.as_string())
+            .collect::<HashSet<_>>();
+
+        self.strings
+            .table
+            .retain(|s, _| reachable_strings.contains(s));
+
+        before - self.heap.len()
     }
 
     fn rewrite_chunk(chunk: &mut Chunk, mapping: &HashMap<usize, usize>) {

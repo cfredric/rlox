@@ -119,6 +119,11 @@ fun outer2() {
   return inner;
 }
 
+{
+  var x = "make a string" + " that can be garbage collected";
+  print x;
+}
+
 var closure = outer2();
 closure();
 closure();

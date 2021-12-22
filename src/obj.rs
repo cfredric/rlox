@@ -22,8 +22,12 @@ impl Header {
         }
     }
 
-    fn is_marked(&self) -> bool {
+    pub fn is_marked(&self) -> bool {
         self.is_marked || !self.is_gc_able
+    }
+
+    fn set_gc_able(&mut self, gc: bool) {
+        self.is_gc_able = gc;
     }
 }
 
@@ -63,6 +67,10 @@ impl Obj {
         }
     }
 
+    pub fn set_gc_exempt(&mut self) {
+        self.header_mut().set_gc_able(false);
+    }
+
     pub fn mark(&mut self, marked: bool) {
         self.header_mut().mark(marked);
     }
@@ -91,7 +99,7 @@ impl Obj {
 
 #[derive(Clone, Debug)]
 pub struct LoxString {
-    header: Header,
+    pub header: Header,
     pub string: String,
 }
 
@@ -112,7 +120,7 @@ impl std::hash::Hash for LoxString {
 impl LoxString {
     pub fn new(s: &str) -> Self {
         Self {
-            header: Header::new(false),
+            header: Header::new(true),
             string: s.to_string(),
         }
     }
