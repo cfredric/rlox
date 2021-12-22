@@ -4,8 +4,6 @@ use crate::obj::LoxString;
 
 #[derive(Debug)]
 pub struct Table<V> {
-    // TODO: use GC'ed strings as keys, in order to allow pruning of unused
-    // (unmarked) strings during garbage collection.
     pub table: HashMap<LoxString, V>,
 }
 

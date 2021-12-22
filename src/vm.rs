@@ -419,8 +419,7 @@ impl<'opt> VM<'opt> {
             }
         }
 
-        for (_, v) in self.globals.table.clone().iter() {
-            // TODO: mark keys? Have to store them as string objects first.
+        for v in self.globals.table.clone().values() {
             self.mark_value(*v);
         }
 
