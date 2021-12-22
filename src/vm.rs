@@ -236,7 +236,7 @@ impl<'opt> VM<'opt> {
     }
 
     fn runtime_error(&mut self, message: &str) {
-        eprintln!("{}", message);
+        eprintln!("Runtime error: {}", message);
 
         for frame in self.frames.iter().rev() {
             let func = self.function();
@@ -265,11 +265,11 @@ impl<'opt> VM<'opt> {
 
     fn call_value(&mut self, callee: Value, arg_count: usize) -> bool {
         if let Value::ObjIndex(heap_index) = callee {
-            return match &self.heap[heap_index] {
-                Obj::String(_) | Obj::Function(_) | Obj::UpValue(_) => {
-                    unreachable!()
+            match &self.heap[heap_index] {
+                Obj::String(_) | Obj::Function(_) | Obj::UpValue(_) | Obj::Instance(_) => {}
+                Obj::Closure(_) => {
+                    return self.call(heap_index, arg_count);
                 }
-                Obj::Closure(_) => self.call(heap_index, arg_count),
                 Obj::NativeFn(native) => {
                     let result =
                         (native.f)(self.stack.iter().rev().take(arg_count).cloned().collect());
@@ -277,7 +277,7 @@ impl<'opt> VM<'opt> {
                         self.pop();
                     }
                     self.push(result);
-                    true
+                    return true;
                 }
                 Obj::Class(_) => {
                     // Eat args, for now.
@@ -286,9 +286,8 @@ impl<'opt> VM<'opt> {
                     }
                     let instance = self.new_instance(heap_index);
                     self.push(Value::ObjIndex(instance));
-                    true
+                    return true;
                 }
-                Obj::Instance(_) => todo!(),
             };
         }
         self.runtime_error("Can only call functions and classes.");
