@@ -423,7 +423,8 @@ impl<'opt> VM<'opt> {
             self.mark_value(*v);
         }
 
-        // TODO: mark the strings table?
+        // TODO: mark the strings table. Every key whose heap-equivalent is
+        // reachable is reachable.
 
         // Not marking compiler roots, since the compiler doesn't exist after
         // the call to `compile` completes. This implementation has no static
@@ -520,6 +521,8 @@ impl<'opt> VM<'opt> {
             mapping
         };
 
+        // TODO: prune from strings table.
+
         // Remove unreachable objects.
         self.heap.retain(|obj| obj.is_marked());
 
@@ -593,6 +596,11 @@ impl<'opt> VM<'opt> {
             if self.opt.slow_execution {
                 std::thread::sleep(std::time::Duration::new(1, 0));
             }
+
+            if self.opt.stress_garbage_collector {
+                self.collect_garbage();
+            }
+
             use crate::value::*;
             match &self.read_byte() {
                 OpCode::Constant(offset) => {

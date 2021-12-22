@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 
+use crate::obj::LoxString;
+
 #[derive(Debug)]
 pub struct Table<V> {
     // TODO: use GC'ed strings as keys, in order to allow pruning of unused
     // (unmarked) strings during garbage collection.
-    pub table: HashMap<String, V>,
+    pub table: HashMap<LoxString, V>,
 }
 
 impl<V> Table<V> {
@@ -15,7 +17,7 @@ impl<V> Table<V> {
     }
 
     pub fn set(&mut self, key: &str, val: V) -> bool {
-        match self.table.entry(key.to_string()) {
+        match self.table.entry(LoxString::new(key)) {
             std::collections::hash_map::Entry::Occupied(mut occ) => {
                 occ.insert(val);
                 false
@@ -28,10 +30,10 @@ impl<V> Table<V> {
     }
 
     pub fn get(&self, key: &str) -> Option<&V> {
-        self.table.get(key)
+        self.table.get(&LoxString::new(key))
     }
 
     pub fn delete(&mut self, key: &str) -> Option<V> {
-        self.table.remove(key)
+        self.table.remove(&LoxString::new(key))
     }
 }
