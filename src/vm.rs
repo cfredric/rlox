@@ -626,7 +626,7 @@ impl<'opt> VM<'opt> {
                         if self.opt.trace_execution {
                             self.print_stack_slice("stack", 0);
                         }
-                        assert!(self.stack.is_empty());
+                        debug_assert!(self.stack.is_empty());
                         return InterpretResult::Ok;
                     }
 
