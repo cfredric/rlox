@@ -2,15 +2,34 @@ use enum_as_inner::EnumAsInner;
 
 use crate::{chunk::Chunk, table::Table, value::Value};
 
-#[derive(Debug)]
-pub struct Obj {
-    pub is_marked: bool,
-    pub variant: ObjVariant,
+#[derive(Copy, Clone, Debug)]
+pub struct Header {
+    is_marked: bool,
+    is_gc_able: bool,
+}
+
+impl Header {
+    fn new(gcs: bool) -> Self {
+        Self {
+            is_marked: false,
+            is_gc_able: gcs,
+        }
+    }
+
+    fn mark(&mut self, marked: bool) {
+        if self.is_gc_able {
+            self.is_marked = marked;
+        }
+    }
+
+    fn is_marked(&self) -> bool {
+        self.is_marked || !self.is_gc_able
+    }
 }
 
 #[derive(Debug, EnumAsInner)]
-pub enum ObjVariant {
-    String(String),
+pub enum Obj {
+    String(LoxString),
     Function(Function),
     Closure(Closure),
     NativeFn(NativeFn),
@@ -20,40 +39,74 @@ pub enum ObjVariant {
 }
 
 impl Obj {
-    pub fn new(variant: ObjVariant) -> Self {
-        Self {
-            is_marked: false,
-            variant,
+    fn header(&self) -> &Header {
+        match self {
+            Obj::String(s) => &s.header,
+            Obj::Function(f) => &f.header,
+            Obj::Closure(c) => &c.header,
+            Obj::NativeFn(f) => &f.header,
+            Obj::UpValue(u) => &u.header,
+            Obj::Class(c) => &c.header,
+            Obj::Instance(i) => &i.header,
         }
     }
 
-    pub fn mark(&mut self) {
-        self.is_marked = true;
+    fn header_mut(&mut self) -> &mut Header {
+        match self {
+            Obj::String(s) => &mut s.header,
+            Obj::Function(f) => &mut f.header,
+            Obj::Closure(c) => &mut c.header,
+            Obj::NativeFn(f) => &mut f.header,
+            Obj::UpValue(u) => &mut u.header,
+            Obj::Class(c) => &mut c.header,
+            Obj::Instance(i) => &mut i.header,
+        }
+    }
+
+    pub fn mark(&mut self, marked: bool) {
+        self.header_mut().mark(marked);
+    }
+
+    pub fn is_marked(&self) -> bool {
+        self.header().is_marked()
     }
 
     pub fn print(&self, heap: &[Obj]) -> String {
-        match &self.variant {
-            ObjVariant::String(s) => s.to_string(),
-            ObjVariant::Function(fun) => format!("<fn {}>", fun.name),
-            ObjVariant::NativeFn(_) => "<native fn>".to_string(),
-            ObjVariant::Closure(fun) => format!(
+        match &self {
+            Obj::String(s) => s.string.to_string(),
+            Obj::Function(fun) => format!("<fn {}>", fun.name),
+            Obj::NativeFn(_) => "<native fn>".to_string(),
+            Obj::Closure(fun) => format!(
                 "<closure (fn {})>",
-                heap[fun.function_index].variant.as_function().unwrap().name
+                heap[fun.function_index].as_function().unwrap().name
             ),
-            ObjVariant::UpValue(upvalue) => format!("upvalue {:?}", upvalue),
-            ObjVariant::Class(c) => c.name.to_string(),
-            ObjVariant::Instance(i) => {
-                format!(
-                    "{} instance",
-                    heap[i.class_index].variant.as_class().unwrap().name
-                )
+            Obj::UpValue(upvalue) => format!("upvalue {:?}", upvalue),
+            Obj::Class(c) => c.name.to_string(),
+            Obj::Instance(i) => {
+                format!("{} instance", heap[i.class_index].as_class().unwrap().name)
             }
         }
     }
 }
 
 #[derive(Debug)]
+pub struct LoxString {
+    header: Header,
+    pub string: String,
+}
+
+impl LoxString {
+    pub fn new(s: &str) -> Self {
+        Self {
+            header: Header::new(false),
+            string: s.to_string(),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct Function {
+    header: Header,
     pub arity: usize,
     pub chunk: Chunk,
     pub name: String,
@@ -62,6 +115,7 @@ pub struct Function {
 impl Function {
     pub fn new(name: &str) -> Self {
         Self {
+            header: Header::new(true),
             arity: 0,
             name: name.to_string(),
             chunk: Chunk::new(),
@@ -69,10 +123,26 @@ impl Function {
     }
 }
 
-pub type NativeFn = fn(args: Vec<Value>) -> Value;
+type Native = fn(args: Vec<Value>) -> Value;
+
+#[derive(Debug)]
+pub struct NativeFn {
+    header: Header,
+    pub f: Native,
+}
+
+impl NativeFn {
+    pub fn new(f: Native) -> Self {
+        Self {
+            header: Header::new(false),
+            f,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct Closure {
+    header: Header,
     /// The heap index of the underlying function.
     pub function_index: usize,
     /// Pointers into the heap.
@@ -82,6 +152,7 @@ pub struct Closure {
 impl Closure {
     pub fn new(function_index: usize, upvalues: Vec<usize>) -> Self {
         Self {
+            header: Header::new(true),
             function_index,
             upvalues,
         }
@@ -90,12 +161,14 @@ impl Closure {
 
 #[derive(Debug)]
 pub struct Class {
+    header: Header,
     name: String,
 }
 
 impl Class {
     pub fn new(name: &str) -> Self {
         Self {
+            header: Header::new(true),
             name: name.to_string(),
         }
     }
@@ -103,6 +176,7 @@ impl Class {
 
 #[derive(Debug)]
 pub struct Instance {
+    header: Header,
     pub class_index: usize,
     pub fields: Table<Value>,
 }
@@ -110,6 +184,7 @@ pub struct Instance {
 impl Instance {
     pub fn new(class_index: usize, fields: Table<Value>) -> Self {
         Self {
+            header: Header::new(true),
             class_index,
             fields,
         }
@@ -118,6 +193,7 @@ impl Instance {
 
 #[derive(Copy, Clone, Debug)]
 pub struct UpValue {
+    header: Header,
     /// The value.
     pub value: OpenOrClosed,
     /// next is a pointer into the heap, to another UpValue object. This forms a linked list.
@@ -125,6 +201,14 @@ pub struct UpValue {
 }
 
 impl UpValue {
+    pub fn new(local: usize, upvalue: Option<usize>) -> Self {
+        Self {
+            header: Header::new(true),
+            value: OpenOrClosed::Open(local),
+            next: upvalue,
+        }
+    }
+
     /// Returns true iff this upvalue points (or used to point) at or above the
     /// given stack slot.
     pub fn is_at_or_above(&self, stack_slot: usize) -> bool {

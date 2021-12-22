@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::chunk::{Chunk, OpCode};
 use crate::compiler::Compiler;
 use crate::obj::{
-    Class, Closure, Function, Instance, NativeFn, Obj, ObjVariant, OpenOrClosed, UpValue,
+    Class, Closure, Function, Instance, LoxString, NativeFn, Obj, OpenOrClosed, UpValue,
 };
 use crate::table::Table;
 use crate::value::Value;
@@ -103,7 +103,7 @@ impl<'opt> VM<'opt> {
             next_gc: 1024 * 1024,
             is_compiling: false,
         };
-        vm.define_native("clock", clock_native);
+        vm.define_native("clock", NativeFn::new(clock_native));
 
         vm
     }
@@ -123,39 +123,34 @@ impl<'opt> VM<'opt> {
     }
 
     fn allocate_string(&mut self, s: String) -> usize {
-        let idx = self.allocate_object(Obj::new(ObjVariant::String(s)));
+        let idx = self.allocate_object(Obj::String(LoxString::new(&s)));
         self.strings
-            .set(self.heap[idx].variant.as_string().unwrap(), idx);
+            .set(&self.heap[idx].as_string().unwrap().string, idx);
         idx
     }
 
     pub fn new_function(&mut self, f: Function) -> usize {
-        self.allocate_object(Obj::new(ObjVariant::Function(f)))
+        self.allocate_object(Obj::Function(f))
     }
 
     pub fn new_native(&mut self, f: NativeFn) -> usize {
-        self.allocate_object(Obj::new(ObjVariant::NativeFn(f)))
+        self.allocate_object(Obj::NativeFn(f))
     }
 
     pub fn new_closure(&mut self, func_index: usize, upvalues: Vec<usize>) -> usize {
-        self.allocate_object(Obj::new(ObjVariant::Closure(Closure::new(
-            func_index, upvalues,
-        ))))
+        self.allocate_object(Obj::Closure(Closure::new(func_index, upvalues)))
     }
 
     pub fn new_class(&mut self, name: &str) -> usize {
-        self.allocate_object(Obj::new(ObjVariant::Class(Class::new(name))))
+        self.allocate_object(Obj::Class(Class::new(name)))
     }
 
     pub fn new_instance(&mut self, class_index: usize) -> usize {
-        self.allocate_object(Obj::new(ObjVariant::Instance(Instance::new(
-            class_index,
-            Table::new(),
-        ))))
+        self.allocate_object(Obj::Instance(Instance::new(class_index, Table::new())))
     }
 
     pub fn new_upvalue(&mut self, upvalue: UpValue) -> usize {
-        self.allocate_object(Obj::new(ObjVariant::UpValue(upvalue)))
+        self.allocate_object(Obj::UpValue(upvalue))
     }
 
     pub fn allocate_object(&mut self, obj: Obj) -> usize {
@@ -173,7 +168,6 @@ impl<'opt> VM<'opt> {
 
     fn function(&self) -> &Function {
         self.heap[self.closure().function_index]
-            .variant
             .as_function()
             .unwrap()
     }
@@ -189,10 +183,7 @@ impl<'opt> VM<'opt> {
     }
 
     fn closure(&self) -> &Closure {
-        self.heap[self.frame().heap_index]
-            .variant
-            .as_closure()
-            .unwrap()
+        self.heap[self.frame().heap_index].as_closure().unwrap()
     }
 
     fn read_byte(&mut self) -> OpCode {
@@ -213,10 +204,10 @@ impl<'opt> VM<'opt> {
     }
 
     fn as_string(&self, val: Value) -> &str {
-        self.heap[*val.as_obj_index().unwrap()]
-            .variant
+        &self.heap[*val.as_obj_index().unwrap()]
             .as_string()
             .unwrap()
+            .string
     }
 
     fn push(&mut self, value: Value) {
@@ -239,8 +230,8 @@ impl<'opt> VM<'opt> {
 
     fn concatenate(&mut self, s: &str, t: &str) -> Value {
         let mut conc = String::new();
-        conc.push_str(s);
-        conc.push_str(t);
+        conc.push_str(&s);
+        conc.push_str(&t);
         Value::ObjIndex(self.take_string(conc))
     }
 
@@ -272,20 +263,21 @@ impl<'opt> VM<'opt> {
 
     fn call_value(&mut self, callee: Value, arg_count: usize) -> bool {
         if let Value::ObjIndex(heap_index) = callee {
-            return match &self.heap[heap_index].variant {
-                ObjVariant::String(_) | ObjVariant::Function(_) | ObjVariant::UpValue(_) => {
+            return match &self.heap[heap_index] {
+                Obj::String(_) | Obj::Function(_) | Obj::UpValue(_) => {
                     unreachable!()
                 }
-                ObjVariant::Closure(_) => self.call(heap_index, arg_count),
-                ObjVariant::NativeFn(native) => {
-                    let result = native(self.stack.iter().rev().take(arg_count).cloned().collect());
+                Obj::Closure(_) => self.call(heap_index, arg_count),
+                Obj::NativeFn(native) => {
+                    let result =
+                        (native.f)(self.stack.iter().rev().take(arg_count).cloned().collect());
                     for _ in 0..arg_count + 1 {
                         self.pop();
                     }
                     self.push(result);
                     true
                 }
-                ObjVariant::Class(_) => {
+                Obj::Class(_) => {
                     // Eat args, for now.
                     for _ in 0..arg_count + 1 {
                         self.pop();
@@ -294,7 +286,7 @@ impl<'opt> VM<'opt> {
                     self.push(Value::ObjIndex(instance));
                     true
                 }
-                ObjVariant::Instance(_) => todo!(),
+                Obj::Instance(_) => todo!(),
             };
         }
         self.runtime_error("Can only call functions and classes.");
@@ -310,26 +302,18 @@ impl<'opt> VM<'opt> {
         let mut upvalue = self.open_upvalues;
         while upvalue.is_some()
             && self.heap[upvalue.unwrap()]
-                .variant
                 .as_up_value()
                 .unwrap()
                 .is_at_or_above(local)
         {
             prev_upvalue = upvalue;
-            upvalue = self.heap[upvalue.unwrap()]
-                .variant
-                .as_up_value()
-                .unwrap()
-                .next;
+            upvalue = self.heap[upvalue.unwrap()].as_up_value().unwrap().next;
         }
 
-        let created_upvalue = self.new_upvalue(UpValue {
-            value: OpenOrClosed::Open(local),
-            next: upvalue,
-        });
+        let created_upvalue = self.new_upvalue(UpValue::new(local, upvalue));
 
         if let Some(prev) = prev_upvalue {
-            self.heap[prev].variant.as_up_value_mut().unwrap().next = Some(created_upvalue);
+            self.heap[prev].as_up_value_mut().unwrap().next = Some(created_upvalue);
         } else {
             self.open_upvalues = Some(created_upvalue);
         }
@@ -342,10 +326,9 @@ impl<'opt> VM<'opt> {
     fn close_upvalues(&mut self, stack_slot: usize) {
         while matches!(
             self.open_upvalues,
-            Some(ptr) if self.heap[ptr].variant.as_up_value().unwrap().is_at_or_above(stack_slot)
+            Some(ptr) if self.heap[ptr].as_up_value().unwrap().is_at_or_above(stack_slot)
         ) {
             let upvalue = self.heap[self.open_upvalues.unwrap()]
-                .variant
                 .as_up_value_mut()
                 .unwrap();
             match upvalue.value {
@@ -359,9 +342,8 @@ impl<'opt> VM<'opt> {
     }
 
     fn call(&mut self, closure_heap_index: usize, arg_count: usize) -> bool {
-        let closure = self.heap[closure_heap_index].variant.as_closure().unwrap();
+        let closure = self.heap[closure_heap_index].as_closure().unwrap();
         let arity = self.heap[closure.function_index]
-            .variant
             .as_function()
             .unwrap()
             .arity;
@@ -432,7 +414,7 @@ impl<'opt> VM<'opt> {
             let mut upvalue = self.open_upvalues;
             while let Some(index) = upvalue {
                 self.mark_object(index);
-                upvalue = self.heap[index].variant.as_up_value().unwrap().next;
+                upvalue = self.heap[index].as_up_value().unwrap().next;
             }
         }
 
@@ -465,15 +447,15 @@ impl<'opt> VM<'opt> {
             eprintln!("{} blacken {}", index, self.heap[index].print(&self.heap));
         }
 
-        match &self.heap[index].variant {
-            ObjVariant::String(_) | ObjVariant::NativeFn(_) | ObjVariant::Class(_) => {}
-            ObjVariant::Function(f) => {
+        match &self.heap[index] {
+            Obj::String(_) | Obj::NativeFn(_) | Obj::Class(_) => {}
+            Obj::Function(f) => {
                 // TODO: don't clone here.
                 for v in f.chunk.constants.clone().iter_mut() {
                     self.mark_value(*v);
                 }
             }
-            ObjVariant::Closure(c) => {
+            Obj::Closure(c) => {
                 let fn_idx = c.function_index;
                 let uvs = c.upvalues.clone();
                 self.mark_object(fn_idx);
@@ -481,12 +463,12 @@ impl<'opt> VM<'opt> {
                     self.mark_object(*uv);
                 }
             }
-            ObjVariant::UpValue(upvalue) => {
+            Obj::UpValue(upvalue) => {
                 if let OpenOrClosed::Closed(_, v) = upvalue.value {
                     self.mark_value(v);
                 }
             }
-            ObjVariant::Instance(i) => {
+            Obj::Instance(i) => {
                 let idx = i.class_index;
                 let field_values = i.fields.table.values().copied().collect::<Vec<_>>();
                 self.mark_object(idx);
@@ -506,11 +488,11 @@ impl<'opt> VM<'opt> {
             );
         }
 
-        if self.heap[index].is_marked {
+        if self.heap[index].is_marked() {
             return;
         }
 
-        self.heap[index].mark();
+        self.heap[index].mark(true);
 
         self.gray_stack.push(index);
     }
@@ -527,7 +509,7 @@ impl<'opt> VM<'opt> {
             let mut mapping = HashMap::new();
             let mut post_compaction_index = 0;
             for (i, obj) in self.heap.iter().enumerate() {
-                if obj.is_marked {
+                if obj.is_marked() {
                     // If this object is marked, it is reachable, and will be kept.
                     // We add an entry for this pointer, and then increment the
                     // post-compaction pointer.
@@ -539,30 +521,30 @@ impl<'opt> VM<'opt> {
         };
 
         // Remove unreachable objects.
-        self.heap.retain(|obj| obj.is_marked);
+        self.heap.retain(|obj| obj.is_marked());
 
         // Now apply pointer rewriting.
         for obj in self.heap.iter_mut() {
-            obj.is_marked = false;
-            match &mut obj.variant {
-                ObjVariant::String(_) | ObjVariant::NativeFn(_) | ObjVariant::Class(_) => {
+            obj.mark(false);
+            match obj {
+                Obj::String(_) | Obj::NativeFn(_) | Obj::Class(_) => {
                     // Nothing to do here.
                 }
-                ObjVariant::Function(f) => {
+                Obj::Function(f) => {
                     Self::rewrite_chunk(&mut f.chunk, &mapping);
                 }
-                ObjVariant::Closure(c) => {
+                Obj::Closure(c) => {
                     c.function_index = mapping[&c.function_index];
                     for uv in c.upvalues.iter_mut() {
                         *uv = mapping[uv];
                     }
                 }
-                ObjVariant::UpValue(uv) => {
+                Obj::UpValue(uv) => {
                     if let Some(ptr) = uv.next {
                         uv.next = Some(mapping[&ptr]);
                     }
                 }
-                ObjVariant::Instance(i) => {
+                Obj::Instance(i) => {
                     i.class_index = mapping[&i.class_index];
                 }
             }
@@ -647,11 +629,11 @@ impl<'opt> VM<'opt> {
                         self.push(Value::Double(a + b));
                     }
                     (Value::ObjIndex(i), Value::ObjIndex(j)) => {
-                        match (&self.heap[i].variant, &self.heap[j].variant) {
-                            (ObjVariant::String(t), ObjVariant::String(s)) => {
+                        match (&self.heap[i], &self.heap[j]) {
+                            (Obj::String(t), Obj::String(s)) => {
                                 // Have to clone here, since adding to the heap
                                 // might invalidate references to s and t.
-                                let (s, t) = (s.clone(), t.clone());
+                                let (s, t) = (s.string.clone(), t.string.clone());
                                 let val = self.concatenate(&s, &t);
                                 self.pop();
                                 self.pop();
@@ -746,7 +728,6 @@ impl<'opt> VM<'opt> {
                                 self.capture_upvalue(self.frame().slots() + uv.index)
                             } else {
                                 self.heap[self.frame().heap_index]
-                                    .variant
                                     .as_closure()
                                     .unwrap()
                                     .upvalues[uv.index]
@@ -758,7 +739,7 @@ impl<'opt> VM<'opt> {
                 }
                 OpCode::GetUpvalue(slot) => {
                     let uv_index = self.closure().upvalues[*slot];
-                    let uv = self.heap[uv_index].variant.as_up_value().unwrap();
+                    let uv = self.heap[uv_index].as_up_value().unwrap();
                     let val = match uv.value {
                         OpenOrClosed::Open(loc) => self.stack[loc],
                         OpenOrClosed::Closed(_, val) => val,
@@ -768,7 +749,7 @@ impl<'opt> VM<'opt> {
                 OpCode::SetUpvalue(slot) => {
                     let uv_index = self.closure().upvalues[*slot];
                     let val = self.peek(0);
-                    let uv = self.heap[uv_index].variant.as_up_value_mut().unwrap();
+                    let uv = self.heap[uv_index].as_up_value_mut().unwrap();
                     match uv.value {
                         OpenOrClosed::Open(loc) => self.stack[loc] = val,
                         OpenOrClosed::Closed(loc, _) => uv.value = OpenOrClosed::Closed(loc, val),
@@ -785,13 +766,12 @@ impl<'opt> VM<'opt> {
                 }
                 OpCode::GetProperty(constant) => {
                     let instance_idx = *self.peek(0).as_obj_index().unwrap();
-                    if self.heap[instance_idx].variant.as_instance().is_none() {
+                    if self.heap[instance_idx].as_instance().is_none() {
                         self.runtime_error("Only instances have properties.");
                         return InterpretResult::RuntimeError;
                     }
                     let name = self.read_string(*constant).to_string();
                     if let Some(v) = self.heap[instance_idx]
-                        .variant
                         .as_instance()
                         .unwrap()
                         .fields
@@ -806,14 +786,13 @@ impl<'opt> VM<'opt> {
                 }
                 OpCode::SetProperty(constant) => {
                     let instance_idx = *self.peek(1).as_obj_index().unwrap();
-                    if self.heap[instance_idx].variant.as_instance().is_none() {
+                    if self.heap[instance_idx].as_instance().is_none() {
                         self.runtime_error("Only instances have properties.");
                         return InterpretResult::RuntimeError;
                     }
                     let name = self.read_string(*constant).to_string();
                     let value = self.peek(0);
                     self.heap[instance_idx]
-                        .variant
                         .as_instance_mut()
                         .unwrap()
                         .fields
