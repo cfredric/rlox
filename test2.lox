@@ -1,3 +1,4 @@
+var start = clock();
 var breakfast = "beignets";
 var beverage = "cafe au lait";
 breakfast = "beignets with " + beverage;
@@ -136,3 +137,4 @@ class Toast {}
 var toast = Toast();
 print toast.jam = "grape";
 print toast.jam;
+print clock() - start;
