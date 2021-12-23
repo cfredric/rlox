@@ -392,7 +392,10 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.consume(TokenType::Identifier, "Expect method name.");
         let constant = self.identifier_constant(self.previous.lexeme);
 
-        let ty = FunctionType::Method;
+        let mut ty = FunctionType::Method;
+        if self.previous.lexeme == "init" {
+            ty = FunctionType::Initializer;
+        }
         self.function(ty);
 
         self.emit_opcode(OpCode::Method(constant));
@@ -429,6 +432,9 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         if self.matches(TokenType::Semicolon) {
             self.emit_return();
         } else {
+            if self.current().function_type == FunctionType::Initializer {
+                self.error("Can't return a value from an initializer.");
+            }
             self.expression();
             self.consume(TokenType::Semicolon, "Expect ';' after return value.");
             self.emit_opcode(OpCode::Return);
@@ -731,7 +737,11 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn emit_return(&mut self) {
-        self.emit_opcode(OpCode::Nil);
+        if self.current().function_type == FunctionType::Initializer {
+            self.emit_opcode(OpCode::GetLocal(0));
+        } else {
+            self.emit_opcode(OpCode::Nil);
+        }
         self.emit_opcode(OpCode::Return);
     }
 
@@ -926,6 +936,7 @@ impl<'source> Local<'source> {
 #[derive(Debug, Eq, PartialEq)]
 pub enum FunctionType {
     Function,
+    Initializer,
     Method,
     Script,
 }

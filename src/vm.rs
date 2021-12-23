@@ -11,6 +11,7 @@ use crate::value::Value;
 use crate::Opt;
 
 const GC_HEAP_GROWTH_FACTOR: usize = 2;
+const INIT_STR: &'static str = "init";
 
 pub struct VM<'opt> {
     opt: &'opt Opt,
@@ -285,12 +286,22 @@ impl<'opt> VM<'opt> {
                     return true;
                 }
                 Obj::Class(_) => {
-                    // Eat args, for now.
-                    for _ in 0..arg_count + 1 {
-                        self.pop();
-                    }
+                    let stack_len = self.stack.len();
                     let instance = self.new_instance(heap_index);
-                    self.push(Value::ObjIndex(instance));
+                    self.stack[stack_len - arg_count - 1] = Value::ObjIndex(instance);
+
+                    if let Some(initializer) = self.heap[heap_index]
+                        .as_class()
+                        .unwrap()
+                        .methods
+                        .get(INIT_STR)
+                        .cloned()
+                    {
+                        return self.call(*initializer.as_obj_index().unwrap(), arg_count);
+                    } else if arg_count != 0 {
+                        self.runtime_error(&format!("Expected 0 arguments but got {}", arg_count));
+                        return false;
+                    }
                     return true;
                 }
                 Obj::BoundMethod(b) => {
