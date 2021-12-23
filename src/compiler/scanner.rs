@@ -207,6 +207,16 @@ pub(super) struct Token<'a> {
     pub line: usize,
 }
 
+impl<'source> Token<'source> {
+    pub(super) fn new(ty: TokenType, lexeme: &'static str) -> Self {
+        Self {
+            ty,
+            lexeme,
+            line: 0,
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
 pub(super) enum TokenType {
     LeftParen,

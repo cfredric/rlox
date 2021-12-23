@@ -295,6 +295,8 @@ impl<'opt> VM<'opt> {
                 }
                 Obj::BoundMethod(b) => {
                     let bound_ptr = b.closure_idx;
+                    let stack_top = self.stack.len();
+                    self.stack[stack_top - arg_count - 1] = b.receiver;
                     return self.call(bound_ptr, arg_count);
                 }
             };
@@ -952,6 +954,6 @@ impl CallFrame {
     }
 
     fn slots(&self) -> usize {
-        self.frame_start + 1
+        self.frame_start
     }
 }

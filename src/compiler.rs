@@ -18,6 +18,7 @@ pub(crate) struct Compiler<'opt, 'source, 'vm> {
     vm: &'vm mut VM<'opt>,
 
     functions: Vec<FunctionState<'source>>,
+    class_compilers: Vec<ClassState>,
 }
 
 #[derive(Debug)]
@@ -36,13 +37,27 @@ impl<'source> FunctionState<'source> {
         Self::with_name(function_type, "")
     }
     fn with_name(function_type: FunctionType, name: &str) -> Self {
+        let local = if function_type != FunctionType::Function {
+            Local::new(TokenType::This, "this")
+        } else {
+            Local::new(TokenType::Eof, "")
+        };
         Self {
             function: Function::new(name),
             function_type,
-            locals: Vec::new(),
+            locals: vec![local],
             scope_depth: 0,
             upvalues: Vec::new(),
         }
+    }
+}
+
+#[derive(Debug)]
+struct ClassState {}
+
+impl ClassState {
+    fn new() -> Self {
+        Self {}
     }
 }
 
@@ -62,6 +77,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             panic_mode: false,
             vm,
             functions: vec![FunctionState::with_name(function_type, "script")],
+            class_compilers: Vec::new(),
         }
     }
 
@@ -199,6 +215,8 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.emit_opcode(OpCode::Class(name_constant));
         self.define_variable(name_constant);
 
+        self.class_compilers.push(ClassState::new());
+
         self.named_variable(name, false);
         self.consume(TokenType::LeftBrace, "Expect '{' before class body.");
         while !self.check(TokenType::RightBrace) && !self.check(TokenType::Eof) {
@@ -206,6 +224,8 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         }
         self.consume(TokenType::RightBrace, "Expect '}' after class body.");
         self.emit_opcode(OpCode::Pop);
+
+        self.class_compilers.pop();
     }
 
     fn fun_declaration(&mut self) {
@@ -372,7 +392,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.consume(TokenType::Identifier, "Expect method name.");
         let constant = self.identifier_constant(self.previous.lexeme);
 
-        let ty = FunctionType::Function;
+        let ty = FunctionType::Method;
         self.function(ty);
 
         self.emit_opcode(OpCode::Method(constant));
@@ -624,6 +644,15 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.named_variable(self.previous.lexeme, can_assign)
     }
 
+    fn this(&mut self) {
+        if self.class_compilers.last().is_none() {
+            self.error("Can't use 'this' outside of a class.");
+            return;
+        }
+
+        self.variable(false);
+    }
+
     fn named_variable(&mut self, name: &str, can_assign: bool) {
         let (get_op, set_op) = if let Some(arg) = Self::resolve_local(self.current(), name) {
             (OpCode::GetLocal(arg), OpCode::SetLocal(arg))
@@ -808,7 +837,7 @@ fn get_rule(ty: TokenType) -> Rule {
         TokenType::Print => Rule::new(None, None, Precedence::None),
         TokenType::Return => Rule::new(None, None, Precedence::None),
         TokenType::Super => Rule::new(None, None, Precedence::None),
-        TokenType::This => Rule::new(None, None, Precedence::None),
+        TokenType::This => Rule::new(Some(|c, _ctx| c.this()), None, Precedence::None),
         TokenType::True => Rule::new(Some(|c, _ctx| c.literal()), None, Precedence::None),
         TokenType::Var => Rule::new(None, None, Precedence::None),
         TokenType::While => Rule::new(None, None, Precedence::None),
@@ -884,9 +913,20 @@ struct Local<'source> {
     is_captured: bool,
 }
 
+impl<'source> Local<'source> {
+    fn new(ty: TokenType, name: &'static str) -> Self {
+        Self {
+            name: Token::new(ty, name),
+            depth: Some(0),
+            is_captured: false,
+        }
+    }
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum FunctionType {
     Function,
+    Method,
     Script,
 }
 
