@@ -316,6 +316,42 @@ impl<'opt> VM<'opt> {
         false
     }
 
+    fn invoke_from_class(&mut self, class_index: usize, name: &str, arg_count: usize) -> bool {
+        let method = match self.heap[class_index]
+            .as_class()
+            .unwrap()
+            .methods
+            .table
+            .get(&LoxString::new(name))
+        {
+            Some(m) => *m.as_obj_index().unwrap(),
+            None => {
+                self.runtime_error(&format!("Undefined property {}", name));
+                return false;
+            }
+        };
+        self.call(method, arg_count)
+    }
+
+    fn invoke(&mut self, name: &str, arg_count: usize) -> bool {
+        let receiver = self.peek(arg_count);
+        let (class_index, fields) = match self.heap[*receiver.as_obj_index().unwrap()].as_instance()
+        {
+            Some(i) => (i.class_index, i.fields.clone()),
+            None => {
+                self.runtime_error("Only instances have methods.");
+                return false;
+            }
+        };
+
+        if let Some(value) = fields.get(name) {
+            let stack_len = self.stack.len();
+            self.stack[stack_len - arg_count - 1] = *value;
+            return self.call_value(*value, arg_count);
+        }
+        return self.invoke_from_class(class_index, name, arg_count);
+    }
+
     fn bind_method(&mut self, class_idx: usize, name: &str) -> bool {
         let method = match self.heap[class_idx]
             .as_class()
@@ -908,6 +944,13 @@ impl<'opt> VM<'opt> {
                 }
                 OpCode::Method(constant) => {
                     self.define_method(self.read_constant(*constant));
+                }
+                OpCode::Invoke(constant, arg_count) => {
+                    let arg_count = *arg_count;
+                    let method = self.read_string(*constant).to_string();
+                    if !self.invoke(&method, arg_count) {
+                        return InterpretResult::RuntimeError;
+                    }
                 }
             }
         }

@@ -505,6 +505,9 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         if can_assign && self.matches(TokenType::Equal) {
             self.expression();
             self.emit_opcode(OpCode::SetProperty(name));
+        } else if self.matches(TokenType::LeftParen) {
+            let arg_count = self.argument_list();
+            self.emit_opcode(OpCode::Invoke(name, arg_count));
         } else {
             self.emit_opcode(OpCode::GetProperty(name));
         }

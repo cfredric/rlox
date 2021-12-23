@@ -40,6 +40,9 @@ pub enum OpCode {
     Loop(usize),
     /// Operand is the number of arguments passed to the callee.
     Call(usize),
+    /// First operand is the index into the constants table of the method name;
+    /// second operand is the argument count.
+    Invoke(usize, usize),
     /// First operand is the index into the constants table for the function;
     /// second operand is the list of upvalue metadata used by the closure.
     Closure(usize, Vec<Upvalue>),
@@ -151,6 +154,9 @@ impl Chunk {
                 self.constant_instruction("OP_SET_PROPERTY", heap, *constant)
             }
             OpCode::Method(constant) => self.constant_instruction("OP_METHOD", heap, *constant),
+            OpCode::Invoke(constant, arg_count) => {
+                self.invoke_instruction("OP_INVOKE", *constant, *arg_count)
+            }
         }
     }
 
@@ -169,5 +175,9 @@ impl Chunk {
     fn jump_instruction(&self, name: &str, distance: usize, positive: bool) {
         let distance = distance as isize * if positive { 1 } else { -1 };
         println!("{:16} {}", name, distance);
+    }
+
+    fn invoke_instruction(&self, name: &str, constant: usize, arg_count: usize) {
+        println!("{:16} ({} args) {}", name, arg_count, constant)
     }
 }

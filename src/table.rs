@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::obj::LoxString;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Table<V> {
     pub table: HashMap<LoxString, V>,
 }
