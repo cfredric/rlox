@@ -3,7 +3,8 @@ use std::collections::{HashMap, HashSet};
 use crate::chunk::{Chunk, OpCode};
 use crate::compiler::Compiler;
 use crate::obj::{
-    Class, Closure, Function, Instance, LoxString, NativeFn, Obj, OpenOrClosed, UpValue,
+    BoundMethod, Class, Closure, Function, Instance, LoxString, NativeFn, Obj, OpenOrClosed,
+    UpValue,
 };
 use crate::table::Table;
 use crate::value::Value;
@@ -149,6 +150,10 @@ impl<'opt> VM<'opt> {
         self.allocate_object(Obj::Instance(Instance::new(class_index, Table::new())))
     }
 
+    pub fn new_bound_method(&mut self, receiver: Value, closure_idx: usize) -> usize {
+        self.allocate_object(Obj::BoundMethod(BoundMethod::new(receiver, closure_idx)))
+    }
+
     pub fn new_upvalue(&mut self, upvalue: UpValue) -> usize {
         self.allocate_object(Obj::UpValue(upvalue))
     }
@@ -288,10 +293,35 @@ impl<'opt> VM<'opt> {
                     self.push(Value::ObjIndex(instance));
                     return true;
                 }
+                Obj::BoundMethod(b) => {
+                    let bound_ptr = b.closure_idx;
+                    return self.call(bound_ptr, arg_count);
+                }
             };
         }
         self.runtime_error("Can only call functions and classes.");
         false
+    }
+
+    fn bind_method(&mut self, class_idx: usize, name: &str) -> bool {
+        let method = match self.heap[class_idx]
+            .as_class()
+            .unwrap()
+            .methods
+            .table
+            .get(&LoxString::new(name))
+        {
+            Some(m) => *m,
+            None => {
+                self.runtime_error(&format!("Undefined property {}", name));
+                return false;
+            }
+        };
+
+        let bound = self.new_bound_method(self.peek(0), *method.as_obj_index().unwrap());
+        self.pop();
+        self.push(Value::ObjIndex(bound));
+        true
     }
 
     /// Captures the given stack slot as a local upvalue. Inserts the new
@@ -340,6 +370,20 @@ impl<'opt> VM<'opt> {
             }
             self.open_upvalues = upvalue.next;
         }
+    }
+
+    fn define_method(&mut self, name_idx: Value) {
+        let method = self.peek(0);
+        let class_index = *self.peek(1).as_obj_index().unwrap();
+        let name = self.heap[*name_idx.as_obj_index().unwrap()]
+            .as_string()
+            .unwrap()
+            .string
+            .clone();
+        let class = self.heap[class_index].as_class_mut().unwrap();
+
+        class.methods.set(&name, method);
+        self.pop();
     }
 
     fn call(&mut self, closure_heap_index: usize, arg_count: usize) -> bool {
@@ -446,7 +490,7 @@ impl<'opt> VM<'opt> {
         }
 
         match &self.heap[index] {
-            Obj::String(_) | Obj::NativeFn(_) | Obj::Class(_) => {}
+            Obj::String(_) | Obj::NativeFn(_) => {}
             Obj::Function(f) => {
                 // TODO: don't clone here.
                 for v in f.chunk.constants.clone().iter_mut() {
@@ -466,6 +510,12 @@ impl<'opt> VM<'opt> {
                     self.mark_value(v);
                 }
             }
+            Obj::Class(c) => {
+                let methods = c.methods.table.values().copied().collect::<Vec<_>>();
+                for m in methods {
+                    self.mark_value(m);
+                }
+            }
             Obj::Instance(i) => {
                 let idx = i.class_index;
                 let field_values = i.fields.table.values().copied().collect::<Vec<_>>();
@@ -473,6 +523,12 @@ impl<'opt> VM<'opt> {
                 for value in field_values {
                     self.mark_value(value);
                 }
+            }
+            Obj::BoundMethod(b) => {
+                let rec = b.receiver;
+                let c = b.closure_idx;
+                self.mark_value(rec);
+                self.mark_object(c);
             }
         }
     }
@@ -525,6 +581,7 @@ impl<'opt> VM<'opt> {
         self.heap.retain(|obj| obj.is_marked());
 
         // Now apply pointer rewriting.
+        // Rewrite heap-internal pointers:
         for obj in self.heap.iter_mut() {
             obj.mark(false);
             match obj {
@@ -548,15 +605,27 @@ impl<'opt> VM<'opt> {
                 Obj::Instance(i) => {
                     i.class_index = mapping[&i.class_index];
                 }
+                Obj::BoundMethod(b) => {
+                    let rec = *b.receiver.as_obj_index().unwrap();
+                    *b.receiver.as_obj_index_mut().unwrap() = mapping[&rec];
+                    b.closure_idx = mapping[&b.closure_idx];
+                }
             }
         }
 
+        // Rewrite pointers from the stack into the heap:
+        for v in self.stack.iter_mut() {
+            if let Value::ObjIndex(i) = v {
+                *i = mapping[&i];
+            }
+        }
+
+        // Prune out unused strings from the strings table:
         let reachable_strings = self
             .heap
             .iter()
             .filter_map(|o| o.as_string())
             .collect::<HashSet<_>>();
-
         self.strings
             .table
             .retain(|s, _| reachable_strings.contains(s));
@@ -798,8 +867,13 @@ impl<'opt> VM<'opt> {
                     {
                         self.pop(); // Instance.
                         self.push(v);
-                    } else {
-                        self.runtime_error(&format!("Undefined property '{}'.", name));
+                        continue;
+                    }
+                    if !self.bind_method(
+                        self.heap[instance_idx].as_instance().unwrap().class_index,
+                        &name,
+                    ) {
+                        return InterpretResult::RuntimeError;
                     }
                 }
                 OpCode::SetProperty(constant) => {
@@ -818,6 +892,9 @@ impl<'opt> VM<'opt> {
                     self.pop(); // Value.
                     self.pop(); // Instance.
                     self.push(value);
+                }
+                OpCode::Method(constant) => {
+                    self.define_method(self.read_constant(*constant));
                 }
             }
         }

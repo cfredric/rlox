@@ -192,14 +192,20 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
     fn class_declaration(&mut self) {
         self.consume(TokenType::Identifier, "Expect class name.");
+        let name = self.previous.lexeme;
         let name_constant = self.identifier_constant(self.previous.lexeme);
         self.declare_variable();
 
         self.emit_opcode(OpCode::Class(name_constant));
         self.define_variable(name_constant);
 
+        self.named_variable(name, false);
         self.consume(TokenType::LeftBrace, "Expect '{' before class body.");
+        while !self.check(TokenType::RightBrace) && !self.check(TokenType::Eof) {
+            self.method();
+        }
         self.consume(TokenType::RightBrace, "Expect '}' after class body.");
+        self.emit_opcode(OpCode::Pop);
     }
 
     fn fun_declaration(&mut self) {
@@ -360,6 +366,16 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         let function_heap_index = self.vm.new_function(function);
         let function_constant_index = self.make_constant(Value::ObjIndex(function_heap_index));
         self.emit_opcode(OpCode::Closure(function_constant_index, upvalues));
+    }
+
+    fn method(&mut self) {
+        self.consume(TokenType::Identifier, "Expect method name.");
+        let constant = self.identifier_constant(self.previous.lexeme);
+
+        let ty = FunctionType::Function;
+        self.function(ty);
+
+        self.emit_opcode(OpCode::Method(constant));
     }
 
     fn begin_scope(&mut self) {

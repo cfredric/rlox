@@ -40,6 +40,7 @@ pub enum Obj {
     UpValue(UpValue),
     Class(Class),
     Instance(Instance),
+    BoundMethod(BoundMethod),
 }
 
 impl Obj {
@@ -52,6 +53,7 @@ impl Obj {
             Obj::UpValue(u) => &u.header,
             Obj::Class(c) => &c.header,
             Obj::Instance(i) => &i.header,
+            Obj::BoundMethod(b) => &b.header,
         }
     }
 
@@ -64,6 +66,7 @@ impl Obj {
             Obj::UpValue(u) => &mut u.header,
             Obj::Class(c) => &mut c.header,
             Obj::Instance(i) => &mut i.header,
+            Obj::BoundMethod(b) => &mut b.header,
         }
     }
 
@@ -80,7 +83,7 @@ impl Obj {
     }
 
     pub fn print(&self, heap: &[Obj]) -> String {
-        match &self {
+        match self {
             Obj::String(s) => s.string.to_string(),
             Obj::Function(fun) => format!("<fn {}>", fun.name),
             Obj::NativeFn(_) => "<native fn>".to_string(),
@@ -92,6 +95,9 @@ impl Obj {
             Obj::Class(c) => c.name.to_string(),
             Obj::Instance(i) => {
                 format!("{} instance", heap[i.class_index].as_class().unwrap().name)
+            }
+            Obj::BoundMethod(b) => {
+                heap[heap[b.closure_idx].as_closure().unwrap().function_index].print(heap)
             }
         }
     }
@@ -185,6 +191,7 @@ impl Closure {
 pub struct Class {
     header: Header,
     name: String,
+    pub methods: Table<Value>,
 }
 
 impl Class {
@@ -192,6 +199,7 @@ impl Class {
         Self {
             header: Header::new(true),
             name: name.to_string(),
+            methods: Table::new(),
         }
     }
 }
@@ -209,6 +217,23 @@ impl Instance {
             header: Header::new(true),
             class_index,
             fields,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct BoundMethod {
+    header: Header,
+    pub receiver: Value,
+    pub closure_idx: usize,
+}
+
+impl BoundMethod {
+    pub fn new(receiver: Value, closure_idx: usize) -> Self {
+        Self {
+            header: Header::new(true),
+            receiver,
+            closure_idx,
         }
     }
 }

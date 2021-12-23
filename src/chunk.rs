@@ -55,6 +55,8 @@ pub enum OpCode {
     Return,
     /// Operand is the index into the constants table for the class name.
     Class(usize),
+    /// Operand is the index into the constants table for the method name.
+    Method(usize),
 }
 
 #[derive(Default, Debug)]
@@ -148,6 +150,7 @@ impl Chunk {
             OpCode::SetProperty(constant) => {
                 self.constant_instruction("OP_SET_PROPERTY", heap, *constant)
             }
+            OpCode::Method(constant) => self.constant_instruction("OP_METHOD", heap, *constant),
         }
     }
 

@@ -137,4 +137,14 @@ class Toast {}
 var toast = Toast();
 print toast.jam = "grape";
 print toast.jam;
+
+class Scone {
+  topping(first, second) {
+    print "scone with " + first + " and " + second;
+  }
+}
+
+var scone = Scone();
+scone.topping("berries", "cream");
+
 print clock() - start;
