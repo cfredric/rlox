@@ -176,9 +176,16 @@ class Oops {
 var oops = Oops();
 oops.field();
 
+fun boolToString(b) {
+    if (b) {
+        return "true";
+    }
+    return "false";
+}
+
 class Doughnut {
   init(fresh) {
-      this.isFresh = fresh;
+    this.isFresh = fresh;
   }
   cook() {
     print "Dunk in the fryer.";
@@ -188,14 +195,15 @@ class Doughnut {
   finish(ingredient) {
     print "Finish with " + ingredient;
   }
+
   freshness() {
-      print this.isFresh;
+    return this.isFresh;
   }
 }
 
 class Cruller < Doughnut {
     init(fresh) {
-        super.init(fresh);
+      super.init(fresh);
     }
   finish(ingredient) {
     // No sprinkles, always icing.
@@ -204,7 +212,7 @@ class Cruller < Doughnut {
 }
 
 var cruller = Cruller(true);
-print cruller.freshness();
+print "is it fresh? " + boolToString(cruller.freshness());
 cruller.finish("asdf");
 
 print clock() - start;
