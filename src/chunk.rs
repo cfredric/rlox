@@ -55,9 +55,15 @@ pub enum OpCode {
     GetProperty(usize),
     /// Operand is the index into the constants table for the property name.
     SetProperty(usize),
+    /// Operand is the index into the constants table for the superclass method name.
+    GetSuper(usize),
+    /// First operand is the index into the constants table of the superclass method name;
+    /// second operand is the argument count.
+    SuperInvoke(usize, usize),
     Return,
     /// Operand is the index into the constants table for the class name.
     Class(usize),
+    Inherit,
     /// Operand is the index into the constants table for the method name.
     Method(usize),
 }
@@ -156,6 +162,11 @@ impl Chunk {
             OpCode::Method(constant) => self.constant_instruction("OP_METHOD", heap, *constant),
             OpCode::Invoke(constant, arg_count) => {
                 self.invoke_instruction("OP_INVOKE", *constant, *arg_count)
+            }
+            OpCode::Inherit => Self::simple_instruction("OP_INHERIT"),
+            OpCode::GetSuper(c) => self.constant_instruction("OP_GET_SUPER", heap, *c),
+            OpCode::SuperInvoke(name, arg_count) => {
+                self.invoke_instruction("OP_SUPER_INVOKE", *name, *arg_count);
             }
         }
     }

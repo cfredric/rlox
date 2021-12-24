@@ -942,6 +942,13 @@ impl<'opt> VM<'opt> {
                     self.pop(); // Instance.
                     self.push(value);
                 }
+                OpCode::GetSuper(name_index) => {
+                    let name = self.read_string(*name_index).to_string();
+                    let superclass_ptr = *self.pop().as_obj_index().unwrap();
+                    if !self.bind_method(superclass_ptr, &name) {
+                        return InterpretResult::RuntimeError;
+                    }
+                }
                 OpCode::Method(constant) => {
                     self.define_method(self.read_constant(*constant));
                 }
@@ -949,6 +956,30 @@ impl<'opt> VM<'opt> {
                     let arg_count = *arg_count;
                     let method = self.read_string(*constant).to_string();
                     if !self.invoke(&method, arg_count) {
+                        return InterpretResult::RuntimeError;
+                    }
+                }
+                OpCode::Inherit => {
+                    let superclass = *self.peek(1).as_obj_index().unwrap();
+                    let superclass_methods = match &self.heap[superclass] {
+                        Obj::Class(c) => c.methods.table.clone(),
+                        _ => {
+                            self.runtime_error("Superclass must be a class.");
+                            return InterpretResult::RuntimeError;
+                        }
+                    };
+                    let subclass = *self.peek(0).as_obj_index().unwrap();
+                    let subclass_methods = &mut self.heap[subclass].as_class_mut().unwrap().methods;
+                    subclass_methods
+                        .table
+                        .extend(superclass_methods.into_iter());
+                    self.pop(); // Subclass.
+                }
+                OpCode::SuperInvoke(constant, arg_count) => {
+                    let arg_count = *arg_count;
+                    let method = self.read_string(*constant).to_string();
+                    let superclass_ptr = *self.pop().as_obj_index().unwrap();
+                    if !self.invoke_from_class(superclass_ptr, &method, arg_count) {
                         return InterpretResult::RuntimeError;
                     }
                 }

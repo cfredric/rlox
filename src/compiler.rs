@@ -53,11 +53,15 @@ impl<'source> FunctionState<'source> {
 }
 
 #[derive(Debug)]
-struct ClassState {}
+struct ClassState {
+    has_superclass: bool,
+}
 
 impl ClassState {
     fn new() -> Self {
-        Self {}
+        Self {
+            has_superclass: false,
+        }
     }
 }
 
@@ -217,6 +221,23 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
         self.class_compilers.push(ClassState::new());
 
+        if self.matches(TokenType::Less) {
+            self.consume(TokenType::Identifier, "Expect superclass name.");
+            self.variable(false);
+
+            if name == self.previous.lexeme {
+                self.error("A class can't inherit from itself.");
+            }
+
+            self.begin_scope();
+            self.add_local(Token::new(TokenType::Super, "super"));
+            self.define_variable(0);
+
+            self.named_variable(name, false);
+            self.emit_opcode(OpCode::Inherit);
+            self.current_class_mut().has_superclass = true;
+        }
+
         self.named_variable(name, false);
         self.consume(TokenType::LeftBrace, "Expect '{' before class body.");
         while !self.check(TokenType::RightBrace) && !self.check(TokenType::Eof) {
@@ -225,6 +246,9 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.consume(TokenType::RightBrace, "Expect '}' after class body.");
         self.emit_opcode(OpCode::Pop);
 
+        if self.current_class().has_superclass {
+            self.end_scope();
+        }
         self.class_compilers.pop();
     }
 
@@ -662,6 +686,31 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.variable(false);
     }
 
+    fn super_(&mut self) {
+        match self.class_compilers.last() {
+            Some(c) if !c.has_superclass => {
+                self.error("Can't use 'super' in a class with no superclass.");
+            }
+            None => {
+                self.error("Can't use 'super' outside of a class.");
+            }
+            _ => {}
+        }
+        self.consume(TokenType::Dot, "Expect '.' after 'super'.");
+        self.consume(TokenType::Identifier, "Expect superclass method name.");
+        let name = self.identifier_constant(self.previous.lexeme);
+
+        self.named_variable("this", false);
+        if self.matches(TokenType::LeftParen) {
+            let arg_count = self.argument_list();
+            self.named_variable("super", false);
+            self.emit_opcode(OpCode::SuperInvoke(name, arg_count));
+        } else {
+            self.named_variable("super", false);
+            self.emit_opcode(OpCode::GetSuper(name));
+        }
+    }
+
     fn named_variable(&mut self, name: &str, can_assign: bool) {
         let (get_op, set_op) = if let Some(arg) = Self::resolve_local(self.current(), name) {
             (OpCode::GetLocal(arg), OpCode::SetLocal(arg))
@@ -773,6 +822,14 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.functions.last_mut().unwrap()
     }
 
+    fn current_class(&self) -> &ClassState {
+        self.class_compilers.last().unwrap()
+    }
+
+    fn current_class_mut(&mut self) -> &mut ClassState {
+        self.class_compilers.last_mut().unwrap()
+    }
+
     fn error_at_current(&mut self, message: &str) {
         let cur = self.current;
         self.error_at(&cur, message);
@@ -849,7 +906,7 @@ fn get_rule(ty: TokenType) -> Rule {
         TokenType::Or => Rule::new(None, Some(|c, _ctx| c.or()), Precedence::Or),
         TokenType::Print => Rule::new(None, None, Precedence::None),
         TokenType::Return => Rule::new(None, None, Precedence::None),
-        TokenType::Super => Rule::new(None, None, Precedence::None),
+        TokenType::Super => Rule::new(Some(|c, _ctx| c.super_()), None, Precedence::None),
         TokenType::This => Rule::new(Some(|c, _ctx| c.this()), None, Precedence::None),
         TokenType::True => Rule::new(Some(|c, _ctx| c.literal()), None, Precedence::None),
         TokenType::Var => Rule::new(None, None, Precedence::None),
