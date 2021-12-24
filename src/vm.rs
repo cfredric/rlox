@@ -11,7 +11,7 @@ use crate::value::Value;
 use crate::Opt;
 
 const GC_HEAP_GROWTH_FACTOR: usize = 2;
-const INIT_STR: &'static str = "init";
+const INIT_STR: &str = "init";
 
 pub struct VM<'opt> {
     opt: &'opt Opt,
@@ -236,8 +236,8 @@ impl<'opt> VM<'opt> {
 
     fn concatenate(&mut self, s: &str, t: &str) -> Value {
         let mut conc = String::new();
-        conc.push_str(&s);
-        conc.push_str(&t);
+        conc.push_str(s);
+        conc.push_str(t);
         Value::ObjIndex(self.take_string(conc))
     }
 
@@ -349,7 +349,7 @@ impl<'opt> VM<'opt> {
             self.stack[stack_len - arg_count - 1] = *value;
             return self.call_value(*value, arg_count);
         }
-        return self.invoke_from_class(class_index, name, arg_count);
+        self.invoke_from_class(class_index, name, arg_count)
     }
 
     fn bind_method(&mut self, class_idx: usize, name: &str) -> bool {
@@ -665,7 +665,7 @@ impl<'opt> VM<'opt> {
         // Rewrite pointers from the stack into the heap:
         for v in self.stack.iter_mut() {
             if let Value::ObjIndex(i) = v {
-                *i = mapping[&i];
+                *i = mapping[i];
             }
         }
 
