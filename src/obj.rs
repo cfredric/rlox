@@ -103,24 +103,10 @@ impl Obj {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct LoxString {
     pub header: Header,
     pub string: String,
-}
-
-impl PartialEq for LoxString {
-    fn eq(&self, other: &Self) -> bool {
-        self.string == other.string
-    }
-}
-
-impl Eq for LoxString {}
-
-impl std::hash::Hash for LoxString {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.string.hash(state);
-    }
 }
 
 impl LoxString {
