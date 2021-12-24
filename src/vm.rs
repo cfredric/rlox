@@ -662,6 +662,7 @@ impl<'opt> VM<'opt> {
             .heap
             .iter()
             .filter_map(|o| o.as_string())
+            .map(|ls| &ls.string)
             .collect::<HashSet<_>>();
         self.strings
             .table
