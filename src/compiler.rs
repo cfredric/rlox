@@ -951,7 +951,6 @@ impl Precedence {
     }
 }
 
-#[derive(Copy, Clone)]
 struct ParseFnCtx {
     can_assign: bool,
 }
@@ -976,7 +975,7 @@ impl Rule {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 struct Local<'source> {
     name: Token<'source>,
     depth: Option<usize>,
@@ -1001,7 +1000,7 @@ pub enum FunctionType {
     Script,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Upvalue {
     pub index: usize,
     pub is_local: bool,

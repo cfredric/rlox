@@ -2,7 +2,7 @@ use enum_as_inner::EnumAsInner;
 
 use crate::{chunk::Chunk, table::Table, value::Value};
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug)]
 pub struct Header {
     is_marked: bool,
     is_gc_able: bool,
@@ -224,7 +224,7 @@ impl BoundMethod {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug)]
 pub struct UpValue {
     header: Header,
     /// The value.
@@ -249,7 +249,7 @@ impl UpValue {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug)]
 pub enum OpenOrClosed {
     /// Open holds a pointer into the stack.
     Open(usize),
