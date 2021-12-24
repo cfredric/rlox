@@ -317,13 +317,7 @@ impl<'opt> VM<'opt> {
     }
 
     fn invoke_from_class(&mut self, class_index: usize, name: &str, arg_count: usize) -> bool {
-        let method = match self.heap[class_index]
-            .as_class()
-            .unwrap()
-            .methods
-            .table
-            .get(&LoxString::new(name))
-        {
+        let method = match self.heap[class_index].as_class().unwrap().methods.get(name) {
             Some(m) => *m.as_obj_index().unwrap(),
             None => {
                 self.runtime_error(&format!("Undefined property {}", name));
@@ -353,13 +347,7 @@ impl<'opt> VM<'opt> {
     }
 
     fn bind_method(&mut self, class_idx: usize, name: &str) -> bool {
-        let method = match self.heap[class_idx]
-            .as_class()
-            .unwrap()
-            .methods
-            .table
-            .get(&LoxString::new(name))
-        {
+        let method = match self.heap[class_idx].as_class().unwrap().methods.get(name) {
             Some(m) => *m,
             None => {
                 self.runtime_error(&format!("Undefined property {}", name));
