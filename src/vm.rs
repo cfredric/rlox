@@ -958,8 +958,10 @@ impl<'opt> VM<'opt> {
                         }
                     };
                     let subclass = *self.peek(0).as_obj_index().unwrap();
-                    let subclass_methods = &mut self.heap[subclass].as_class_mut().unwrap().methods;
-                    subclass_methods
+                    self.heap[subclass]
+                        .as_class_mut()
+                        .unwrap()
+                        .methods
                         .table
                         .extend(superclass_methods.into_iter());
                     self.pop(); // Subclass.
