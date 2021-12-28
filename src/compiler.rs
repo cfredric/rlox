@@ -149,7 +149,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.current_chunk_mut().code[jump_index] = match self.current_chunk().code[jump_index] {
             OpCode::JumpIfFalse(_) => OpCode::JumpIfFalse(distance),
             OpCode::Jump(_) => OpCode::Jump(distance),
-            _ => unreachable!(),
+            _ => unreachable!("Tried to patch non-jump OpCode"),
         }
     }
 
