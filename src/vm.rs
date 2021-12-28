@@ -810,15 +810,16 @@ impl<'opt> VM<'opt> {
                 }
                 OpCode::SetGlobal(index) => {
                     let name = self.read_string(*index).to_string();
-                    if self
-                        .globals
-                        .insert(name.to_string(), self.peek(0))
-                        .is_none()
-                    {
-                        self.globals.remove(&name);
-                        self.runtime_error(&format!("Undefined variable '{}'.", name));
-                        return InterpretResult::RuntimeError;
-                    }
+                    let val = self.peek(0);
+                    let key = match self.globals.entry(name) {
+                        std::collections::hash_map::Entry::Occupied(mut o) => {
+                            o.insert(val);
+                            continue;
+                        }
+                        std::collections::hash_map::Entry::Vacant(e) => e.key().to_string(),
+                    };
+                    self.runtime_error(&format!("Undefined variable '{}'.", key));
+                    return InterpretResult::RuntimeError;
                 }
                 OpCode::SetLocal(slot) => {
                     let index = self.frame().slots() + *slot;
