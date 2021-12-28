@@ -6,7 +6,6 @@ use crate::obj::{
     BoundMethod, Class, Closure, Function, Instance, LoxString, NativeFn, Obj, OpenOrClosed,
     UpValue,
 };
-use crate::table::Table;
 use crate::value::Value;
 use crate::Opt;
 
@@ -20,11 +19,11 @@ pub struct VM<'opt> {
 
     pub heap: Vec<Obj>,
     stack: Vec<Value>,
-    pub strings: Table<usize>,
+    pub strings: HashMap<String, usize>,
     /// open_upvalues is a pointer into the heap, to the head of the linked list
     /// of upvalue objects.
     open_upvalues: Option<usize>,
-    globals: Table<Value>,
+    globals: HashMap<String, Value>,
 
     /// Vector of heap indices, used during GC.
     gray_stack: Vec<usize>,
@@ -97,9 +96,9 @@ impl<'opt> VM<'opt> {
             frames: Vec::new(),
             heap: Vec::new(),
             stack: Vec::new(),
-            strings: Table::new(),
+            strings: HashMap::new(),
             open_upvalues: None,
-            globals: Table::new(),
+            globals: HashMap::new(),
             gray_stack: Vec::new(),
             bytes_allocated: 0,
             next_gc: 1024 * 1024,
@@ -127,7 +126,7 @@ impl<'opt> VM<'opt> {
     fn allocate_string(&mut self, s: String) -> usize {
         let idx = self.allocate_object(Obj::String(LoxString::new(&s)));
         self.strings
-            .set(&self.heap[idx].as_string().unwrap().string, idx);
+            .insert(self.heap[idx].as_string().unwrap().string.to_string(), idx);
         idx
     }
 
@@ -148,7 +147,7 @@ impl<'opt> VM<'opt> {
     }
 
     pub fn new_instance(&mut self, class_index: usize) -> usize {
-        self.allocate_object(Obj::Instance(Instance::new(class_index, Table::new())))
+        self.allocate_object(Obj::Instance(Instance::new(class_index)))
     }
 
     pub fn new_bound_method(&mut self, receiver: Value, closure_idx: usize) -> usize {
@@ -263,7 +262,7 @@ impl<'opt> VM<'opt> {
 
         let key = self.as_string(self.stack[0]).to_string();
         let value = self.stack[1];
-        self.globals.set(&key, value);
+        self.globals.insert(key, value);
 
         self.pop();
         self.pop();
@@ -419,7 +418,7 @@ impl<'opt> VM<'opt> {
             .clone();
         let class = self.heap[class_index].as_class_mut().unwrap();
 
-        class.methods.set(&name, method);
+        class.methods.insert(name, method);
         self.pop();
     }
 
@@ -500,7 +499,7 @@ impl<'opt> VM<'opt> {
             }
         }
 
-        for v in self.globals.table.clone().values() {
+        for v in self.globals.clone().values() {
             self.mark_value(*v);
         }
 
@@ -548,14 +547,14 @@ impl<'opt> VM<'opt> {
                 }
             }
             Obj::Class(c) => {
-                let methods = c.methods.table.values().copied().collect::<Vec<_>>();
+                let methods = c.methods.values().copied().collect::<Vec<_>>();
                 for m in methods {
                     self.mark_value(m);
                 }
             }
             Obj::Instance(i) => {
                 let idx = i.class_index;
-                let field_values = i.fields.table.values().copied().collect::<Vec<_>>();
+                let field_values = i.fields.values().copied().collect::<Vec<_>>();
                 self.mark_object(idx);
                 for value in field_values {
                     self.mark_value(value);
@@ -664,9 +663,7 @@ impl<'opt> VM<'opt> {
             .filter_map(|o| o.as_string())
             .map(|ls| &ls.string)
             .collect::<HashSet<_>>();
-        self.strings
-            .table
-            .retain(|s, _| reachable_strings.contains(s));
+        self.strings.retain(|s, _| reachable_strings.contains(s));
 
         before - self.heap.len()
     }
@@ -799,7 +796,7 @@ impl<'opt> VM<'opt> {
                 OpCode::DefineGlobal(index) => {
                     let name = self.read_string(*index).to_string();
                     let v = self.pop();
-                    self.globals.set(&name, v);
+                    self.globals.insert(name, v);
                 }
                 OpCode::GetGlobal(index) => {
                     let name = self.read_string(*index).to_string();
@@ -813,8 +810,12 @@ impl<'opt> VM<'opt> {
                 }
                 OpCode::SetGlobal(index) => {
                     let name = self.read_string(*index).to_string();
-                    if self.globals.set(&name, self.peek(0)) {
-                        self.globals.delete(&name);
+                    if self
+                        .globals
+                        .insert(name.to_string(), self.peek(0))
+                        .is_none()
+                    {
+                        self.globals.remove(&name);
                         self.runtime_error(&format!("Undefined variable '{}'.", name));
                         return InterpretResult::RuntimeError;
                     }
@@ -926,7 +927,7 @@ impl<'opt> VM<'opt> {
                         .as_instance_mut()
                         .unwrap()
                         .fields
-                        .set(&name, value);
+                        .insert(name, value);
                     self.pop(); // Value.
                     self.pop(); // Instance.
                     self.push(value);
@@ -951,7 +952,7 @@ impl<'opt> VM<'opt> {
                 OpCode::Inherit => {
                     let superclass = *self.peek(1).as_obj_index().unwrap();
                     let superclass_methods = match &self.heap[superclass] {
-                        Obj::Class(c) => c.methods.table.clone(),
+                        Obj::Class(c) => c.methods.clone(),
                         _ => {
                             self.runtime_error("Superclass must be a class.");
                             return InterpretResult::RuntimeError;
@@ -962,7 +963,6 @@ impl<'opt> VM<'opt> {
                         .as_class_mut()
                         .unwrap()
                         .methods
-                        .table
                         .extend(superclass_methods.into_iter());
                     self.pop(); // Subclass.
                 }

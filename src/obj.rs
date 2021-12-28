@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+
 use enum_as_inner::EnumAsInner;
 
-use crate::{chunk::Chunk, table::Table, value::Value};
+use crate::{chunk::Chunk, value::Value};
 
 #[derive(Debug)]
 pub struct Header {
@@ -177,7 +179,7 @@ impl Closure {
 pub struct Class {
     header: Header,
     name: String,
-    pub methods: Table<Value>,
+    pub methods: HashMap<String, Value>,
 }
 
 impl Class {
@@ -185,7 +187,7 @@ impl Class {
         Self {
             header: Header::new(true),
             name: name.to_string(),
-            methods: Table::new(),
+            methods: HashMap::new(),
         }
     }
 }
@@ -194,15 +196,15 @@ impl Class {
 pub struct Instance {
     header: Header,
     pub class_index: usize,
-    pub fields: Table<Value>,
+    pub fields: HashMap<String, Value>,
 }
 
 impl Instance {
-    pub fn new(class_index: usize, fields: Table<Value>) -> Self {
+    pub fn new(class_index: usize) -> Self {
         Self {
             header: Header::new(true),
             class_index,
-            fields,
+            fields: HashMap::new(),
         }
     }
 }
