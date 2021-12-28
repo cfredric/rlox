@@ -584,10 +584,6 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.make_constant(Value::ObjIndex(idx))
     }
 
-    fn identifiers_equal(&self, a: Token<'source>, b: Token<'source>) -> bool {
-        a.lexeme == b.lexeme
-    }
-
     fn define_variable(&mut self, global: usize) {
         if self.current().scope_depth > 0 {
             self.mark_initialized();
