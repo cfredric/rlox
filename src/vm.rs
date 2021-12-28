@@ -277,7 +277,7 @@ impl<'opt> VM<'opt> {
                 }
                 Obj::NativeFn(native) => {
                     let result =
-                        (native.f)(self.stack.iter().rev().take(arg_count).cloned().collect());
+                        (native.f)(self.stack.iter().rev().take(arg_count).copied().collect());
                     for _ in 0..arg_count + 1 {
                         self.pop();
                     }
@@ -294,7 +294,7 @@ impl<'opt> VM<'opt> {
                         .unwrap()
                         .methods
                         .get(INIT_STR)
-                        .cloned()
+                        .copied()
                     {
                         return self.call(*initializer.as_obj_index().unwrap(), arg_count);
                     } else if arg_count != 0 {
@@ -903,7 +903,7 @@ impl<'opt> VM<'opt> {
                         .unwrap()
                         .fields
                         .get(&name)
-                        .cloned()
+                        .copied()
                     {
                         self.pop(); // Instance.
                         self.push(v);
