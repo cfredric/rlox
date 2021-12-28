@@ -64,9 +64,7 @@ impl<'source> Scanner<'source> {
                 self.make_token(t)
             }
             '"' => self.string(),
-            _ => {
-                unreachable!();
-            }
+            _ => self.error_token("Unrecognized character."),
         }
     }
 
