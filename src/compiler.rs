@@ -543,7 +543,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             TokenType::False => self.emit_opcode(OpCode::Bool(false)),
             TokenType::Nil => self.emit_opcode(OpCode::Nil),
             TokenType::True => self.emit_opcode(OpCode::Bool(true)),
-            _ => unreachable!(),
+            _ => unreachable!("Unexpected TokenType in literal"),
         }
     }
 
