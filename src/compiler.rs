@@ -494,7 +494,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         match op_ty {
             TokenType::Minus => self.emit_opcode(OpCode::Negate),
             TokenType::Bang => self.emit_opcode(OpCode::Not),
-            _ => unreachable!(),
+            _ => self.error("Unexpected unary operand."),
         }
     }
 
