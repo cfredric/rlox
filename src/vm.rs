@@ -86,6 +86,15 @@ fn sleep_native(args: Vec<Value>) -> Value {
     Value::Nil
 }
 
+fn now_native(_args: Vec<Value>) -> Value {
+    let now = std::time::SystemTime::now();
+    let now = match now.duration_since(std::time::UNIX_EPOCH) {
+        Ok(d) => d.as_millis(),
+        Err(_) => 0,
+    };
+    Value::Double(now as f64)
+}
+
 macro_rules! binary_op {
     ($self:ident, $op:ident, $value_type:ident) => {{
         let b = $self.pop();
@@ -121,6 +130,7 @@ impl<'opt> VM<'opt> {
         };
         vm.define_native("clock", NativeFn::new(clock_native));
         vm.define_native("sleep", NativeFn::new(sleep_native));
+        vm.define_native("now", NativeFn::new(now_native));
 
         vm
     }

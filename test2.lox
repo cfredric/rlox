@@ -1,4 +1,5 @@
 var start = clock();
+var startNow = now();
 var breakfast = "beignets";
 var beverage = "cafe au lait";
 breakfast = "beignets with " + beverage;
@@ -215,5 +216,6 @@ var cruller = Cruller(true);
 print "is it fresh? " + boolToString(cruller.freshness());
 cruller.finish("asdf");
 
-sleep(100);
+sleep(1000);
 print clock() - start;
+print now() - startNow;
