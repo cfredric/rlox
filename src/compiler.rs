@@ -406,10 +406,11 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.consume(TokenType::LeftBrace, "Expect '{' before function body.");
         self.block();
 
-        let (function, upvalues) = self.end_compiler().unwrap();
-        let function_heap_index = self.vm.new_function(function);
-        let function_constant_index = self.make_constant(Value::ObjIndex(function_heap_index));
-        self.emit_opcode(OpCode::Closure(function_constant_index, upvalues));
+        if let Some((function, upvalues)) = self.end_compiler() {
+            let function_heap_index = self.vm.new_function(function);
+            let function_constant_index = self.make_constant(Value::ObjIndex(function_heap_index));
+            self.emit_opcode(OpCode::Closure(function_constant_index, upvalues));
+        }
     }
 
     fn method(&mut self) {
