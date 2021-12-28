@@ -10,13 +10,6 @@ pub enum Value {
     ObjIndex(usize),
 }
 
-pub fn double(f: f64) -> Value {
-    Value::Double(f)
-}
-pub fn vbool(b: bool) -> Value {
-    Value::Bool(b)
-}
-
 const ERROR_MARGIN: f64 = 0.00000000001;
 
 impl Value {

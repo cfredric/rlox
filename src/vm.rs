@@ -44,22 +44,6 @@ pub enum InterpretResult {
     RuntimeError,
 }
 
-fn sub(a: f64, b: f64) -> f64 {
-    a - b
-}
-fn mul(a: f64, b: f64) -> f64 {
-    a * b
-}
-fn div(a: f64, b: f64) -> f64 {
-    a / b
-}
-fn gt(a: f64, b: f64) -> bool {
-    a > b
-}
-fn lt(a: f64, b: f64) -> bool {
-    a < b
-}
-
 mod ffi {
     extern "C" {
         pub fn clock() -> libc::clock_t;
@@ -96,7 +80,7 @@ fn now_native(_args: Vec<Value>) -> Value {
 }
 
 macro_rules! binary_op {
-    ($self:ident, $op:ident, $value_type:ident) => {{
+    ($self:ident, $op:expr, $value_type:expr) => {{
         let b = $self.pop();
         let a = $self.pop();
         match (a, b) {
@@ -797,9 +781,9 @@ impl<'opt> VM<'opt> {
                         return InterpretResult::RuntimeError;
                     }
                 },
-                OpCode::Subtract => binary_op!(self, sub, double),
-                OpCode::Multiply => binary_op!(self, mul, double),
-                OpCode::Divide => binary_op!(self, div, double),
+                OpCode::Subtract => binary_op!(self, |a, b| a - b, |x| Value::Double(x)),
+                OpCode::Multiply => binary_op!(self, |a, b| a * b, |x| Value::Double(x)),
+                OpCode::Divide => binary_op!(self, |a, b| a / b, |x| Value::Double(x)),
                 OpCode::Nil => self.push(Value::Nil),
                 OpCode::Bool(b) => self.push(Value::Bool(*b)),
                 OpCode::Not => {
@@ -811,8 +795,8 @@ impl<'opt> VM<'opt> {
                     let a = self.pop();
                     self.push(Value::Bool(Value::equal(a, b)));
                 }
-                OpCode::Greater => binary_op!(self, gt, vbool),
-                OpCode::Less => binary_op!(self, lt, vbool),
+                OpCode::Greater => binary_op!(self, |a, b| a > b, |b| Value::Bool(b)),
+                OpCode::Less => binary_op!(self, |a, b| a < b, |b| Value::Bool(b)),
                 OpCode::Print => {
                     println!("{}", self.pop().print(&self.heap));
                 }
