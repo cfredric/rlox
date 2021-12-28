@@ -754,33 +754,34 @@ impl<'opt> VM<'opt> {
                         return InterpretResult::RuntimeError;
                     }
                 },
-                OpCode::Add => match (self.peek(0), self.peek(1)) {
-                    (Value::Double(b), Value::Double(a)) => {
-                        self.pop();
-                        self.pop();
-                        self.push(Value::Double(a + b));
-                    }
-                    (Value::ObjIndex(i), Value::ObjIndex(j)) => {
-                        match (&self.heap[i], &self.heap[j]) {
-                            (Obj::String(t), Obj::String(s)) => {
-                                // Have to clone here, since adding to the heap
-                                // might invalidate references to s and t.
-                                let (s, t) = (s.string.clone(), t.string.clone());
-                                let val = self.concatenate(&s, &t);
-                                self.pop();
-                                self.pop();
-                                self.push(val);
-                            }
-                            (_, _) => {
-                                unreachable!();
+                OpCode::Add => {
+                    match (self.peek(0), self.peek(1)) {
+                        (Value::Double(b), Value::Double(a)) => {
+                            self.pop();
+                            self.pop();
+                            self.push(Value::Double(a + b));
+                            continue;
+                        }
+                        (Value::ObjIndex(i), Value::ObjIndex(j)) => {
+                            match (&self.heap[i], &self.heap[j]) {
+                                (Obj::String(t), Obj::String(s)) => {
+                                    // Have to clone here, since adding to the heap
+                                    // might invalidate references to s and t.
+                                    let (s, t) = (s.string.clone(), t.string.clone());
+                                    let val = self.concatenate(&s, &t);
+                                    self.pop();
+                                    self.pop();
+                                    self.push(val);
+                                    continue;
+                                }
+                                (_, _) => {}
                             }
                         }
-                    }
-                    _ => {
-                        self.runtime_error("Operands must be two numbers or two strings.");
-                        return InterpretResult::RuntimeError;
-                    }
-                },
+                        _ => {}
+                    };
+                    self.runtime_error("Operands must be two numbers or two strings.");
+                    return InterpretResult::RuntimeError;
+                }
                 OpCode::Subtract => binary_op!(self, |a, b| a - b, |x| Value::Double(x)),
                 OpCode::Multiply => binary_op!(self, |a, b| a * b, |x| Value::Double(x)),
                 OpCode::Divide => binary_op!(self, |a, b| a / b, |x| Value::Double(x)),
