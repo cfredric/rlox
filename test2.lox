@@ -1,5 +1,5 @@
 var start = clock();
-var startNow = now();
+var start_now = now();
 var breakfast = "beignets";
 var beverage = "cafe au lait";
 breakfast = "beignets with " + beverage;
@@ -218,4 +218,4 @@ cruller.finish("asdf");
 
 sleep(1000);
 print clock() - start;
-print now() - startNow;
+print now() - start_now;

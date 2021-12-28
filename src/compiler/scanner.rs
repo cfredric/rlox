@@ -4,6 +4,10 @@ pub(super) struct Scanner<'source> {
     line: usize,
 }
 
+fn is_alphabetic(c: char) -> bool {
+    c.is_alphabetic() || c == '_'
+}
+
 impl<'source> Scanner<'source> {
     pub(super) fn new(source: &'source str) -> Self {
         Scanner {
@@ -26,7 +30,7 @@ impl<'source> Scanner<'source> {
         }
 
         match self.advance() {
-            c if c.is_alphabetic() => self.identifier(),
+            c if is_alphabetic(c) => self.identifier(),
             c if c.is_digit(10) => self.number(),
             '(' => self.make_token(LeftParen),
             ')' => self.make_token(RightParen),
@@ -140,7 +144,7 @@ impl<'source> Scanner<'source> {
     }
 
     fn identifier(&mut self) -> Token<'source> {
-        while self.peek().is_alphabetic() || self.peek().is_digit(10) {
+        while is_alphabetic(self.peek()) || self.peek().is_digit(10) {
             self.advance();
         }
         self.make_token(self.identifier_type())
