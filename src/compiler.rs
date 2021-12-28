@@ -646,17 +646,11 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             return;
         }
         let name = self.previous;
-        // TODO: don't clone here.
-        for local in self.current().locals.clone().iter().rev() {
-            if local
-                .depth
-                .map_or(false, |d| d < self.current().scope_depth)
-            {
-                break;
-            }
-            if self.identifiers_equal(name, local.name) {
-                self.error("Already a variable with this name in this scope.");
-            }
+        let current = self.current();
+        if current.locals.iter().any(|l| {
+            !l.depth.map_or(false, |d| d < current.scope_depth) && name.lexeme == l.name.lexeme
+        }) {
+            self.error("Already a variable with this name in this scope.");
         }
         self.add_local(name);
     }

@@ -328,19 +328,19 @@ impl<'opt> VM<'opt> {
 
     fn invoke(&mut self, name: &str, arg_count: usize) -> bool {
         let receiver = self.peek(arg_count);
-        let (class_index, fields) = match self.heap[*receiver.as_obj_index().unwrap()].as_instance()
+        let (class_index, field) = match self.heap[*receiver.as_obj_index().unwrap()].as_instance()
         {
-            Some(i) => (i.class_index, i.fields.clone()),
+            Some(i) => (i.class_index, i.fields.get(name).copied()),
             None => {
                 self.runtime_error("Only instances have methods.");
                 return false;
             }
         };
 
-        if let Some(value) = fields.get(name) {
+        if let Some(value) = field {
             let stack_len = self.stack.len();
-            self.stack[stack_len - arg_count - 1] = *value;
-            return self.call_value(*value, arg_count);
+            self.stack[stack_len - arg_count - 1] = value;
+            return self.call_value(value, arg_count);
         }
         self.invoke_from_class(class_index, name, arg_count)
     }
