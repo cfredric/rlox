@@ -215,4 +215,5 @@ var cruller = Cruller(true);
 print "is it fresh? " + boolToString(cruller.freshness());
 cruller.finish("asdf");
 
+sleep(100);
 print clock() - start;

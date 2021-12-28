@@ -71,6 +71,21 @@ fn clock_native(_args: Vec<Value>) -> Value {
     Value::Double(t as f64 / 1_000_000_f64)
 }
 
+fn sleep_native(args: Vec<Value>) -> Value {
+    if args.is_empty() {
+        return Value::Nil;
+    }
+    let duration = match args[0] {
+        Value::Double(d) => d.floor() as u64,
+        _ => {
+            return Value::Nil;
+        }
+    };
+
+    std::thread::sleep(std::time::Duration::from_millis(duration));
+    Value::Nil
+}
+
 macro_rules! binary_op {
     ($self:ident, $op:ident, $value_type:ident) => {{
         let b = $self.pop();
@@ -105,6 +120,7 @@ impl<'opt> VM<'opt> {
             is_compiling: false,
         };
         vm.define_native("clock", NativeFn::new(clock_native));
+        vm.define_native("sleep", NativeFn::new(sleep_native));
 
         vm
     }
