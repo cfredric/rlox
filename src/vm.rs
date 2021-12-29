@@ -370,14 +370,13 @@ impl<'opt> VM<'opt> {
     fn capture_upvalue(&mut self, local: usize) -> usize {
         let mut prev_upvalue = None;
         let mut upvalue = self.open_upvalues;
-        while upvalue.is_some()
-            && self.heap.heap[upvalue.unwrap()]
-                .as_up_value()
-                .unwrap()
-                .is_at_or_above(local)
-        {
+        while let Some(uv) = upvalue {
+            let uv = self.heap.heap[uv].as_up_value().unwrap();
+            if !uv.is_at_or_above(local) {
+                break;
+            }
             prev_upvalue = upvalue;
-            upvalue = self.heap.heap[upvalue.unwrap()].as_up_value().unwrap().next;
+            upvalue = uv.next;
         }
 
         let created_upvalue = self.new_upvalue(UpValue::new(local, upvalue));
