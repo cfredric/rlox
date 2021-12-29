@@ -669,7 +669,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn this(&mut self) {
-        if let Some(_) = self.class_compilers.last() {
+        if self.class_compilers.last().is_some() {
             self.variable(false);
         } else {
             self.error("Can't use 'this' outside of a class.");

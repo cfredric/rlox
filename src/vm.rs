@@ -272,7 +272,7 @@ impl<'opt> VM<'opt> {
                     return self.call(heap_index, arg_count);
                 }
                 Obj::NativeFn(native) => {
-                    let result = (native.f)(&self.stack.top_n(arg_count));
+                    let result = (native.f)(self.stack.top_n(arg_count));
                     self.stack.pop_n(arg_count + 1);
                     self.stack.push(result);
                     return true;
