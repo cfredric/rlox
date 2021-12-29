@@ -44,21 +44,21 @@ fn main() -> io::Result<()> {
 
     match &opt.path {
         Some(path) => {
-            run_file(path, &opt)?;
+            let source = std::fs::read_to_string(path)?;
+            run_file(&opt, source);
             Ok(())
         }
         None => repl(&opt),
     }
 }
 
-fn run_file(path: &Path, opt: &Opt) -> io::Result<()> {
-    let source = std::fs::read_to_string(path)?;
+pub fn run_file(opt: &Opt, source: String) {
     let result = vm::VM::new(opt).interpret(&source);
 
     match result {
-        vm::InterpretResult::Ok => Ok(()),
         vm::InterpretResult::CompileError => std::process::exit(65),
         vm::InterpretResult::RuntimeError => std::process::exit(70),
+        vm::InterpretResult::Ok => {}
     }
 }
 
