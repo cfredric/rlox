@@ -272,11 +272,8 @@ impl<'opt> VM<'opt> {
                     return self.call(heap_index, arg_count);
                 }
                 Obj::NativeFn(native) => {
-                    let result =
-                        (native.f)(&self.stack.stack[self.stack.stack.len() - arg_count..]);
-                    self.stack
-                        .stack
-                        .truncate(self.stack.stack.len() - arg_count - 1);
+                    let result = (native.f)(&self.stack.top_n(arg_count));
+                    self.stack.pop_n(arg_count + 1);
                     self.stack.push(result);
                     return true;
                 }
@@ -969,6 +966,14 @@ impl Stack {
 
     fn peek(&self, offset: usize) -> Value {
         self.stack[self.stack.len() - 1 - offset]
+    }
+
+    fn top_n(&self, n: usize) -> &[Value] {
+        &self.stack[self.stack.len() - n..]
+    }
+
+    fn pop_n(&mut self, n: usize) {
+        self.stack.truncate(self.stack.len() - n);
     }
 }
 
