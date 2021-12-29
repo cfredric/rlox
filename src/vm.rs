@@ -18,7 +18,7 @@ pub struct VM<'opt> {
     frames: Vec<CallFrame>,
 
     pub heap: Heap,
-    stack: Vec<Value>,
+    stack: Stack,
     pub strings: HashMap<String, usize>,
     /// open_upvalues is a pointer into the heap, to the head of the linked list
     /// of upvalue objects.
@@ -77,17 +77,17 @@ fn now_native(_args: &[Value]) -> Value {
 }
 
 macro_rules! binary_op {
-    ($self:ident, $op:expr, $value_type:expr) => {{
-        let b = $self.pop();
-        let a = $self.pop();
+    ($vm:ident, $op:expr, $value_type:expr) => {{
+        let b = $vm.stack.pop();
+        let a = $vm.stack.pop();
         match (a, b) {
             (Value::Double(ad), Value::Double(bd)) => {
-                $self.push($value_type($op(ad, bd)));
+                $vm.stack.push($value_type($op(ad, bd)));
             }
             _ => {
-                $self.runtime_error("Operands must be numbers.");
-                $self.push(a);
-                $self.push(b);
+                $vm.runtime_error("Operands must be numbers.");
+                $vm.stack.push(a);
+                $vm.stack.push(b);
                 return InterpretResult::RuntimeError;
             }
         }
@@ -100,7 +100,7 @@ impl<'opt> VM<'opt> {
             opt,
             frames: Vec::new(),
             heap: Heap::new(opt.log_garbage_collection),
-            stack: Vec::new(),
+            stack: Stack::new(),
             strings: HashMap::new(),
             open_upvalues: None,
             globals: HashMap::new(),
@@ -224,21 +224,8 @@ impl<'opt> VM<'opt> {
             .string
     }
 
-    fn push(&mut self, value: Value) {
-        self.stack.push(value);
-    }
-
-    /// Pops a value from the stack.
-    fn pop(&mut self) -> Value {
-        self.stack.pop().unwrap()
-    }
-
-    fn peek(&self, offset: usize) -> Value {
-        self.stack[self.stack.len() - 1 - offset]
-    }
-
     fn reset_stack(&mut self) {
-        self.stack.clear();
+        self.stack.stack.clear();
         self.open_upvalues = None;
     }
 
@@ -265,16 +252,16 @@ impl<'opt> VM<'opt> {
         let index = self.copy_string(name);
         self.heap.heap[index].set_gc_exempt();
         let index = Value::ObjIndex(index);
-        self.push(index);
+        self.stack.push(index);
         let index = Value::ObjIndex(self.new_native(function));
-        self.push(index);
+        self.stack.push(index);
 
-        let key = self.as_string(self.stack[0]).to_string();
-        let value = self.stack[1];
+        let key = self.as_string(self.stack.stack[0]).to_string();
+        let value = self.stack.stack[1];
         self.globals.insert(key, value);
 
-        self.pop();
-        self.pop();
+        self.stack.pop();
+        self.stack.pop();
     }
 
     fn call_value(&mut self, callee: Value, arg_count: usize) -> bool {
@@ -285,15 +272,18 @@ impl<'opt> VM<'opt> {
                     return self.call(heap_index, arg_count);
                 }
                 Obj::NativeFn(native) => {
-                    let result = (native.f)(&self.stack[self.stack.len() - arg_count..]);
-                    self.stack.truncate(self.stack.len() - arg_count - 1);
-                    self.push(result);
+                    let result =
+                        (native.f)(&self.stack.stack[self.stack.stack.len() - arg_count..]);
+                    self.stack
+                        .stack
+                        .truncate(self.stack.stack.len() - arg_count - 1);
+                    self.stack.push(result);
                     return true;
                 }
                 Obj::Class(_) => {
-                    let stack_len = self.stack.len();
+                    let stack_len = self.stack.stack.len();
                     let instance = self.new_instance(heap_index);
-                    self.stack[stack_len - arg_count - 1] = Value::ObjIndex(instance);
+                    self.stack.stack[stack_len - arg_count - 1] = Value::ObjIndex(instance);
 
                     if let Some(initializer) = self.heap.heap[heap_index]
                         .as_class()
@@ -311,8 +301,8 @@ impl<'opt> VM<'opt> {
                 }
                 Obj::BoundMethod(b) => {
                     let bound_ptr = b.closure_idx;
-                    let stack_top = self.stack.len();
-                    self.stack[stack_top - arg_count - 1] = b.receiver;
+                    let stack_top = self.stack.stack.len();
+                    self.stack.stack[stack_top - arg_count - 1] = b.receiver;
                     return self.call(bound_ptr, arg_count);
                 }
             };
@@ -338,7 +328,7 @@ impl<'opt> VM<'opt> {
     }
 
     fn invoke(&mut self, name: &str, arg_count: usize) -> bool {
-        let receiver = self.peek(arg_count);
+        let receiver = self.stack.peek(arg_count);
         let (class_index, field) =
             match self.heap.heap[*receiver.as_obj_index().unwrap()].as_instance() {
                 Some(i) => (i.class_index, i.fields.get(name).copied()),
@@ -349,8 +339,8 @@ impl<'opt> VM<'opt> {
             };
 
         if let Some(value) = field {
-            let stack_len = self.stack.len();
-            self.stack[stack_len - arg_count - 1] = value;
+            let stack_len = self.stack.stack.len();
+            self.stack.stack[stack_len - arg_count - 1] = value;
             return self.call_value(value, arg_count);
         }
         self.invoke_from_class(class_index, name, arg_count)
@@ -370,9 +360,9 @@ impl<'opt> VM<'opt> {
             }
         };
 
-        let bound = self.new_bound_method(self.peek(0), *method.as_obj_index().unwrap());
-        self.pop();
-        self.push(Value::ObjIndex(bound));
+        let bound = self.new_bound_method(self.stack.peek(0), *method.as_obj_index().unwrap());
+        self.stack.pop();
+        self.stack.push(Value::ObjIndex(bound));
         true
     }
 
@@ -416,7 +406,7 @@ impl<'opt> VM<'opt> {
                 .unwrap();
             match upvalue.value {
                 OpenOrClosed::Open(loc) => {
-                    upvalue.value = OpenOrClosed::Closed(loc, self.stack[loc]);
+                    upvalue.value = OpenOrClosed::Closed(loc, self.stack.stack[loc]);
                 }
                 OpenOrClosed::Closed(_, _) => {}
             }
@@ -425,8 +415,8 @@ impl<'opt> VM<'opt> {
     }
 
     fn define_method(&mut self, name_idx: Value) {
-        let method = self.peek(0);
-        let class_index = *self.peek(1).as_obj_index().unwrap();
+        let method = self.stack.peek(0);
+        let class_index = *self.stack.peek(1).as_obj_index().unwrap();
         let name = self.heap.heap[*name_idx.as_obj_index().unwrap()]
             .as_string()
             .unwrap()
@@ -435,7 +425,7 @@ impl<'opt> VM<'opt> {
         let class = self.heap.heap[class_index].as_class_mut().unwrap();
 
         class.methods.insert(name, method);
-        self.pop();
+        self.stack.pop();
     }
 
     fn call(&mut self, closure_heap_index: usize, arg_count: usize) -> bool {
@@ -459,7 +449,7 @@ impl<'opt> VM<'opt> {
 
         self.frames.push(CallFrame::new(
             closure_heap_index,
-            self.stack.len() - arg_count - 1,
+            self.stack.stack.len() - arg_count - 1,
         ));
         true
     }
@@ -493,7 +483,7 @@ impl<'opt> VM<'opt> {
     }
 
     fn mark_roots(&mut self) {
-        for slot in &self.stack {
+        for slot in &self.stack.stack {
             self.heap.mark_value(*slot);
         }
 
@@ -581,7 +571,7 @@ impl<'opt> VM<'opt> {
         }
 
         // Rewrite pointers from the stack into the heap:
-        for v in self.stack.iter_mut() {
+        for v in self.stack.stack.iter_mut() {
             if let Value::ObjIndex(i) = v {
                 *i = mapping[i];
             }
@@ -620,6 +610,7 @@ impl<'opt> VM<'opt> {
             "{}:    {}",
             label,
             self.stack
+                .stack
                 .iter()
                 .skip(skip)
                 .map(|i| format!("[ {} ]", i.print(&self.heap)))
@@ -651,37 +642,37 @@ impl<'opt> VM<'opt> {
             match &self.read_byte().clone() {
                 OpCode::Constant(offset) => {
                     let constant = self.read_constant(*offset);
-                    self.push(constant);
+                    self.stack.push(constant);
                 }
                 OpCode::Return => {
-                    let result = self.pop();
+                    let result = self.stack.pop();
                     self.close_upvalues(self.frame().slots());
                     let finished_frame = self.frames.pop().unwrap();
                     if self.frames.is_empty() {
-                        self.pop();
+                        self.stack.pop();
                         if self.opt.trace_execution {
                             self.print_stack_slice("stack", 0);
                         }
-                        debug_assert!(self.stack.is_empty());
+                        debug_assert!(self.stack.stack.is_empty());
                         return InterpretResult::Ok;
                     }
 
-                    self.stack.truncate(finished_frame.frame_start);
-                    self.push(result);
+                    self.stack.stack.truncate(finished_frame.frame_start);
+                    self.stack.push(result);
                 }
-                OpCode::Negate => match self.pop() {
-                    Value::Double(d) => self.push(Value::Double(-d)),
+                OpCode::Negate => match self.stack.pop() {
+                    Value::Double(d) => self.stack.push(Value::Double(-d)),
                     _ => {
                         self.runtime_error("Operand must be a number.");
                         return InterpretResult::RuntimeError;
                     }
                 },
                 OpCode::Add => {
-                    match (self.peek(0), self.peek(1)) {
+                    match (self.stack.peek(0), self.stack.peek(1)) {
                         (Value::Double(b), Value::Double(a)) => {
-                            self.pop();
-                            self.pop();
-                            self.push(Value::Double(a + b));
+                            self.stack.pop();
+                            self.stack.pop();
+                            self.stack.push(Value::Double(a + b));
                             continue;
                         }
                         (Value::ObjIndex(i), Value::ObjIndex(j)) => {
@@ -691,9 +682,9 @@ impl<'opt> VM<'opt> {
                                     // might invalidate references to s and t.
                                     let (s, t) = (s.string.clone(), t.string.clone());
                                     let val = self.concatenate(&s, &t);
-                                    self.pop();
-                                    self.pop();
-                                    self.push(val);
+                                    self.stack.pop();
+                                    self.stack.pop();
+                                    self.stack.push(val);
                                     continue;
                                 }
                                 (_, _) => {}
@@ -707,45 +698,45 @@ impl<'opt> VM<'opt> {
                 OpCode::Subtract => binary_op!(self, |a, b| a - b, Value::Double),
                 OpCode::Multiply => binary_op!(self, |a, b| a * b, Value::Double),
                 OpCode::Divide => binary_op!(self, |a, b| a / b, Value::Double),
-                OpCode::Nil => self.push(Value::Nil),
-                OpCode::Bool(b) => self.push(Value::Bool(*b)),
+                OpCode::Nil => self.stack.push(Value::Nil),
+                OpCode::Bool(b) => self.stack.push(Value::Bool(*b)),
                 OpCode::Not => {
-                    let falsey = self.pop().is_falsey();
-                    self.push(Value::Bool(falsey));
+                    let falsey = self.stack.pop().is_falsey();
+                    self.stack.push(Value::Bool(falsey));
                 }
                 OpCode::Equal => {
-                    let b = self.pop();
-                    let a = self.pop();
-                    self.push(Value::Bool(Value::equal(a, b)));
+                    let b = self.stack.pop();
+                    let a = self.stack.pop();
+                    self.stack.push(Value::Bool(Value::equal(a, b)));
                 }
                 OpCode::Greater => binary_op!(self, |a, b| a > b, Value::Bool),
                 OpCode::Less => binary_op!(self, |a, b| a < b, Value::Bool),
                 OpCode::Print => {
-                    println!("{}", self.pop().print(&self.heap));
+                    println!("{}", self.stack.pop().print(&self.heap));
                 }
                 OpCode::Pop => {
-                    self.pop();
+                    self.stack.pop();
                 }
                 OpCode::DefineGlobal(index) => {
                     let name = self.read_string(*index).to_string();
-                    let v = self.pop();
+                    let v = self.stack.pop();
                     self.globals.insert(name, v);
                 }
                 OpCode::GetGlobal(index) => {
-                    let name = self.read_string(*index).to_string();
-                    let v = self.globals.get(&name);
-                    if v.is_none() {
-                        self.runtime_error(&format!("Undefined variable '{}'.", name));
+                    let name = self.read_string(*index);
+                    if let Some(v) = self.globals.get(name) {
+                        self.stack.push(*v);
+                    } else {
+                        let msg = format!("Undefined variable '{}'.", name);
+                        self.runtime_error(&msg);
                         return InterpretResult::RuntimeError;
                     }
-                    let v = *v.unwrap();
-                    self.push(v);
                 }
                 OpCode::SetGlobal(index) => {
                     let name = self.read_string(*index).to_string();
-                    let val = self.peek(0);
                     let key = match self.globals.entry(name) {
                         std::collections::hash_map::Entry::Occupied(mut o) => {
+                            let val = self.stack.peek(0);
                             o.insert(val);
                             continue;
                         }
@@ -756,14 +747,14 @@ impl<'opt> VM<'opt> {
                 }
                 OpCode::SetLocal(slot) => {
                     let index = self.frame().slots() + *slot;
-                    self.stack[index] = self.peek(0);
+                    self.stack.stack[index] = self.stack.peek(0);
                 }
                 OpCode::GetLocal(slot) => {
-                    let value = self.stack[self.frame().slots() + *slot];
+                    let value = self.stack.stack[self.frame().slots() + *slot];
                     self.stack.push(value);
                 }
                 OpCode::JumpIfFalse(distance) => {
-                    if self.peek(0).is_falsey() {
+                    if self.stack.peek(0).is_falsey() {
                         self.frame_mut().ip += distance;
                     }
                 }
@@ -774,7 +765,7 @@ impl<'opt> VM<'opt> {
                     self.frame_mut().ip -= distance;
                 }
                 OpCode::Call(arity) => {
-                    if !self.call_value(self.peek(*arity), *arity) {
+                    if !self.call_value(self.stack.peek(*arity), *arity) {
                         return InterpretResult::RuntimeError;
                     }
                 }
@@ -795,83 +786,70 @@ impl<'opt> VM<'opt> {
                         })
                         .collect();
                     let closure_heap_index = self.new_closure(*function_heap_index, upvalues);
-                    self.push(Value::ObjIndex(closure_heap_index));
+                    self.stack.push(Value::ObjIndex(closure_heap_index));
                 }
                 OpCode::GetUpvalue(slot) => {
                     let uv_index = self.closure().upvalues[*slot];
                     let uv = self.heap.heap[uv_index].as_up_value().unwrap();
                     let val = match uv.value {
-                        OpenOrClosed::Open(loc) => self.stack[loc],
+                        OpenOrClosed::Open(loc) => self.stack.stack[loc],
                         OpenOrClosed::Closed(_, val) => val,
                     };
-                    self.push(val);
+                    self.stack.push(val);
                 }
                 OpCode::SetUpvalue(slot) => {
                     let uv_index = self.closure().upvalues[*slot];
-                    let val = self.peek(0);
+                    let val = self.stack.peek(0);
                     let uv = self.heap.heap[uv_index].as_up_value_mut().unwrap();
                     match uv.value {
-                        OpenOrClosed::Open(loc) => self.stack[loc] = val,
+                        OpenOrClosed::Open(loc) => self.stack.stack[loc] = val,
                         OpenOrClosed::Closed(loc, _) => uv.value = OpenOrClosed::Closed(loc, val),
                     };
                 }
                 OpCode::CloseUpvalue => {
-                    self.close_upvalues(self.stack.len() - 1);
-                    self.pop();
+                    self.close_upvalues(self.stack.stack.len() - 1);
+                    self.stack.pop();
                 }
                 OpCode::Class(index) => {
                     let name = self.read_string(*index).to_string();
                     let heap_index = self.new_class(&name);
-                    self.push(Value::ObjIndex(heap_index));
+                    self.stack.push(Value::ObjIndex(heap_index));
                 }
                 OpCode::GetProperty(constant) => {
-                    let instance_idx = *self.peek(0).as_obj_index().unwrap();
-                    if self.heap.heap[instance_idx].as_instance().is_none() {
+                    let instance_idx = *self.stack.peek(0).as_obj_index().unwrap();
+                    if let Some(i) = self.heap.heap[instance_idx].as_instance() {
+                        let name = self.read_string(*constant).to_string();
+                        if let Some(v) = i.fields.get(&name) {
+                            self.stack.pop(); // Instance.
+                            self.stack.push(*v);
+                            continue;
+                        }
+                        let class_index = i.class_index;
+                        if !self.bind_method(class_index, &name) {
+                            return InterpretResult::RuntimeError;
+                        }
+                    } else {
                         self.runtime_error("Only instances have properties.");
-                        return InterpretResult::RuntimeError;
-                    }
-                    let name = self.read_string(*constant).to_string();
-                    if let Some(v) = self.heap.heap[instance_idx]
-                        .as_instance()
-                        .unwrap()
-                        .fields
-                        .get(&name)
-                        .copied()
-                    {
-                        self.pop(); // Instance.
-                        self.push(v);
-                        continue;
-                    }
-                    if !self.bind_method(
-                        self.heap.heap[instance_idx]
-                            .as_instance()
-                            .unwrap()
-                            .class_index,
-                        &name,
-                    ) {
                         return InterpretResult::RuntimeError;
                     }
                 }
                 OpCode::SetProperty(constant) => {
-                    let instance_idx = *self.peek(1).as_obj_index().unwrap();
-                    if self.heap.heap[instance_idx].as_instance().is_none() {
+                    let instance_idx = *self.stack.peek(1).as_obj_index().unwrap();
+                    let name = self.read_string(*constant).to_string();
+                    if let Some(i) = self.heap.heap[instance_idx].as_instance_mut() {
+                        let value = self.stack.peek(0);
+                        i.fields.insert(name, value);
+                        self.stack.pop(); // Value.
+                        self.stack.pop(); // Instance.
+                        self.stack.push(value);
+                    } else {
                         self.runtime_error("Only instances have properties.");
                         return InterpretResult::RuntimeError;
                     }
-                    let name = self.read_string(*constant).to_string();
-                    let value = self.peek(0);
-                    self.heap.heap[instance_idx]
-                        .as_instance_mut()
-                        .unwrap()
-                        .fields
-                        .insert(name, value);
-                    self.pop(); // Value.
-                    self.pop(); // Instance.
-                    self.push(value);
                 }
                 OpCode::GetSuper(name_index) => {
                     let name = self.read_string(*name_index).to_string();
-                    let superclass_ptr = *self.pop().as_obj_index().unwrap();
+                    let superclass_ptr = *self.stack.pop().as_obj_index().unwrap();
                     if !self.bind_method(superclass_ptr, &name) {
                         return InterpretResult::RuntimeError;
                     }
@@ -887,7 +865,7 @@ impl<'opt> VM<'opt> {
                     }
                 }
                 OpCode::Inherit => {
-                    let superclass = *self.peek(1).as_obj_index().unwrap();
+                    let superclass = *self.stack.peek(1).as_obj_index().unwrap();
                     let superclass_methods = match &self.heap.heap[superclass] {
                         Obj::Class(c) => c.methods.clone(),
                         _ => {
@@ -895,18 +873,18 @@ impl<'opt> VM<'opt> {
                             return InterpretResult::RuntimeError;
                         }
                     };
-                    let subclass = *self.peek(0).as_obj_index().unwrap();
+                    let subclass = *self.stack.peek(0).as_obj_index().unwrap();
                     self.heap.heap[subclass]
                         .as_class_mut()
                         .unwrap()
                         .methods
                         .extend(superclass_methods.into_iter());
-                    self.pop(); // Subclass.
+                    self.stack.pop(); // Subclass.
                 }
                 OpCode::SuperInvoke(constant, arg_count) => {
                     let arg_count = *arg_count;
                     let method = self.read_string(*constant).to_string();
-                    let superclass_ptr = *self.pop().as_obj_index().unwrap();
+                    let superclass_ptr = *self.stack.pop().as_obj_index().unwrap();
                     if !self.invoke_from_class(superclass_ptr, &method, arg_count) {
                         return InterpretResult::RuntimeError;
                     }
@@ -927,10 +905,10 @@ impl<'opt> VM<'opt> {
         match function {
             Some(function) => {
                 let function_heap_index = self.new_function(function);
-                self.push(Value::ObjIndex(function_heap_index));
+                self.stack.push(Value::ObjIndex(function_heap_index));
                 let closure_heap_index = self.new_closure(function_heap_index, Vec::new());
-                self.pop();
-                self.push(Value::ObjIndex(closure_heap_index));
+                self.stack.pop();
+                self.stack.push(Value::ObjIndex(closure_heap_index));
                 self.call(closure_heap_index, 0);
             }
             None => {
@@ -968,6 +946,29 @@ impl CallFrame {
 
     fn slots(&self) -> usize {
         self.frame_start
+    }
+}
+
+struct Stack {
+    pub stack: Vec<Value>,
+}
+
+impl Stack {
+    fn new() -> Self {
+        Self { stack: Vec::new() }
+    }
+
+    fn push(&mut self, value: Value) {
+        self.stack.push(value);
+    }
+
+    /// Pops a value from the stack.
+    fn pop(&mut self) -> Value {
+        self.stack.pop().unwrap()
+    }
+
+    fn peek(&self, offset: usize) -> Value {
+        self.stack[self.stack.len() - 1 - offset]
     }
 }
 

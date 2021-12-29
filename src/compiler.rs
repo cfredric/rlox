@@ -669,12 +669,11 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn this(&mut self) {
-        if self.class_compilers.last().is_none() {
+        if let Some(_) = self.class_compilers.last() {
+            self.variable(false);
+        } else {
             self.error("Can't use 'this' outside of a class.");
-            return;
         }
-
-        self.variable(false);
     }
 
     fn super_(&mut self) {
