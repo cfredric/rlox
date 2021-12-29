@@ -47,12 +47,12 @@ mod ffi {
     }
 }
 
-fn clock_native(_args: Vec<Value>) -> Value {
+fn clock_native(_args: &[Value]) -> Value {
     let t = unsafe { ffi::clock() };
     Value::Double(t as f64 / 1_000_000_f64)
 }
 
-fn sleep_native(args: Vec<Value>) -> Value {
+fn sleep_native(args: &[Value]) -> Value {
     if args.is_empty() {
         return Value::Nil;
     }
@@ -67,7 +67,7 @@ fn sleep_native(args: Vec<Value>) -> Value {
     Value::Nil
 }
 
-fn now_native(_args: Vec<Value>) -> Value {
+fn now_native(_args: &[Value]) -> Value {
     let now = std::time::SystemTime::now();
     let now = match now.duration_since(std::time::UNIX_EPOCH) {
         Ok(d) => d.as_millis(),
@@ -285,11 +285,8 @@ impl<'opt> VM<'opt> {
                     return self.call(heap_index, arg_count);
                 }
                 Obj::NativeFn(native) => {
-                    let result =
-                        (native.f)(self.stack.iter().rev().take(arg_count).copied().collect());
-                    for _ in 0..arg_count + 1 {
-                        self.pop();
-                    }
+                    let result = (native.f)(&self.stack[self.stack.len() - arg_count..]);
+                    self.stack.truncate(self.stack.len() - arg_count - 1);
                     self.push(result);
                     return true;
                 }

@@ -144,9 +144,8 @@ impl Function {
     }
 }
 
-type Native = fn(args: Vec<Value>) -> Value;
+type Native = fn(args: &[Value]) -> Value;
 
-#[derive(Debug)]
 pub struct NativeFn {
     header: Header,
     pub f: Native,
@@ -158,6 +157,12 @@ impl NativeFn {
             header: Header::new(false),
             f,
         }
+    }
+}
+
+impl std::fmt::Debug for NativeFn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "NativeFn")
     }
 }
 
