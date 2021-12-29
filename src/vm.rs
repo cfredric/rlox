@@ -704,9 +704,9 @@ impl<'opt> VM<'opt> {
                     self.runtime_error("Operands must be two numbers or two strings.");
                     return InterpretResult::RuntimeError;
                 }
-                OpCode::Subtract => binary_op!(self, |a, b| a - b, |x| Value::Double(x)),
-                OpCode::Multiply => binary_op!(self, |a, b| a * b, |x| Value::Double(x)),
-                OpCode::Divide => binary_op!(self, |a, b| a / b, |x| Value::Double(x)),
+                OpCode::Subtract => binary_op!(self, |a, b| a - b, Value::Double),
+                OpCode::Multiply => binary_op!(self, |a, b| a * b, Value::Double),
+                OpCode::Divide => binary_op!(self, |a, b| a / b, Value::Double),
                 OpCode::Nil => self.push(Value::Nil),
                 OpCode::Bool(b) => self.push(Value::Bool(*b)),
                 OpCode::Not => {
@@ -718,8 +718,8 @@ impl<'opt> VM<'opt> {
                     let a = self.pop();
                     self.push(Value::Bool(Value::equal(a, b)));
                 }
-                OpCode::Greater => binary_op!(self, |a, b| a > b, |b| Value::Bool(b)),
-                OpCode::Less => binary_op!(self, |a, b| a < b, |b| Value::Bool(b)),
+                OpCode::Greater => binary_op!(self, |a, b| a > b, Value::Bool),
+                OpCode::Less => binary_op!(self, |a, b| a < b, Value::Bool),
                 OpCode::Print => {
                     println!("{}", self.pop().print(&self.heap));
                 }
