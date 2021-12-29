@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use enum_as_inner::EnumAsInner;
 
-use crate::{chunk::Chunk, value::Value};
+use crate::{chunk::Chunk, value::Value, vm::Heap};
 
 #[derive(Debug)]
 pub struct Header {
@@ -84,23 +84,28 @@ impl Obj {
         self.header().is_marked()
     }
 
-    pub fn print(&self, heap: &[Obj]) -> String {
+    pub fn print(&self, heap: &Heap) -> String {
         match self {
             Obj::String(s) => s.string.to_string(),
             Obj::Function(fun) => format!("<fn {}>", fun.name),
             Obj::NativeFn(_) => "<native fn>".to_string(),
             Obj::Closure(fun) => format!(
                 "<closure (fn {})>",
-                heap[fun.function_index].as_function().unwrap().name
+                heap.heap[fun.function_index].as_function().unwrap().name
             ),
             Obj::UpValue(upvalue) => format!("upvalue {:?}", upvalue),
             Obj::Class(c) => c.name.to_string(),
             Obj::Instance(i) => {
-                format!("{} instance", heap[i.class_index].as_class().unwrap().name)
+                format!(
+                    "{} instance",
+                    heap.heap[i.class_index].as_class().unwrap().name
+                )
             }
-            Obj::BoundMethod(b) => {
-                heap[heap[b.closure_idx].as_closure().unwrap().function_index].print(heap)
-            }
+            Obj::BoundMethod(b) => heap.heap[heap.heap[b.closure_idx]
+                .as_closure()
+                .unwrap()
+                .function_index]
+                .print(heap),
         }
     }
 }

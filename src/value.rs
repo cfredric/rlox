@@ -1,6 +1,6 @@
 use enum_as_inner::EnumAsInner;
 
-use crate::obj::Obj;
+use crate::vm::Heap;
 
 #[derive(Debug, PartialEq, Copy, Clone, EnumAsInner)]
 pub enum Value {
@@ -32,12 +32,12 @@ impl Value {
         }
     }
 
-    pub fn print(&self, heap: &[Obj]) -> String {
+    pub fn print(&self, heap: &Heap) -> String {
         match self {
             Value::Double(d) => d.to_string(),
             Value::Nil => "nil".to_string(),
             Value::Bool(b) => b.to_string(),
-            Value::ObjIndex(i) => heap[*i].print(heap),
+            Value::ObjIndex(i) => heap.heap[*i].print(heap),
         }
     }
 }

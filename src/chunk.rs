@@ -1,6 +1,6 @@
 use crate::compiler::Upvalue;
-use crate::obj::Obj;
 use crate::value::Value;
+use crate::vm::Heap;
 
 #[derive(Clone, Debug)]
 pub enum OpCode {
@@ -88,7 +88,7 @@ impl Chunk {
         self.constants.len() - 1
     }
 
-    pub fn disassemble_chunk(&self, name: &str, heap: &[Obj]) {
+    pub fn disassemble_chunk(&self, name: &str, heap: &Heap) {
         println!("== {} ==", name);
 
         for offset in 0..self.code.len() {
@@ -96,7 +96,7 @@ impl Chunk {
         }
     }
 
-    pub fn disassemble_instruction(&self, heap: &[Obj], offset: usize) {
+    pub fn disassemble_instruction(&self, heap: &Heap, offset: usize) {
         print!("{:04} ", offset);
 
         if offset > 0 && self.lines[offset] == self.lines[offset - 1] {
@@ -175,7 +175,7 @@ impl Chunk {
         println!("{}", name);
     }
 
-    fn constant_instruction(&self, name: &str, heap: &[Obj], offset: usize) {
+    fn constant_instruction(&self, name: &str, heap: &Heap, offset: usize) {
         println!("{:16} {}", name, self.constants[offset].print(heap));
     }
 
