@@ -92,7 +92,7 @@ impl<'source> Scanner<'source> {
     }
 
     fn peek_next(&self) -> char {
-        if self.is_at_end() {
+        if self.is_at_end() || self.current + 1 == self.source.len() {
             return '\0';
         }
         self.source[self.current + 1] as char
@@ -145,12 +145,8 @@ impl<'source> Scanner<'source> {
         while !self.is_at_end() && (is_alphabetic(self.peek()) || self.peek().is_digit(10)) {
             self.advance();
         }
-        let ty = self.identifier_type();
-        if ty == TokenType::Error {
-            self.error_token("Non-UTF8 character encountered.")
-        } else {
-            self.make_token(self.identifier_type())
-        }
+
+        self.make_token(self.identifier_type())
     }
 
     fn number(&mut self) -> Token<'source> {
@@ -184,30 +180,25 @@ impl<'source> Scanner<'source> {
     }
 
     fn identifier_type(&self) -> TokenType {
-        let utf8 = std::str::from_utf8(&self.source[0..self.current]).ok();
-        if let Some(s) = utf8 {
-            use TokenType::*;
-            match s {
-                "and" => And,
-                "class" => Class,
-                "else" => Else,
-                "false" => False,
-                "for" => For,
-                "fun" => Fun,
-                "if" => If,
-                "nil" => Nil,
-                "or" => Or,
-                "print" => Print,
-                "return" => Return,
-                "super" => Super,
-                "this" => This,
-                "true" => True,
-                "var" => Var,
-                "while" => While,
-                _ => Identifier,
-            }
-        } else {
-            TokenType::Error
+        use TokenType::*;
+        match std::str::from_utf8(&self.source[0..self.current]).unwrap() {
+            "and" => And,
+            "class" => Class,
+            "else" => Else,
+            "false" => False,
+            "for" => For,
+            "fun" => Fun,
+            "if" => If,
+            "nil" => Nil,
+            "or" => Or,
+            "print" => Print,
+            "return" => Return,
+            "super" => Super,
+            "this" => This,
+            "true" => True,
+            "var" => Var,
+            "while" => While,
+            _ => Identifier,
         }
     }
 }
