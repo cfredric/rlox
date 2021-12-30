@@ -309,7 +309,7 @@ impl Rewrite for Obj {
                 uv.next.rewrite(mapping);
             }
             Obj::Instance(i) => {
-                i.class_index = mapping[&i.class_index];
+                i.class_index.rewrite(mapping);
                 i.fields.rewrite(mapping);
             }
             Obj::BoundMethod(b) => {
