@@ -291,7 +291,7 @@ impl<'opt> VM<'opt> {
                 Obj::BoundMethod(b) => {
                     let bound_ptr = b.closure_idx;
                     let stack_top = self.stack.stack.len();
-                    self.stack.stack[stack_top - arg_count - 1] = Value::ObjIndex(b.receiver);
+                    self.stack.stack[stack_top - arg_count - 1] = Value::ObjIndex(b.receiver_idx);
                     return self.call(bound_ptr, arg_count);
                 }
             };
@@ -534,8 +534,7 @@ impl<'opt> VM<'opt> {
                     i.class_index = mapping[&i.class_index];
                 }
                 Obj::BoundMethod(b) => {
-                    let rec = b.receiver;
-                    b.receiver = mapping[&rec];
+                    b.receiver_idx = mapping[&b.receiver_idx];
                     b.closure_idx = mapping[&b.closure_idx];
                 }
             }
@@ -1038,9 +1037,9 @@ impl Heap {
                 }
             }
             Obj::BoundMethod(b) => {
-                let rec = b.receiver;
+                let r = b.receiver_idx;
                 let c = b.closure_idx;
-                self.mark_object(rec);
+                self.mark_object(r);
                 self.mark_object(c);
             }
         }

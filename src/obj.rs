@@ -222,15 +222,15 @@ impl Instance {
 #[derive(Debug)]
 pub struct BoundMethod {
     header: Header,
-    pub receiver: usize,
+    pub receiver_idx: usize,
     pub closure_idx: usize,
 }
 
 impl BoundMethod {
-    pub fn new(receiver: usize, closure_idx: usize) -> Self {
+    pub fn new(receiver_idx: usize, closure_idx: usize) -> Self {
         Self {
             header: Header::new(true),
-            receiver,
+            receiver_idx,
             closure_idx,
         }
     }
