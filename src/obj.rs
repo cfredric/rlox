@@ -246,11 +246,11 @@ pub struct UpValue {
 }
 
 impl UpValue {
-    pub fn new(local: usize, upvalue: Option<usize>) -> Self {
+    pub fn new(local: usize, next: Option<usize>) -> Self {
         Self {
             header: Header::new(true),
             value: OpenOrClosed::Open(local),
-            next: upvalue,
+            next,
         }
     }
 
@@ -282,7 +282,7 @@ impl OpenOrClosed {
 impl Rewrite for OpenOrClosed {
     fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
         if let OpenOrClosed::Closed(_, mut v) = self {
-            v.rewrite(&mapping);
+            v.rewrite(mapping);
         }
     }
 }

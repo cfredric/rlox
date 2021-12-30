@@ -131,49 +131,57 @@ impl<'opt> VM<'opt> {
     }
 
     fn allocate_string(&mut self, s: String) -> usize {
-        let idx = self.allocate_object(Obj::String(LoxString::new(&s)), None);
+        let idx = self.allocate_object::<usize>(Obj::String(LoxString::new(&s)), &mut []);
         self.strings
             .insert(self.heap.as_string(idx).string.to_string(), idx);
         idx
     }
 
     pub fn new_function(&mut self, f: Function) -> usize {
-        self.allocate_object(Obj::Function(f), None)
+        self.allocate_object::<usize>(Obj::Function(f), &mut [])
     }
 
     pub fn new_native(&mut self, f: NativeFn) -> usize {
-        self.allocate_object(Obj::NativeFn(f), None)
+        self.allocate_object::<usize>(Obj::NativeFn(f), &mut [])
     }
 
     pub fn new_closure(&mut self, func_index: usize, upvalues: Vec<usize>) -> usize {
-        self.allocate_object(Obj::Closure(Closure::new(func_index, upvalues)), None)
+        self.allocate_object::<usize>(Obj::Closure(Closure::new(func_index, upvalues)), &mut [])
     }
 
     pub fn new_class(&mut self, name: &str) -> usize {
-        self.allocate_object(Obj::Class(Class::new(name)), None)
+        self.allocate_object::<usize>(Obj::Class(Class::new(name)), &mut [])
     }
 
     pub fn new_instance(&mut self, class_index: usize) -> (usize, usize) {
         let mut class_index = class_index;
         let instance = self.allocate_object(
             Obj::Instance(Instance::new(class_index)),
-            Some(&mut class_index),
+            &mut [&mut class_index],
         );
         (instance, class_index)
     }
 
     pub fn new_bound_method(&mut self, receiver: usize, closure_idx: usize) -> usize {
-        self.allocate_object(
+        self.allocate_object::<usize>(
             Obj::BoundMethod(BoundMethod::new(receiver, closure_idx)),
-            None,
+            &mut [],
         )
     }
 
-    pub fn new_upvalue(&mut self, upvalue: UpValue) -> usize {
-        self.allocate_object(Obj::UpValue(upvalue), None)
+    pub fn new_upvalue(&mut self, upvalue: UpValue, prev_to_rewrite: &mut Option<usize>) -> usize {
+        let mut orig = upvalue.next;
+        let heap_idx =
+            self.allocate_object(Obj::UpValue(upvalue), &mut [prev_to_rewrite, &mut orig]);
+        self.heap.as_up_value_mut(heap_idx).next = orig;
+        heap_idx
     }
 
-    pub fn allocate_object(&mut self, obj: Obj, idx_to_translate: Option<&mut usize>) -> usize {
+    pub fn allocate_object<R: Rewrite>(
+        &mut self,
+        obj: Obj,
+        idx_to_translate: &mut [&mut R],
+    ) -> usize {
         if self.opt.log_garbage_collection {
             eprintln!("allocate for {}", obj.print(&self.heap));
         }
@@ -181,9 +189,7 @@ impl<'opt> VM<'opt> {
         self.bytes_allocated += std::mem::size_of::<Obj>();
         if self.bytes_allocated > self.next_gc || self.opt.stress_garbage_collector {
             let mapping = self.collect_garbage();
-            if let Some(ptr) = idx_to_translate {
-                *ptr = mapping[ptr];
-            }
+            idx_to_translate.rewrite(&mapping);
         }
         self.heap.heap.push(obj);
         self.heap.heap.len() - 1
@@ -362,17 +368,17 @@ impl<'opt> VM<'opt> {
     /// they don't have a meaningful stack index.
     fn capture_upvalue(&mut self, local: usize) -> usize {
         let mut prev_upvalue = None;
-        let mut upvalue = self.open_upvalues;
-        while let Some(uv) = upvalue {
+        let mut next = self.open_upvalues;
+        while let Some(uv) = next {
             let uv = self.heap.as_up_value(uv);
             if !uv.is_at_or_above(local) {
                 break;
             }
-            prev_upvalue = upvalue;
-            upvalue = uv.next;
+            prev_upvalue = next;
+            next = uv.next;
         }
 
-        let created_upvalue = self.new_upvalue(UpValue::new(local, upvalue));
+        let created_upvalue = self.new_upvalue(UpValue::new(local, next), &mut prev_upvalue);
 
         if let Some(prev) = prev_upvalue {
             self.heap.as_up_value_mut(prev).next = Some(created_upvalue);
@@ -540,6 +546,47 @@ impl<'opt> VM<'opt> {
         self.open_upvalues.rewrite(&mapping);
 
         (before - self.heap.heap.len(), mapping)
+    }
+
+    #[allow(dead_code)]
+    fn check_upvalues(&self) {
+        let mut it = self.open_upvalues;
+        let mut con = true;
+        let mut seen = HashSet::new();
+        while let Some(idx) = it {
+            dbg!(idx);
+            let obj = &self.heap.heap[idx];
+            match obj {
+                Obj::UpValue(UpValue {
+                    next,
+                    value: OpenOrClosed::Open(_slot),
+                    ..
+                }) => {
+                    seen.insert(idx);
+                    it = *next;
+                }
+                _ => {
+                    con = false;
+                    break;
+                }
+            }
+        }
+
+        debug_assert!(con);
+
+        let all_seen = self
+            .heap
+            .heap
+            .iter()
+            .enumerate()
+            .filter_map(|(i, o)| {
+                o.as_up_value().and_then(|a| match a.value {
+                    OpenOrClosed::Open(_) => Some(i),
+                    OpenOrClosed::Closed(_, _) => None,
+                })
+            })
+            .all(|i| seen.contains(&i));
+        debug_assert!(all_seen);
     }
 
     fn print_stack_slice(&self, label: &str, skip: usize) {
@@ -1065,10 +1112,18 @@ impl<T: Rewrite> Rewrite for Vec<T> {
     }
 }
 
+impl<T: Rewrite> Rewrite for [T] {
+    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+        for e in self {
+            e.rewrite(mapping);
+        }
+    }
+}
+
 impl<K, V: Rewrite> Rewrite for HashMap<K, V> {
     fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
         for v in self.values_mut() {
-            v.rewrite(&mapping);
+            v.rewrite(mapping);
         }
     }
 }
@@ -1084,5 +1139,11 @@ impl<T: Rewrite> Rewrite for Option<T> {
         if let Some(t) = self {
             t.rewrite(mapping);
         }
+    }
+}
+
+impl<T: Rewrite> Rewrite for &mut T {
+    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+        (*self).rewrite(mapping);
     }
 }

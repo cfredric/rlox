@@ -34,7 +34,11 @@ var breakfast = "beignets (again)";
 var beverage = "cafe au lait (again)";
 breakfast = "beignets with " + beverage;
 print breakfast;
-
+var iteration = 0;
+while (true) {
+  print "ITERATION:";
+  print iteration;
+  iteration = iteration + 1;
 {
   var i = 0;
    while (i < 3) {
@@ -78,7 +82,7 @@ areWeHavingItYet();
  }
 
  for (var i = 0; i < 10; i = i + 1) {
-     print fibonacci(i);
+     // print fibonacci(i);
  }
 
 fun sum(a, b, c) {
@@ -215,7 +219,7 @@ class Cruller < Doughnut {
 var cruller = Cruller(true);
 print "is it fresh? " + boolToString(cruller.freshness());
 cruller.finish("asdf");
-
+}
 sleep(1000);
 print clock() - start;
 print now() - start_now;
