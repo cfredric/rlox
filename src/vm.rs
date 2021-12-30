@@ -131,48 +131,59 @@ impl<'opt> VM<'opt> {
     }
 
     fn allocate_string(&mut self, s: String) -> usize {
-        let idx = self.allocate_object(Obj::String(LoxString::new(&s)));
+        let idx = self.allocate_object(Obj::String(LoxString::new(&s)), None);
         self.strings
             .insert(self.heap.as_string(idx).string.to_string(), idx);
         idx
     }
 
     pub fn new_function(&mut self, f: Function) -> usize {
-        self.allocate_object(Obj::Function(f))
+        self.allocate_object(Obj::Function(f), None)
     }
 
     pub fn new_native(&mut self, f: NativeFn) -> usize {
-        self.allocate_object(Obj::NativeFn(f))
+        self.allocate_object(Obj::NativeFn(f), None)
     }
 
     pub fn new_closure(&mut self, func_index: usize, upvalues: Vec<usize>) -> usize {
-        self.allocate_object(Obj::Closure(Closure::new(func_index, upvalues)))
+        self.allocate_object(Obj::Closure(Closure::new(func_index, upvalues)), None)
     }
 
     pub fn new_class(&mut self, name: &str) -> usize {
-        self.allocate_object(Obj::Class(Class::new(name)))
+        self.allocate_object(Obj::Class(Class::new(name)), None)
     }
 
-    pub fn new_instance(&mut self, class_index: usize) -> usize {
-        self.allocate_object(Obj::Instance(Instance::new(class_index)))
+    pub fn new_instance(&mut self, class_index: usize) -> (usize, usize) {
+        let mut class_index = class_index;
+        let instance = self.allocate_object(
+            Obj::Instance(Instance::new(class_index)),
+            Some(&mut class_index),
+        );
+        (instance, class_index)
     }
 
     pub fn new_bound_method(&mut self, receiver: usize, closure_idx: usize) -> usize {
-        self.allocate_object(Obj::BoundMethod(BoundMethod::new(receiver, closure_idx)))
+        self.allocate_object(
+            Obj::BoundMethod(BoundMethod::new(receiver, closure_idx)),
+            None,
+        )
     }
 
     pub fn new_upvalue(&mut self, upvalue: UpValue) -> usize {
-        self.allocate_object(Obj::UpValue(upvalue))
+        self.allocate_object(Obj::UpValue(upvalue), None)
     }
 
-    pub fn allocate_object(&mut self, obj: Obj) -> usize {
+    pub fn allocate_object(&mut self, obj: Obj, idx_to_translate: Option<&mut usize>) -> usize {
         if self.opt.log_garbage_collection {
             eprintln!("allocate for {}", obj.print(&self.heap));
         }
 
         self.bytes_allocated += std::mem::size_of::<Obj>();
         if self.bytes_allocated > self.next_gc || self.opt.stress_garbage_collector {
-            self.collect_garbage();
+            let mapping = self.collect_garbage();
+            if let Some(ptr) = idx_to_translate {
+                *ptr = mapping[ptr];
+            }
         }
         self.heap.heap.push(obj);
         self.heap.heap.len() - 1
@@ -272,7 +283,7 @@ impl<'opt> VM<'opt> {
                 }
                 Obj::Class(_) => {
                     let stack_len = self.stack.stack.len();
-                    let instance = self.new_instance(heap_index);
+                    let (instance, heap_index) = self.new_instance(heap_index);
                     self.stack.stack[stack_len - arg_count - 1] = Value::ObjIndex(instance);
 
                     if let Some(idx) = self
@@ -424,9 +435,9 @@ impl<'opt> VM<'opt> {
         true
     }
 
-    fn collect_garbage(&mut self) {
+    fn collect_garbage(&mut self) -> HashMap<usize, usize> {
         if self.is_compiling {
-            return;
+            return HashMap::new();
         }
         if self.opt.log_garbage_collection {
             eprintln!("-- gc begin");
@@ -435,7 +446,7 @@ impl<'opt> VM<'opt> {
 
         self.mark_roots();
         self.heap.trace_references();
-        let removed = self.sweep();
+        let (removed, mapping) = self.sweep();
 
         self.bytes_allocated -= removed * std::mem::size_of::<Obj>();
         self.next_gc = self.bytes_allocated * GC_HEAP_GROWTH_FACTOR;
@@ -443,13 +454,16 @@ impl<'opt> VM<'opt> {
         if self.opt.log_garbage_collection {
             eprintln!("-- gc end");
             eprintln!(
-                "   collected {} bytes ({} to {}), next at {}",
+                "   collected {} bytes ({} objects) ({} to {}), next at {}",
                 before - self.bytes_allocated,
+                (before - self.bytes_allocated) / std::mem::size_of::<Obj>(),
                 before,
                 self.bytes_allocated,
                 self.next_gc
             );
         }
+
+        mapping
     }
 
     fn mark_roots(&mut self) {
@@ -486,7 +500,7 @@ impl<'opt> VM<'opt> {
     ///
     /// Differs from the book, since clox doesn't do compaction (since it uses
     /// C's heap, rather than manually managing a separate heap).
-    fn sweep(&mut self) -> usize {
+    fn sweep(&mut self) -> (usize, HashMap<usize, usize>) {
         // Build the mapping from pre-sweep pointers to post-sweep pointers.
         let mapping = {
             let mut mapping = HashMap::new();
@@ -525,7 +539,7 @@ impl<'opt> VM<'opt> {
         self.strings.rewrite(&mapping);
         self.open_upvalues.rewrite(&mapping);
 
-        before - self.heap.heap.len()
+        (before - self.heap.heap.len(), mapping)
     }
 
     fn print_stack_slice(&self, label: &str, skip: usize) {
