@@ -1046,13 +1046,13 @@ impl Heap {
     fn as_string(&self, idx: usize) -> &LoxString {
         self.heap[idx].as_string().unwrap()
     }
-    fn as_function(&self, idx: usize) -> &Function {
+    pub fn as_function(&self, idx: usize) -> &Function {
         self.heap[idx].as_function().unwrap()
     }
-    fn as_closure(&self, idx: usize) -> &Closure {
+    pub fn as_closure(&self, idx: usize) -> &Closure {
         self.heap[idx].as_closure().unwrap()
     }
-    fn as_class(&self, idx: usize) -> &Class {
+    pub fn as_class(&self, idx: usize) -> &Class {
         self.heap[idx].as_class().unwrap()
     }
     fn as_class_mut(&mut self, idx: usize) -> &mut Class {

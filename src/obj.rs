@@ -91,21 +91,16 @@ impl Obj {
             Obj::NativeFn(_) => "<native fn>".to_string(),
             Obj::Closure(fun) => format!(
                 "<closure (fn {})>",
-                heap.heap[fun.function_index].as_function().unwrap().name
+                heap.as_function(fun.function_index).name
             ),
             Obj::UpValue(upvalue) => format!("upvalue {:?}", upvalue),
             Obj::Class(c) => c.name.to_string(),
             Obj::Instance(i) => {
-                format!(
-                    "{} instance",
-                    heap.heap[i.class_index].as_class().unwrap().name
-                )
+                format!("{} instance", heap.as_class(i.class_index).name)
             }
-            Obj::BoundMethod(b) => heap.heap[heap.heap[b.closure_idx]
-                .as_closure()
-                .unwrap()
-                .function_index]
-                .print(heap),
+            Obj::BoundMethod(b) => {
+                heap.heap[heap.as_closure(b.closure_idx).function_index].print(heap)
+            }
         }
     }
 }
