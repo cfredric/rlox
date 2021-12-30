@@ -131,33 +131,33 @@ impl<'opt> VM<'opt> {
     }
 
     fn allocate_string(&mut self, s: String) -> usize {
-        let idx = self.allocate_object::<usize>(Obj::String(LoxString::new(&s)), &mut []);
+        let idx = self.allocate_object::<usize>(Obj::String(LoxString::new(&s)), None);
         self.strings
             .insert(self.heap.as_string(idx).string.to_string(), idx);
         idx
     }
 
     pub fn new_function(&mut self, f: Function) -> usize {
-        self.allocate_object::<usize>(Obj::Function(f), &mut [])
+        self.allocate_object::<usize>(Obj::Function(f), None)
     }
 
     pub fn new_native(&mut self, f: NativeFn) -> usize {
-        self.allocate_object::<usize>(Obj::NativeFn(f), &mut [])
+        self.allocate_object::<usize>(Obj::NativeFn(f), None)
     }
 
     pub fn new_closure(&mut self, func_index: usize, upvalues: Vec<usize>) -> usize {
-        self.allocate_object::<usize>(Obj::Closure(Closure::new(func_index, upvalues)), &mut [])
+        self.allocate_object::<usize>(Obj::Closure(Closure::new(func_index, upvalues)), None)
     }
 
     pub fn new_class(&mut self, name: &str) -> usize {
-        self.allocate_object::<usize>(Obj::Class(Class::new(name)), &mut [])
+        self.allocate_object::<usize>(Obj::Class(Class::new(name)), None)
     }
 
     pub fn new_instance(&mut self, class_index: usize) -> (usize, usize) {
         let mut class_index = class_index;
         let instance = self.allocate_object(
             Obj::Instance(Instance::new(class_index)),
-            &mut [&mut class_index],
+            Some(&mut class_index),
         );
         (instance, class_index)
     }
@@ -165,18 +165,18 @@ impl<'opt> VM<'opt> {
     pub fn new_bound_method(&mut self, receiver: usize, closure_idx: usize) -> usize {
         self.allocate_object::<usize>(
             Obj::BoundMethod(BoundMethod::new(receiver, closure_idx)),
-            &mut [],
+            None,
         )
     }
 
     pub fn new_upvalue(&mut self, upvalue: UpValue, prev_to_rewrite: &mut Option<usize>) -> usize {
-        self.allocate_object(Obj::UpValue(upvalue), &mut [prev_to_rewrite])
+        self.allocate_object(Obj::UpValue(upvalue), prev_to_rewrite.as_mut())
     }
 
     pub fn allocate_object<R: Rewrite>(
         &mut self,
         mut obj: Obj,
-        idx_to_translate: &mut [&mut R],
+        mut pending_rewrite: Option<R>,
     ) -> usize {
         if self.opt.log_garbage_collection {
             eprintln!("allocate for {}", obj.print(&self.heap));
@@ -184,9 +184,7 @@ impl<'opt> VM<'opt> {
 
         self.bytes_allocated += std::mem::size_of::<Obj>();
         if self.bytes_allocated > self.next_gc || self.opt.stress_garbage_collector {
-            let mapping = self.collect_garbage();
-            obj.rewrite(&mapping);
-            idx_to_translate.rewrite(&mapping);
+            self.collect_garbage(Some((&mut obj, &mut pending_rewrite)));
         }
         self.heap.heap.push(obj);
         self.heap.heap.len() - 1
@@ -438,9 +436,9 @@ impl<'opt> VM<'opt> {
         true
     }
 
-    fn collect_garbage(&mut self) -> HashMap<usize, usize> {
+    fn collect_garbage<R: Rewrite>(&mut self, pending_rewrites: Option<(&mut Obj, &mut R)>) {
         if self.is_compiling {
-            return HashMap::new();
+            return;
         }
         if self.opt.log_garbage_collection {
             eprintln!("-- gc begin");
@@ -449,7 +447,7 @@ impl<'opt> VM<'opt> {
 
         self.mark_roots();
         self.heap.trace_references();
-        let (removed, mapping) = self.sweep();
+        let removed = self.sweep_and_compact(pending_rewrites);
 
         self.bytes_allocated -= removed * std::mem::size_of::<Obj>();
         self.next_gc = self.bytes_allocated * GC_HEAP_GROWTH_FACTOR;
@@ -465,8 +463,6 @@ impl<'opt> VM<'opt> {
                 self.next_gc
             );
         }
-
-        mapping
     }
 
     fn mark_roots(&mut self) {
@@ -503,7 +499,10 @@ impl<'opt> VM<'opt> {
     ///
     /// Differs from the book, since clox doesn't do compaction (since it uses
     /// C's heap, rather than manually managing a separate heap).
-    fn sweep(&mut self) -> (usize, HashMap<usize, usize>) {
+    fn sweep_and_compact<R: Rewrite>(
+        &mut self,
+        pending_rewrites: Option<(&mut Obj, &mut R)>,
+    ) -> usize {
         // Build the mapping from pre-sweep pointers to post-sweep pointers.
         let mapping = {
             let mut mapping = HashMap::new();
@@ -542,7 +541,12 @@ impl<'opt> VM<'opt> {
         self.strings.rewrite(&mapping);
         self.open_upvalues.rewrite(&mapping);
 
-        (before - self.heap.heap.len(), mapping)
+        if let Some((obj, pending_rewrite)) = pending_rewrites {
+            obj.rewrite(&mapping);
+            pending_rewrite.rewrite(&mapping);
+        }
+
+        before - self.heap.heap.len()
     }
 
     #[allow(dead_code)]
@@ -616,7 +620,7 @@ impl<'opt> VM<'opt> {
             }
 
             if self.opt.stress_garbage_collector {
-                self.collect_garbage();
+                self.collect_garbage::<usize>(None);
             }
 
             use crate::value::*;
