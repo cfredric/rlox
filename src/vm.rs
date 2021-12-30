@@ -524,6 +524,9 @@ impl<'opt> VM<'opt> {
                     }
                 }
                 Obj::UpValue(uv) => {
+                    if let OpenOrClosed::Closed(_, mut v) = uv.value {
+                        v.rewrite_pointer(&mapping);
+                    }
                     if let Some(ptr) = uv.next {
                         uv.next = Some(mapping[&ptr]);
                     }
