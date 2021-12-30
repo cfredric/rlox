@@ -376,11 +376,12 @@ impl<'opt> VM<'opt> {
     /// Closes upvalues that point to or above the given stack slot. Upvalues
     /// that are already closed are ignored.
     fn close_upvalues(&mut self, stack_slot: usize) {
-        while matches!(
-            self.open_upvalues,
-            Some(ptr) if self.heap.as_up_value(ptr).is_at_or_above(stack_slot)
-        ) {
-            let upvalue = self.heap.as_up_value_mut(self.open_upvalues.unwrap());
+        while let Some(ptr) = self.open_upvalues {
+            let upvalue = self.heap.as_up_value_mut(ptr);
+            if !upvalue.is_at_or_above(stack_slot) {
+                break;
+            }
+
             match upvalue.value {
                 OpenOrClosed::Open(loc) => {
                     upvalue.value = OpenOrClosed::Closed(loc, self.stack.stack[loc]);
