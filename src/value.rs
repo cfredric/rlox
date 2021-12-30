@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use enum_as_inner::EnumAsInner;
 
 use crate::vm::Heap;
@@ -38,6 +40,12 @@ impl Value {
             Value::Nil => "nil".to_string(),
             Value::Bool(b) => b.to_string(),
             Value::ObjIndex(i) => heap.heap[*i].print(heap),
+        }
+    }
+
+    pub fn rewrite_pointer(&mut self, mapping: &HashMap<usize, usize>) {
+        if let Value::ObjIndex(i) = self {
+            *i = mapping[i];
         }
     }
 }

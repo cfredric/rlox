@@ -530,6 +530,9 @@ impl<'opt> VM<'opt> {
                 }
                 Obj::Instance(i) => {
                     i.class_index = mapping[&i.class_index];
+                    for f in i.fields.values_mut() {
+                        f.rewrite_pointer(&mapping);
+                    }
                 }
                 Obj::BoundMethod(b) => {
                     b.receiver_idx = mapping[&b.receiver_idx];
