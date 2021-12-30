@@ -2,7 +2,11 @@ use std::collections::HashMap;
 
 use enum_as_inner::EnumAsInner;
 
-use crate::{chunk::Chunk, value::Value, vm::Heap};
+use crate::{
+    chunk::Chunk,
+    value::Value,
+    vm::{Heap, Rewrite},
+};
 
 #[derive(Debug)]
 pub struct Header {
@@ -272,5 +276,46 @@ impl OpenOrClosed {
             OpenOrClosed::Closed(loc, _) => *loc,
         };
         loc >= stack_slot
+    }
+}
+
+impl Rewrite for OpenOrClosed {
+    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+        if let OpenOrClosed::Closed(_, mut v) = self {
+            v.rewrite(&mapping);
+        }
+    }
+}
+
+impl Rewrite for Obj {
+    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+        self.mark(false);
+        match self {
+            Obj::String(_) | Obj::NativeFn(_) => {
+                // Nothing to do here.
+            }
+            Obj::Class(c) => {
+                c.methods.rewrite(mapping);
+            }
+            Obj::Function(f) => {
+                f.chunk.rewrite(mapping);
+            }
+            Obj::Closure(c) => {
+                c.function_index = mapping[&c.function_index];
+                c.upvalues.rewrite(mapping);
+            }
+            Obj::UpValue(uv) => {
+                uv.value.rewrite(mapping);
+                uv.next.rewrite(mapping);
+            }
+            Obj::Instance(i) => {
+                i.class_index = mapping[&i.class_index];
+                i.fields.rewrite(mapping);
+            }
+            Obj::BoundMethod(b) => {
+                b.receiver_idx.rewrite(mapping);
+                b.closure_idx.rewrite(mapping);
+            }
+        }
     }
 }

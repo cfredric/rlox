@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use enum_as_inner::EnumAsInner;
 
-use crate::vm::Heap;
+use crate::vm::{Heap, Rewrite};
 
 #[derive(Debug, PartialEq, Copy, Clone, EnumAsInner)]
 pub enum Value {
@@ -42,10 +42,12 @@ impl Value {
             Value::ObjIndex(i) => heap.heap[*i].print(heap),
         }
     }
+}
 
-    pub fn rewrite_pointer(&mut self, mapping: &HashMap<usize, usize>) {
+impl Rewrite for Value {
+    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
         if let Value::ObjIndex(i) = self {
-            *i = mapping[i];
+            i.rewrite(mapping);
         }
     }
 }

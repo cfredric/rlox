@@ -1,6 +1,6 @@
 use crate::compiler::Upvalue;
 use crate::value::Value;
-use crate::vm::Heap;
+use crate::vm::{Heap, Rewrite};
 
 #[derive(Clone, Debug)]
 pub enum OpCode {
@@ -190,5 +190,13 @@ impl Chunk {
 
     fn invoke_instruction(&self, name: &str, constant: usize, arg_count: usize) {
         println!("{:16} ({} args) {}", name, arg_count, constant)
+    }
+}
+
+impl Rewrite for Chunk {
+    fn rewrite(&mut self, mapping: &std::collections::HashMap<usize, usize>) {
+        for v in self.constants.iter_mut() {
+            v.rewrite(mapping);
+        }
     }
 }

@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::chunk::{Chunk, OpCode};
+use crate::chunk::OpCode;
 use crate::compiler::Compiler;
 use crate::obj::{
     BoundMethod, Class, Closure, Function, Instance, LoxString, NativeFn, Obj, OpenOrClosed,
@@ -518,51 +518,14 @@ impl<'opt> VM<'opt> {
         self.strings.retain(|s, _| reachable_strings.contains(s));
 
         // Now apply all the pointer rewriting.
-
-        // The heap:
-        self.heap.rewrite_pointers(&mapping);
-
-        // The stack:
-        for v in self.stack.stack.iter_mut() {
-            v.rewrite_pointer(&mapping);
-        }
-
-        // The upvalue ptr:
-        if let Some(uv) = &mut self.open_upvalues {
-            *uv = mapping[uv];
-        }
-
-        // Globals:
-        for v in self.globals.values_mut() {
-            v.rewrite_pointer(&mapping);
-        }
-
-        // Strings:
-        for v in self.strings.values_mut() {
-            *v = mapping[v];
-        }
-
-        // Callframes:
-        for frame in self.frames.iter_mut() {
-            frame.heap_index = mapping[&frame.heap_index];
-        }
+        self.heap.rewrite(&mapping);
+        self.stack.rewrite(&mapping);
+        self.globals.rewrite(&mapping);
+        self.frames.rewrite(&mapping);
+        self.strings.rewrite(&mapping);
+        self.open_upvalues.rewrite(&mapping);
 
         before - self.heap.heap.len()
-    }
-
-    fn rewrite_chunk(chunk: &mut Chunk, mapping: &HashMap<usize, usize>) {
-        for v in chunk.constants.iter_mut() {
-            Self::rewrite_value(v, mapping);
-        }
-    }
-
-    fn rewrite_value(value: &mut Value, mapping: &HashMap<usize, usize>) {
-        match value {
-            Value::Nil | Value::Bool(_) | Value::Double(_) => {}
-            Value::ObjIndex(ptr) => {
-                *ptr = mapping[ptr];
-            }
-        }
     }
 
     fn print_stack_slice(&self, label: &str, skip: usize) {
@@ -905,6 +868,12 @@ impl CallFrame {
     }
 }
 
+impl Rewrite for CallFrame {
+    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+        self.heap_index.rewrite(mapping);
+    }
+}
+
 struct Stack {
     pub stack: Vec<Value>,
 }
@@ -933,6 +902,12 @@ impl Stack {
 
     fn pop_n(&mut self, n: usize) {
         self.stack.truncate(self.stack.len() - n);
+    }
+}
+
+impl Rewrite for Stack {
+    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+        self.stack.rewrite(mapping);
     }
 }
 
@@ -1035,44 +1010,6 @@ impl Heap {
         }
     }
 
-    fn rewrite_pointers(&mut self, mapping: &HashMap<usize, usize>) {
-        for obj in self.heap.iter_mut() {
-            obj.mark(false);
-            match obj {
-                Obj::String(_) | Obj::NativeFn(_) | Obj::Class(_) => {
-                    // Nothing to do here.
-                }
-                Obj::Function(f) => {
-                    VM::rewrite_chunk(&mut f.chunk, &mapping);
-                }
-                Obj::Closure(c) => {
-                    c.function_index = mapping[&c.function_index];
-                    for uv in c.upvalues.iter_mut() {
-                        *uv = mapping[uv];
-                    }
-                }
-                Obj::UpValue(uv) => {
-                    if let OpenOrClosed::Closed(_, mut v) = uv.value {
-                        v.rewrite_pointer(&mapping);
-                    }
-                    if let Some(ptr) = uv.next {
-                        uv.next = Some(mapping[&ptr]);
-                    }
-                }
-                Obj::Instance(i) => {
-                    i.class_index = mapping[&i.class_index];
-                    for f in i.fields.values_mut() {
-                        f.rewrite_pointer(&mapping);
-                    }
-                }
-                Obj::BoundMethod(b) => {
-                    b.receiver_idx = mapping[&b.receiver_idx];
-                    b.closure_idx = mapping[&b.closure_idx];
-                }
-            }
-        }
-    }
-
     fn as_string(&self, idx: usize) -> &LoxString {
         self.heap[idx].as_string().unwrap()
     }
@@ -1093,5 +1030,45 @@ impl Heap {
     }
     fn as_up_value_mut(&mut self, idx: usize) -> &mut UpValue {
         self.heap[idx].as_up_value_mut().unwrap()
+    }
+}
+
+impl Rewrite for Heap {
+    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+        self.heap.rewrite(mapping);
+    }
+}
+
+pub trait Rewrite {
+    fn rewrite(&mut self, mapping: &HashMap<usize, usize>);
+}
+
+impl<T: Rewrite> Rewrite for Vec<T> {
+    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+        for e in self {
+            e.rewrite(mapping);
+        }
+    }
+}
+
+impl<K, V: Rewrite> Rewrite for HashMap<K, V> {
+    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+        for v in self.values_mut() {
+            v.rewrite(&mapping);
+        }
+    }
+}
+
+impl Rewrite for usize {
+    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+        *self = mapping[self];
+    }
+}
+
+impl<T: Rewrite> Rewrite for Option<T> {
+    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+        if let Some(t) = self {
+            t.rewrite(mapping);
+        }
     }
 }
