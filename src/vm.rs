@@ -19,6 +19,7 @@ pub struct VM<'opt> {
 
     pub heap: Heap,
     stack: Stack,
+    /// Values are pointers into the heap, to LoxStrings.
     pub strings: HashMap<String, usize>,
     /// open_upvalues is a pointer into the heap, to the head of the linked list
     /// of upvalue objects.
@@ -506,51 +507,6 @@ impl<'opt> VM<'opt> {
         let before = self.heap.heap.len();
         self.heap.heap.retain(|obj| obj.is_marked());
 
-        // Now apply pointer rewriting.
-        // Rewrite heap-internal pointers:
-        for obj in self.heap.heap.iter_mut() {
-            obj.mark(false);
-            match obj {
-                Obj::String(_) | Obj::NativeFn(_) | Obj::Class(_) => {
-                    // Nothing to do here.
-                }
-                Obj::Function(f) => {
-                    Self::rewrite_chunk(&mut f.chunk, &mapping);
-                }
-                Obj::Closure(c) => {
-                    c.function_index = mapping[&c.function_index];
-                    for uv in c.upvalues.iter_mut() {
-                        *uv = mapping[uv];
-                    }
-                }
-                Obj::UpValue(uv) => {
-                    if let OpenOrClosed::Closed(_, mut v) = uv.value {
-                        v.rewrite_pointer(&mapping);
-                    }
-                    if let Some(ptr) = uv.next {
-                        uv.next = Some(mapping[&ptr]);
-                    }
-                }
-                Obj::Instance(i) => {
-                    i.class_index = mapping[&i.class_index];
-                    for f in i.fields.values_mut() {
-                        f.rewrite_pointer(&mapping);
-                    }
-                }
-                Obj::BoundMethod(b) => {
-                    b.receiver_idx = mapping[&b.receiver_idx];
-                    b.closure_idx = mapping[&b.closure_idx];
-                }
-            }
-        }
-
-        // Rewrite pointers from the stack into the heap:
-        for v in self.stack.stack.iter_mut() {
-            if let Value::ObjIndex(i) = v {
-                *i = mapping[i];
-            }
-        }
-
         // Prune out unused strings from the strings table:
         let reachable_strings = self
             .heap
@@ -560,6 +516,36 @@ impl<'opt> VM<'opt> {
             .map(|ls| &ls.string)
             .collect::<HashSet<_>>();
         self.strings.retain(|s, _| reachable_strings.contains(s));
+
+        // Now apply all the pointer rewriting.
+
+        // The heap:
+        self.heap.rewrite_pointers(&mapping);
+
+        // The stack:
+        for v in self.stack.stack.iter_mut() {
+            v.rewrite_pointer(&mapping);
+        }
+
+        // The upvalue ptr:
+        if let Some(uv) = &mut self.open_upvalues {
+            *uv = mapping[uv];
+        }
+
+        // Globals:
+        for v in self.globals.values_mut() {
+            v.rewrite_pointer(&mapping);
+        }
+
+        // Strings:
+        for v in self.strings.values_mut() {
+            *v = mapping[v];
+        }
+
+        // Callframes:
+        for frame in self.frames.iter_mut() {
+            frame.heap_index = mapping[&frame.heap_index];
+        }
 
         before - self.heap.heap.len()
     }
@@ -1045,6 +1031,44 @@ impl Heap {
                 let c = b.closure_idx;
                 self.mark_object(r);
                 self.mark_object(c);
+            }
+        }
+    }
+
+    fn rewrite_pointers(&mut self, mapping: &HashMap<usize, usize>) {
+        for obj in self.heap.iter_mut() {
+            obj.mark(false);
+            match obj {
+                Obj::String(_) | Obj::NativeFn(_) | Obj::Class(_) => {
+                    // Nothing to do here.
+                }
+                Obj::Function(f) => {
+                    VM::rewrite_chunk(&mut f.chunk, &mapping);
+                }
+                Obj::Closure(c) => {
+                    c.function_index = mapping[&c.function_index];
+                    for uv in c.upvalues.iter_mut() {
+                        *uv = mapping[uv];
+                    }
+                }
+                Obj::UpValue(uv) => {
+                    if let OpenOrClosed::Closed(_, mut v) = uv.value {
+                        v.rewrite_pointer(&mapping);
+                    }
+                    if let Some(ptr) = uv.next {
+                        uv.next = Some(mapping[&ptr]);
+                    }
+                }
+                Obj::Instance(i) => {
+                    i.class_index = mapping[&i.class_index];
+                    for f in i.fields.values_mut() {
+                        f.rewrite_pointer(&mapping);
+                    }
+                }
+                Obj::BoundMethod(b) => {
+                    b.receiver_idx = mapping[&b.receiver_idx];
+                    b.closure_idx = mapping[&b.closure_idx];
+                }
             }
         }
     }
