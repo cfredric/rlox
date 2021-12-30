@@ -170,16 +170,12 @@ impl<'opt> VM<'opt> {
     }
 
     pub fn new_upvalue(&mut self, upvalue: UpValue, prev_to_rewrite: &mut Option<usize>) -> usize {
-        let mut orig = upvalue.next;
-        let heap_idx =
-            self.allocate_object(Obj::UpValue(upvalue), &mut [prev_to_rewrite, &mut orig]);
-        self.heap.as_up_value_mut(heap_idx).next = orig;
-        heap_idx
+        self.allocate_object(Obj::UpValue(upvalue), &mut [prev_to_rewrite])
     }
 
     pub fn allocate_object<R: Rewrite>(
         &mut self,
-        obj: Obj,
+        mut obj: Obj,
         idx_to_translate: &mut [&mut R],
     ) -> usize {
         if self.opt.log_garbage_collection {
@@ -189,6 +185,7 @@ impl<'opt> VM<'opt> {
         self.bytes_allocated += std::mem::size_of::<Obj>();
         if self.bytes_allocated > self.next_gc || self.opt.stress_garbage_collector {
             let mapping = self.collect_garbage();
+            obj.rewrite(&mapping);
             idx_to_translate.rewrite(&mapping);
         }
         self.heap.heap.push(obj);
