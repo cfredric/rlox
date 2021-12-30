@@ -1,40 +1,9 @@
-use std::io::{self, BufRead, Write};
-use std::path::PathBuf;
+use std::io;
+
 use structopt::StructOpt;
 
-mod chunk;
-mod common;
-mod compiler;
-mod obj;
-mod value;
-mod vm;
-
-#[derive(StructOpt, Debug)]
-pub struct Opt {
-    #[structopt(name = "PATH", parse(from_os_str))]
-    path: Option<PathBuf>,
-
-    #[structopt(short = "e", long = "trace_execution")]
-    trace_execution: bool,
-
-    #[structopt(short = "p", long = "print_code")]
-    print_code: bool,
-
-    #[structopt(short = "c", long = "compile_only")]
-    compile_only: bool,
-
-    #[structopt(short = "s", long = "slow_execution")]
-    slow_execution: bool,
-
-    #[structopt(short = "g", long = "stress_garbage_collector")]
-    stress_garbage_collector: bool,
-
-    #[structopt(short = "l", long = "log_garbage_collection")]
-    log_garbage_collection: bool,
-}
-
 fn main() -> io::Result<()> {
-    let mut opt = Opt::from_args();
+    let mut opt = rlox::Opt::from_args();
     if opt.slow_execution {
         opt.trace_execution = true;
     }
@@ -45,41 +14,11 @@ fn main() -> io::Result<()> {
     match &opt.path {
         Some(path) => {
             let source = std::fs::read_to_string(path)?;
-            run_file(&opt, source);
-            Ok(())
+            match rlox::run_file(&opt, source) {
+                Ok(_) => Ok(()),
+                Err(err_code) => std::process::exit(err_code),
+            }
         }
-        None => repl(&opt),
-    }
-}
-
-pub fn run_file(opt: &Opt, source: String) {
-    let result = vm::VM::new(opt).interpret(&source);
-
-    match result {
-        vm::InterpretResult::CompileError => std::process::exit(65),
-        vm::InterpretResult::RuntimeError => std::process::exit(70),
-        vm::InterpretResult::Ok => {}
-    }
-}
-
-fn repl(opt: &Opt) -> io::Result<()> {
-    let mut buffer = String::new();
-    let stdin = std::io::stdin();
-    let mut handle = stdin.lock();
-
-    let mut vm = vm::VM::new(opt);
-
-    loop {
-        print!("> ");
-        std::io::stdout().flush()?;
-        handle.read_line(&mut buffer)?;
-
-        if buffer.is_empty() {
-            return Ok(());
-        }
-        if buffer != "\n" {
-            vm.interpret(&buffer);
-        }
-        buffer.clear();
+        None => rlox::repl(&opt),
     }
 }
