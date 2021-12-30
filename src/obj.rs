@@ -189,7 +189,8 @@ impl Closure {
 pub struct Class {
     header: Header,
     name: String,
-    pub methods: HashMap<String, Value>,
+    /// Each method value is an index into the heap, pointing to a Closure.
+    pub methods: HashMap<String, usize>,
 }
 
 impl Class {

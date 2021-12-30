@@ -274,7 +274,7 @@ impl<'opt> VM<'opt> {
                     let instance = self.new_instance(heap_index);
                     self.stack.stack[stack_len - arg_count - 1] = Value::ObjIndex(instance);
 
-                    if let Some(Value::ObjIndex(idx)) = self
+                    if let Some(idx) = self
                         .heap
                         .as_class(heap_index)
                         .methods
@@ -302,12 +302,11 @@ impl<'opt> VM<'opt> {
 
     fn invoke_from_class(&mut self, class_index: usize, name: &str, arg_count: usize) -> bool {
         let method = match self.heap.as_class(class_index).methods.get(name) {
-            Some(Value::ObjIndex(idx)) => *idx,
+            Some(idx) => *idx,
             None => {
                 self.runtime_error(&format!("Undefined property {}", name));
                 return false;
             }
-            _ => unreachable!(),
         };
         self.call(method, arg_count)
     }
@@ -332,12 +331,11 @@ impl<'opt> VM<'opt> {
 
     fn bind_method(&mut self, class_idx: usize, name: &str) -> bool {
         let method = match self.heap.as_class(class_idx).methods.get(name) {
-            Some(Value::ObjIndex(idx)) => *idx,
+            Some(idx) => *idx,
             None => {
                 self.runtime_error(&format!("Undefined property {}", name));
                 return false;
             }
-            _ => unreachable!(),
         };
 
         let bound = self.new_bound_method(*self.stack.peek(0).as_obj_index().unwrap(), method);
@@ -393,12 +391,12 @@ impl<'opt> VM<'opt> {
     }
 
     fn define_method(&mut self, name_idx: usize) {
-        let method = self.stack.peek(0);
+        let method_idx = *self.stack.peek(0).as_obj_index().unwrap();
         let class_index = *self.stack.peek(1).as_obj_index().unwrap();
         let name = self.heap.as_string(name_idx).string.clone();
         let class = self.heap.as_class_mut(class_index);
 
-        class.methods.insert(name, method);
+        class.methods.insert(name, method_idx);
         self.stack.pop();
     }
 
@@ -1025,7 +1023,7 @@ impl Heap {
             Obj::Class(c) => {
                 let methods = c.methods.values().copied().collect::<Vec<_>>();
                 for m in methods {
-                    self.mark_value(m);
+                    self.mark_object(m);
                 }
             }
             Obj::Instance(i) => {
