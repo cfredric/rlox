@@ -753,31 +753,30 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         None
     }
 
-    fn add_upvalue(&mut self, index: usize, is_local: bool) -> usize {
-        if let Some(index) =
-            self.current()
-                .upvalues
-                .iter()
-                .enumerate()
-                .find_map(|(idx, upvalue)| {
-                    if upvalue.index == index && upvalue.is_local == is_local {
-                        Some(idx)
-                    } else {
-                        None
-                    }
-                })
+    fn add_upvalue(&mut self, func_state_index: usize, index: usize, is_local: bool) -> usize {
+        if let Some(index) = self.functions[func_state_index]
+            .upvalues
+            .iter()
+            .enumerate()
+            .find_map(|(idx, upvalue)| {
+                if upvalue.index == index && upvalue.is_local == is_local {
+                    Some(idx)
+                } else {
+                    None
+                }
+            })
         {
             return index;
         }
 
-        if self.current().upvalues.len() >= 256 {
+        if self.functions[func_state_index].upvalues.len() >= 256 {
             self.error("Too many closure variables in function.");
             return 0;
         }
-        self.current_mut()
+        self.functions[func_state_index]
             .upvalues
             .push(Upvalue { index, is_local });
-        self.current().upvalues.len() - 1
+        self.functions[func_state_index].upvalues.len() - 1
     }
 
     fn resolve_upvalue(&mut self, state_index: usize, name: &str) -> Option<usize> {
@@ -788,11 +787,11 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         let enclosing = state_index - 1;
         if let Some(local) = self.resolve_local(enclosing, name) {
             self.functions[enclosing].locals[local].is_captured = true;
-            return Some(self.add_upvalue(local, true));
+            return Some(self.add_upvalue(state_index, local, true));
         }
 
-        if let Some(upvalue) = self.resolve_upvalue(state_index - 1, name) {
-            return Some(self.add_upvalue(upvalue, false));
+        if let Some(upvalue) = self.resolve_upvalue(enclosing, name) {
+            return Some(self.add_upvalue(state_index, upvalue, false));
         }
 
         None
