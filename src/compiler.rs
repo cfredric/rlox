@@ -836,6 +836,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         if self.panic_mode {
             return;
         }
+        self.panic_mode = true;
         let location = match token.ty {
             scanner::TokenType::Eof => " at end".to_string(),
             scanner::TokenType::Error => "".to_string(),
