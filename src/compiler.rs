@@ -171,6 +171,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
                 .disassemble_chunk(&self.current().function.name, &self.vm.heap);
         }
         if self.had_error {
+            self.functions.pop();
             return None;
         }
         self.functions.pop().map(|f| (f.function, f.upvalues))
@@ -229,7 +230,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
                 self.error("A class can't inherit from itself.");
             }
 
-            self.begin_scope();
+            self.begin_scope(); // Matched with end below.
             self.add_local(Token::new(TokenType::Super, "super"));
             self.define_variable(0);
 
@@ -247,7 +248,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.emit_opcode(OpCode::Pop);
 
         if self.current_class().has_superclass {
-            self.end_scope();
+            self.end_scope(); // Matched with begin in this function.
         }
         self.class_compilers.pop();
     }
@@ -287,16 +288,16 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         } else if self.matches(TokenType::While) {
             self.while_statement();
         } else if self.matches(TokenType::LeftBrace) {
-            self.begin_scope();
+            self.begin_scope(); // Matched with end below.
             self.block();
-            self.end_scope();
+            self.end_scope(); // Matched with begin immediately above.
         } else {
             self.expression_statement();
         }
     }
 
     fn for_statement(&mut self) {
-        self.begin_scope();
+        self.begin_scope(); // Matched with end below.
         self.consume(TokenType::LeftParen, "Expect '(' after 'for'.");
         if self.matches(TokenType::Semicolon) {
             // No initializer.
@@ -336,7 +337,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             self.emit_opcode(OpCode::Pop);
         }
 
-        self.end_scope();
+        self.end_scope(); // Matched with begin at the beginning of this fn.
     }
 
     fn if_statement(&mut self) {
@@ -406,6 +407,9 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.consume(TokenType::LeftBrace, "Expect '{' before function body.");
         self.block();
 
+        // Not in book, and not strictly necessary, but no big reason not to do
+        // it.
+        self.end_scope();
         if let Some((function, upvalues)) = self.end_compiler() {
             let function_heap_index = self.vm.new_function(function);
             let function_constant_index = self.make_constant(Value::ObjIndex(function_heap_index));
@@ -832,14 +836,13 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         if self.panic_mode {
             return;
         }
-        eprint!("[line {}] Error", token.line);
-        match token.ty {
-            scanner::TokenType::Eof => eprint!(" at end"),
-            scanner::TokenType::Error => {}
-            _ => eprint!(" at {}", token.lexeme),
-        }
+        let location = match token.ty {
+            scanner::TokenType::Eof => " at end".to_string(),
+            scanner::TokenType::Error => "".to_string(),
+            _ => format!(" at {}", token.lexeme),
+        };
+        eprintln!("[line {}] Error{}: {}", token.line, location, message);
 
-        eprintln!(": {}", message);
         self.had_error = true;
     }
 
