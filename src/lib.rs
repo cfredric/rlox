@@ -40,7 +40,6 @@ impl Opt {
 }
 
 pub fn run_file(opt: &Opt, source: String) -> Result<(), i32> {
-    dbg!("running... ", &source);
     if !source.is_ascii() {
         return Err(65);
     }
