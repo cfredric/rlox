@@ -296,7 +296,7 @@ impl<'opt> VM<'opt> {
                     {
                         return self.call(idx, arg_count);
                     } else if arg_count != 0 {
-                        self.runtime_error(&format!("Expected 0 arguments but got {}", arg_count));
+                        self.runtime_error(&format!("Expected 0 arguments but got {}.", arg_count));
                         return false;
                     }
                     return true;
