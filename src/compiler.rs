@@ -146,6 +146,9 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
     fn patch_jump(&mut self, jump_index: usize) {
         let distance = self.current_chunk().code.len() - jump_index - 1;
+        if distance >= 2_usize.pow(16) {
+            self.error("Too much code to jump over.");
+        }
         self.current_chunk_mut().code[jump_index] = match self.current_chunk().code[jump_index] {
             OpCode::JumpIfFalse(_) => OpCode::JumpIfFalse(distance),
             OpCode::Jump(_) => OpCode::Jump(distance),
@@ -155,6 +158,9 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
     fn emit_loop(&mut self, loop_start: usize) {
         let distance = self.current_chunk().code.len() - loop_start + 1;
+        if distance >= 2_usize.pow(16) {
+            self.error("Loop body too large.");
+        }
         self.emit_opcode(OpCode::Loop(distance));
     }
 
