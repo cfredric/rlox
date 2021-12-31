@@ -556,7 +556,6 @@ impl<'opt> VM<'opt> {
         let mut con = true;
         let mut seen = HashSet::new();
         while let Some(idx) = it {
-            dbg!(idx);
             let obj = &self.heap.heap[idx];
             match obj {
                 Obj::UpValue(UpValue {
