@@ -663,7 +663,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn add_local(&mut self, name: Token<'source>) {
-        if self.current().locals.len() > 256 {
+        if self.current().locals.len() >= 256 {
             self.error("Too many local variables in function.");
             return;
         }
