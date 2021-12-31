@@ -195,8 +195,6 @@ impl Chunk {
 
 impl Rewrite for Chunk {
     fn rewrite(&mut self, mapping: &std::collections::HashMap<usize, usize>) {
-        for v in self.constants.iter_mut() {
-            v.rewrite(mapping);
-        }
+        self.constants.rewrite(mapping);
     }
 }
