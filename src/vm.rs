@@ -317,7 +317,7 @@ impl<'opt> VM<'opt> {
         let method = match self.heap.as_class(class_index).methods.get(name) {
             Some(idx) => *idx,
             None => {
-                self.runtime_error(&format!("Undefined property {}", name));
+                self.runtime_error(&format!("Undefined property '{}'.", name));
                 return false;
             }
         };
@@ -346,7 +346,7 @@ impl<'opt> VM<'opt> {
         let method = match self.heap.as_class(class_idx).methods.get(name) {
             Some(idx) => *idx,
             None => {
-                self.runtime_error(&format!("Undefined property {}", name));
+                self.runtime_error(&format!("Undefined property '{}'.", name));
                 return false;
             }
         };
@@ -830,7 +830,7 @@ impl<'opt> VM<'opt> {
                         self.stack.pop(); // Instance.
                         self.stack.push(value);
                     } else {
-                        self.runtime_error("Only instances have properties.");
+                        self.runtime_error("Only instances have fields.");
                         return InterpretResult::RuntimeError;
                     }
                 }

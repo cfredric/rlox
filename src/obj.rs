@@ -93,10 +93,7 @@ impl Obj {
             Obj::String(s) => s.string.to_string(),
             Obj::Function(fun) => format!("<fn {}>", fun.name),
             Obj::NativeFn(_) => "<native fn>".to_string(),
-            Obj::Closure(fun) => format!(
-                "<closure (fn {})>",
-                heap.as_function(fun.function_index).name
-            ),
+            Obj::Closure(fun) => heap.heap[fun.function_index].print(heap),
             Obj::UpValue(upvalue) => format!("upvalue {:?}", upvalue),
             Obj::Class(c) => c.name.to_string(),
             Obj::Instance(i) => {
