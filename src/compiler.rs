@@ -798,7 +798,12 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn make_constant(&mut self, value: Value) -> usize {
-        self.current_chunk_mut().add_constant(value)
+        let idx = self.current_chunk_mut().add_constant(value);
+        if idx >= 2_usize.pow(8) {
+            self.error("Too many constants in one chunk.");
+            return 0;
+        }
+        idx
     }
 
     fn emit_constant(&mut self, value: Value) {
