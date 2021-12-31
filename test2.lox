@@ -9,15 +9,15 @@ print breakfast;
 {
   var a = "outer";
   {
-    var a = a + " inner";
-    print a;
+    var b = a + " inner";
+    print b;
   }
 }
 {
   var a = "retuo";
   {
-    var a = a + " renni";
-    print a;
+    var b = a + " renni";
+    print b;
   }
 }
 
