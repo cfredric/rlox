@@ -238,7 +238,7 @@ impl<'opt> VM<'opt> {
     }
 
     fn runtime_error(&mut self, message: &str) {
-        eprintln!("Runtime error: {}", message);
+        eprintln!("{}", message);
 
         for frame in self.frames.iter().rev() {
             let func = self.function();
