@@ -821,17 +821,24 @@ impl<'opt> VM<'opt> {
                     };
                 }
                 OpCode::SetProperty(constant) => {
-                    let instance_idx = *self.stack.peek(1).as_obj_index().unwrap();
-                    let name = self.read_string(*constant).to_string();
-                    if let Some(i) = self.heap.heap[instance_idx].as_instance_mut() {
-                        let value = self.stack.peek(0);
-                        i.fields.insert(name, value);
-                        self.stack.pop(); // Value.
-                        self.stack.pop(); // Instance.
-                        self.stack.push(value);
-                    } else {
-                        self.runtime_error("Only instances have fields.");
-                        return InterpretResult::RuntimeError;
+                    match self.stack.peek(1) {
+                        Value::ObjIndex(instance_idx)
+                            if self.heap.heap[instance_idx].as_instance().is_some() =>
+                        {
+                            let name = self.read_string(*constant).to_string();
+                            let value = self.stack.peek(0);
+                            self.heap
+                                .as_instance_mut(instance_idx)
+                                .fields
+                                .insert(name, value);
+                            self.stack.pop(); // Value.
+                            self.stack.pop(); // Instance.
+                            self.stack.push(value);
+                        }
+                        _ => {
+                            self.runtime_error("Only instances have fields.");
+                            return InterpretResult::RuntimeError;
+                        }
                     }
                 }
                 OpCode::GetSuper(name_index) => {
@@ -1095,8 +1102,11 @@ impl Heap {
     fn as_class_mut(&mut self, idx: usize) -> &mut Class {
         self.heap[idx].as_class_mut().unwrap()
     }
-    fn as_instance(&mut self, idx: usize) -> &Instance {
+    fn as_instance(&self, idx: usize) -> &Instance {
         self.heap[idx].as_instance().unwrap()
+    }
+    fn as_instance_mut(&mut self, idx: usize) -> &mut Instance {
+        self.heap[idx].as_instance_mut().unwrap()
     }
     fn as_up_value(&self, idx: usize) -> &UpValue {
         self.heap[idx].as_up_value().unwrap()
