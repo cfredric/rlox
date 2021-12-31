@@ -852,20 +852,23 @@ impl<'opt> VM<'opt> {
                     }
                 }
                 OpCode::Inherit => {
-                    let superclass = *self.stack.peek(1).as_obj_index().unwrap();
-                    let superclass_methods = match &self.heap.heap[superclass] {
-                        Obj::Class(c) => c.methods.clone(),
+                    match self.stack.peek(1) {
+                        Value::ObjIndex(superclass)
+                            if self.heap.heap[superclass].as_class().is_some() =>
+                        {
+                            let superclass_methods = self.heap.as_class(superclass).methods.clone();
+                            let subclass = *self.stack.peek(0).as_obj_index().unwrap();
+                            self.heap
+                                .as_class_mut(subclass)
+                                .methods
+                                .extend(superclass_methods.into_iter());
+                            self.stack.pop(); // Subclass.
+                        }
                         _ => {
                             self.runtime_error("Superclass must be a class.");
                             return InterpretResult::RuntimeError;
                         }
-                    };
-                    let subclass = *self.stack.peek(0).as_obj_index().unwrap();
-                    self.heap
-                        .as_class_mut(subclass)
-                        .methods
-                        .extend(superclass_methods.into_iter());
-                    self.stack.pop(); // Subclass.
+                    }
                 }
                 OpCode::SuperInvoke(constant, arg_count) => {
                     let arg_count = *arg_count;
