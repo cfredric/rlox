@@ -839,7 +839,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         let location = match token.ty {
             scanner::TokenType::Eof => " at end".to_string(),
             scanner::TokenType::Error => "".to_string(),
-            _ => format!(" at {}", token.lexeme),
+            _ => format!(" at '{}'", token.lexeme),
         };
         eprintln!("[line {}] Error{}: {}", token.line, location, message);
 
