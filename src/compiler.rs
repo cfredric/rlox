@@ -506,10 +506,10 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         match ty {
             TokenType::BangEqual => self.emit_opcodes(OpCode::Equal, OpCode::Not),
             TokenType::EqualEqual => self.emit_opcode(OpCode::Equal),
-            TokenType::Greater => self.emit_opcode(OpCode::Equal),
-            TokenType::GreaterEqual => self.emit_opcodes(OpCode::Not, OpCode::Less),
+            TokenType::Greater => self.emit_opcode(OpCode::Greater),
+            TokenType::GreaterEqual => self.emit_opcodes(OpCode::Less, OpCode::Not),
             TokenType::Less => self.emit_opcode(OpCode::Less),
-            TokenType::LessEqual => self.emit_opcodes(OpCode::Not, OpCode::Greater),
+            TokenType::LessEqual => self.emit_opcodes(OpCode::Greater, OpCode::Not),
             TokenType::Plus => self.emit_opcode(OpCode::Add),
             TokenType::Minus => self.emit_opcode(OpCode::Subtract),
             TokenType::Star => self.emit_opcode(OpCode::Multiply),
