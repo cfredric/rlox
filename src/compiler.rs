@@ -712,7 +712,8 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn named_variable(&mut self, name: &str, can_assign: bool) {
-        let (get_op, set_op) = if let Some(arg) = Self::resolve_local(self.current(), name) {
+        let current_idx = self.functions.len() - 1;
+        let (get_op, set_op) = if let Some(arg) = self.resolve_local(current_idx, name) {
             (OpCode::GetLocal(arg), OpCode::SetLocal(arg))
         } else if let Some(arg) = self.resolve_upvalue(self.functions.len() - 1, name) {
             (OpCode::GetUpvalue(arg), OpCode::SetUpvalue(arg))
@@ -728,19 +729,28 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         }
     }
 
-    fn resolve_local(state: &FunctionState, name: &str) -> Option<usize> {
-        state
+    fn resolve_local(&mut self, state_idx: usize, name: &str) -> Option<usize> {
+        let local = self.functions[state_idx]
             .locals
             .iter()
             .enumerate()
             .rev()
             .find_map(|(i, local)| {
-                if local.name.lexeme == name && local.depth.is_some() {
-                    Some(i)
+                if local.name.lexeme == name {
+                    Some((i, local))
                 } else {
                     None
                 }
-            })
+            });
+
+        if let Some((i, local)) = local {
+            if local.depth.is_none() {
+                self.error("Can't read local variable in its own initializer.");
+            }
+            return Some(i);
+        }
+
+        None
     }
 
     fn add_upvalue(&mut self, index: usize, is_local: bool) -> usize {
@@ -776,7 +786,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         }
 
         let enclosing = state_index - 1;
-        if let Some(local) = Self::resolve_local(&self.functions[enclosing], name) {
+        if let Some(local) = self.resolve_local(enclosing, name) {
             self.functions[enclosing].locals[local].is_captured = true;
             return Some(self.add_upvalue(local, true));
         }
