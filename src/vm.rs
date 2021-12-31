@@ -798,22 +798,27 @@ impl<'opt> VM<'opt> {
                     self.stack.push(Value::ObjIndex(heap_index));
                 }
                 OpCode::GetProperty(constant) => {
-                    let instance_idx = *self.stack.peek(0).as_obj_index().unwrap();
-                    if let Some(i) = self.heap.heap[instance_idx].as_instance() {
-                        let name = self.read_string(*constant).to_string();
-                        if let Some(v) = i.fields.get(&name) {
-                            self.stack.pop(); // Instance.
-                            self.stack.push(*v);
-                            continue;
+                    match self.stack.peek(0) {
+                        Value::ObjIndex(instance_idx)
+                            if self.heap.heap[instance_idx].as_instance().is_some() =>
+                        {
+                            let name = self.read_string(*constant).to_string();
+                            let i = self.heap.as_instance(instance_idx);
+                            if let Some(v) = i.fields.get(&name) {
+                                self.stack.pop(); // Instance.
+                                self.stack.push(*v);
+                                continue;
+                            }
+                            let class_index = i.class_index;
+                            if !self.bind_method(class_index, &name) {
+                                return InterpretResult::RuntimeError;
+                            }
                         }
-                        let class_index = i.class_index;
-                        if !self.bind_method(class_index, &name) {
+                        _ => {
+                            self.runtime_error("Only instances have properties.");
                             return InterpretResult::RuntimeError;
                         }
-                    } else {
-                        self.runtime_error("Only instances have properties.");
-                        return InterpretResult::RuntimeError;
-                    }
+                    };
                 }
                 OpCode::SetProperty(constant) => {
                     let instance_idx = *self.stack.peek(1).as_obj_index().unwrap();
@@ -1086,6 +1091,9 @@ impl Heap {
     }
     fn as_class_mut(&mut self, idx: usize) -> &mut Class {
         self.heap[idx].as_class_mut().unwrap()
+    }
+    fn as_instance(&mut self, idx: usize) -> &Instance {
+        self.heap[idx].as_instance().unwrap()
     }
     fn as_up_value(&self, idx: usize) -> &UpValue {
         self.heap[idx].as_up_value().unwrap()
