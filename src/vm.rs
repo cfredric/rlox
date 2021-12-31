@@ -437,7 +437,7 @@ impl<'opt> VM<'opt> {
     }
 
     fn collect_garbage<R: Rewrite>(&mut self, pending_rewrites: Option<(&mut Obj, &mut R)>) {
-        if self.is_compiling {
+        if self.is_compiling || self.opt.disable_garbage_collection {
             return;
         }
         if self.opt.log_garbage_collection {

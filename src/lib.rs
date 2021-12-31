@@ -31,6 +31,9 @@ pub struct Opt {
 
     #[structopt(short = "l", long = "log_garbage_collection")]
     log_garbage_collection: bool,
+
+    #[structopt(short = "d", long = "disable_garbage_collection")]
+    disable_garbage_collection: bool,
 }
 
 impl Opt {
