@@ -1,5 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
+use itertools::Itertools;
+
 use crate::chunk::OpCode;
 use crate::compiler::Compiler;
 use crate::obj::{
@@ -554,34 +556,26 @@ impl<'opt> VM<'opt> {
             pending_rewrite.rewrite(&mapping);
         }
 
+        debug_assert!(self.check_upvalues());
+
         before - self.heap.heap.len()
     }
 
-    #[allow(dead_code)]
-    fn check_upvalues(&self) {
-        let mut it = self.open_upvalues;
-        let mut con = true;
-        let mut seen = HashSet::new();
-        while let Some(idx) = it {
-            let obj = &self.heap.heap[idx];
-            match obj {
-                Obj::UpValue(UpValue {
-                    value: OpenOrClosed::Open(Open { next, .. }),
-                    ..
-                }) => {
-                    seen.insert(idx);
-                    it = *next;
-                }
-                _ => {
-                    con = false;
-                    break;
-                }
-            }
+    fn open_upvalues_iter(&self) -> OpenUpValueIter {
+        OpenUpValueIter {
+            heap: &self.heap,
+            it: self.open_upvalues,
         }
+    }
 
-        debug_assert!(con);
+    fn check_upvalues(&self) -> bool {
+        let is_sorted_and_unique = self
+            .open_upvalues_iter()
+            .tuple_windows()
+            .all(|(a, b)| a > b);
+        let opens_ll = self.open_upvalues_iter().collect::<HashSet<_>>();
 
-        let all_seen = self
+        let opens_heap = self
             .heap
             .heap
             .iter()
@@ -592,8 +586,9 @@ impl<'opt> VM<'opt> {
                     OpenOrClosed::Closed(_) => None,
                 })
             })
-            .all(|i| seen.contains(&i));
-        debug_assert!(all_seen);
+            .collect();
+
+        opens_ll == opens_heap && is_sorted_and_unique
     }
 
     fn print_stack_slice(&self, label: &str, skip: usize) {
@@ -1173,5 +1168,22 @@ impl<T: Rewrite> Rewrite for Option<T> {
 impl<T: Rewrite> Rewrite for &mut T {
     fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
         (*self).rewrite(mapping);
+    }
+}
+
+struct OpenUpValueIter<'h> {
+    heap: &'h Heap,
+    it: Option<usize>,
+}
+
+impl<'h> Iterator for OpenUpValueIter<'h> {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let cur = self.it;
+        if let Some(ptr) = self.it {
+            self.it = self.heap.as_up_value(ptr).value.as_open().unwrap().next;
+        }
+        cur
     }
 }
