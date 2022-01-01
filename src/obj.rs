@@ -238,45 +238,42 @@ pub struct UpValue {
     header: Header,
     /// The value.
     pub value: OpenOrClosed,
-    /// next is a pointer into the heap, to another UpValue object. This forms a linked list.
-    pub next: Option<usize>,
 }
 
 impl UpValue {
     pub fn new(local: usize, next: Option<usize>) -> Self {
         Self {
             header: Header::new(true),
-            value: OpenOrClosed::Open(local),
-            next,
+            value: OpenOrClosed::Open(Open { slot: local, next }),
         }
-    }
-
-    pub fn slot(&self) -> usize {
-        self.value.slot()
     }
 }
 
 #[derive(Debug, EnumAsInner)]
 pub enum OpenOrClosed {
-    /// Open holds a pointer into the stack.
-    Open(usize),
-    /// Value holds the old stack slot (for sorting), and a closed-over value.
-    Closed(usize, Value),
+    /// Open is an upvalue that hasn't been moved off the stack yet.
+    Open(Open),
+    /// Value holds a closed-over value.
+    Closed(Value),
 }
 
-impl OpenOrClosed {
-    fn slot(&self) -> usize {
-        match self {
-            OpenOrClosed::Open(loc) => *loc,
-            OpenOrClosed::Closed(loc, _) => *loc,
-        }
-    }
+#[derive(Debug)]
+pub struct Open {
+    /// The stack slot that holds the associated value.
+    pub slot: usize,
+    /// Heap pointer to the next open upvalue.
+    pub next: Option<usize>,
 }
 
 impl Rewrite for OpenOrClosed {
     fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
-        if let OpenOrClosed::Closed(_, mut v) = self {
-            v.rewrite(mapping);
+        match self {
+            OpenOrClosed::Open(Open { next, .. }) => {
+                next.rewrite(mapping);
+            }
+            OpenOrClosed::Closed(mut v) => {
+                v.rewrite(mapping);
+            }
         }
     }
 }
@@ -300,7 +297,6 @@ impl Rewrite for Obj {
             }
             Obj::UpValue(uv) => {
                 uv.value.rewrite(mapping);
-                uv.next.rewrite(mapping);
             }
             Obj::Instance(i) => {
                 i.class_index.rewrite(mapping);

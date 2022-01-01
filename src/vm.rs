@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::chunk::OpCode;
 use crate::compiler::Compiler;
 use crate::obj::{
-    BoundMethod, Class, Closure, Function, Instance, LoxString, NativeFn, Obj, OpenOrClosed,
+    BoundMethod, Class, Closure, Function, Instance, LoxString, NativeFn, Obj, Open, OpenOrClosed,
     UpValue,
 };
 use crate::value::Value;
@@ -366,16 +366,16 @@ impl<'opt> VM<'opt> {
         let mut prev_upvalue = None;
         let mut next = self.open_upvalues;
         while let Some(uv) = next {
-            let uv = self.heap.as_up_value(uv);
-            if uv.slot() <= local {
+            let open = self.heap.as_up_value(uv).value.as_open().unwrap();
+            if open.slot <= local {
                 break;
             }
             prev_upvalue = next;
-            next = uv.next;
+            next = open.next;
         }
 
         if let Some(ptr) = next {
-            if *self.heap.as_up_value(ptr).value.as_open().unwrap() == local {
+            if self.heap.as_up_value(ptr).value.as_open().unwrap().slot == local {
                 return ptr;
             }
         }
@@ -383,7 +383,12 @@ impl<'opt> VM<'opt> {
         let created_upvalue = self.new_upvalue(UpValue::new(local, next), &mut prev_upvalue);
 
         if let Some(prev) = prev_upvalue {
-            self.heap.as_up_value_mut(prev).next = Some(created_upvalue);
+            self.heap
+                .as_up_value_mut(prev)
+                .value
+                .as_open_mut()
+                .unwrap()
+                .next = Some(created_upvalue);
         } else {
             self.open_upvalues = Some(created_upvalue);
         }
@@ -396,17 +401,13 @@ impl<'opt> VM<'opt> {
     fn close_upvalues(&mut self, stack_slot: usize) {
         while let Some(ptr) = self.open_upvalues {
             let upvalue = self.heap.as_up_value_mut(ptr);
-            if upvalue.slot() < stack_slot {
+            let open = upvalue.value.as_open().unwrap();
+            if open.slot < stack_slot {
                 break;
             }
 
-            match upvalue.value {
-                OpenOrClosed::Open(loc) => {
-                    upvalue.value = OpenOrClosed::Closed(loc, self.stack.stack[loc]);
-                }
-                OpenOrClosed::Closed(_, _) => {}
-            }
-            self.open_upvalues = upvalue.next;
+            self.open_upvalues = open.next;
+            upvalue.value = OpenOrClosed::Closed(self.stack.stack[open.slot]);
         }
     }
 
@@ -485,7 +486,7 @@ impl<'opt> VM<'opt> {
             let mut upvalue = self.open_upvalues;
             while let Some(index) = upvalue {
                 self.heap.mark_object(index);
-                upvalue = self.heap.as_up_value(index).next;
+                upvalue = self.heap.as_up_value(index).value.as_open().unwrap().next;
             }
         }
 
@@ -565,8 +566,7 @@ impl<'opt> VM<'opt> {
             let obj = &self.heap.heap[idx];
             match obj {
                 Obj::UpValue(UpValue {
-                    next,
-                    value: OpenOrClosed::Open(_slot),
+                    value: OpenOrClosed::Open(Open { next, .. }),
                     ..
                 }) => {
                     seen.insert(idx);
@@ -589,7 +589,7 @@ impl<'opt> VM<'opt> {
             .filter_map(|(i, o)| {
                 o.as_up_value().and_then(|a| match a.value {
                     OpenOrClosed::Open(_) => Some(i),
-                    OpenOrClosed::Closed(_, _) => None,
+                    OpenOrClosed::Closed(_) => None,
                 })
             })
             .all(|i| seen.contains(&i));
@@ -780,8 +780,8 @@ impl<'opt> VM<'opt> {
                     let uv_index = self.closure().upvalues[*slot];
                     let uv = self.heap.as_up_value(uv_index);
                     let val = match uv.value {
-                        OpenOrClosed::Open(loc) => self.stack.stack[loc],
-                        OpenOrClosed::Closed(_, val) => val,
+                        OpenOrClosed::Open(Open { slot, .. }) => self.stack.stack[slot],
+                        OpenOrClosed::Closed(val) => val,
                     };
                     self.stack.push(val);
                 }
@@ -790,8 +790,8 @@ impl<'opt> VM<'opt> {
                     let val = self.stack.peek(0);
                     let uv = self.heap.as_up_value_mut(uv_index);
                     match uv.value {
-                        OpenOrClosed::Open(loc) => self.stack.stack[loc] = val,
-                        OpenOrClosed::Closed(loc, _) => uv.value = OpenOrClosed::Closed(loc, val),
+                        OpenOrClosed::Open(Open { slot, .. }) => self.stack.stack[slot] = val,
+                        OpenOrClosed::Closed(_) => uv.value = OpenOrClosed::Closed(val),
                     };
                 }
                 OpCode::CloseUpvalue => {
@@ -1066,7 +1066,7 @@ impl Heap {
                 }
             }
             Obj::UpValue(upvalue) => {
-                if let OpenOrClosed::Closed(_, v) = upvalue.value {
+                if let OpenOrClosed::Closed(v) = upvalue.value {
                     self.mark_value(v);
                 }
             }
