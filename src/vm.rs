@@ -367,11 +367,17 @@ impl<'opt> VM<'opt> {
         let mut next = self.open_upvalues;
         while let Some(uv) = next {
             let uv = self.heap.as_up_value(uv);
-            if !uv.is_at_or_above(local) {
+            if uv.slot() <= local {
                 break;
             }
             prev_upvalue = next;
             next = uv.next;
+        }
+
+        if let Some(ptr) = next {
+            if *self.heap.as_up_value(ptr).value.as_open().unwrap() == local {
+                return ptr;
+            }
         }
 
         let created_upvalue = self.new_upvalue(UpValue::new(local, next), &mut prev_upvalue);
@@ -390,7 +396,7 @@ impl<'opt> VM<'opt> {
     fn close_upvalues(&mut self, stack_slot: usize) {
         while let Some(ptr) = self.open_upvalues {
             let upvalue = self.heap.as_up_value_mut(ptr);
-            if !upvalue.is_at_or_above(stack_slot) {
+            if upvalue.slot() < stack_slot {
                 break;
             }
 

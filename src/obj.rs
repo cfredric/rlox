@@ -251,14 +251,12 @@ impl UpValue {
         }
     }
 
-    /// Returns true iff this upvalue points (or used to point) at or above the
-    /// given stack slot.
-    pub fn is_at_or_above(&self, stack_slot: usize) -> bool {
-        self.value.is_at_or_above(stack_slot)
+    pub fn slot(&self) -> usize {
+        self.value.slot()
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, EnumAsInner)]
 pub enum OpenOrClosed {
     /// Open holds a pointer into the stack.
     Open(usize),
@@ -267,12 +265,11 @@ pub enum OpenOrClosed {
 }
 
 impl OpenOrClosed {
-    fn is_at_or_above(&self, stack_slot: usize) -> bool {
-        let loc = match self {
+    fn slot(&self) -> usize {
+        match self {
             OpenOrClosed::Open(loc) => *loc,
             OpenOrClosed::Closed(loc, _) => *loc,
-        };
-        loc >= stack_slot
+        }
     }
 }
 
