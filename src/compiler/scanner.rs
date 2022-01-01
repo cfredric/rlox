@@ -5,7 +5,7 @@ pub(super) struct Scanner<'source> {
 }
 
 fn is_alphabetic(c: char) -> bool {
-    ('a'..'z').contains(&c) || ('A'..'Z').contains(&c) || c == '_'
+    ('a'..='z').contains(&c) || ('A'..='Z').contains(&c) || c == '_'
 }
 
 impl<'source> Scanner<'source> {
