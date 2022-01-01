@@ -205,7 +205,7 @@ impl<'source> Scanner<'source> {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Default, Clone, Copy)]
 pub(super) struct Token<'a> {
     pub ty: TokenType,
     pub lexeme: &'a str,
@@ -222,7 +222,7 @@ impl<'source> Token<'source> {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
+#[derive(PartialEq, Copy, Clone)]
 pub(super) enum TokenType {
     LeftParen,
     RightParen,

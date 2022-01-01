@@ -8,7 +8,6 @@ use crate::{
     vm::{Heap, Rewrite},
 };
 
-#[derive(Debug)]
 pub struct Header {
     is_marked: bool,
     is_gc_able: bool,
@@ -37,7 +36,7 @@ impl Header {
     }
 }
 
-#[derive(Debug, EnumAsInner)]
+#[derive(EnumAsInner)]
 pub enum Obj {
     String(LoxString),
     Function(Function),
@@ -94,7 +93,7 @@ impl Obj {
             Obj::Function(fun) => format!("<fn {}>", fun.name),
             Obj::NativeFn(_) => "<native fn>".to_string(),
             Obj::Closure(fun) => heap.heap[fun.function_index].print(heap),
-            Obj::UpValue(upvalue) => format!("upvalue {:?}", upvalue),
+            Obj::UpValue(_upvalue) => unreachable!(),
             Obj::Class(c) => c.name.to_string(),
             Obj::Instance(i) => {
                 format!("{} instance", heap.as_class(i.class_index).name)
@@ -106,7 +105,6 @@ impl Obj {
     }
 }
 
-#[derive(Debug)]
 pub struct LoxString {
     pub header: Header,
     pub string: String,
@@ -121,7 +119,6 @@ impl LoxString {
     }
 }
 
-#[derive(Debug)]
 pub struct Function {
     header: Header,
     pub arity: usize,
@@ -156,13 +153,6 @@ impl NativeFn {
     }
 }
 
-impl std::fmt::Debug for NativeFn {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "NativeFn")
-    }
-}
-
-#[derive(Debug)]
 pub struct Closure {
     header: Header,
     /// The heap index of the underlying function.
@@ -181,7 +171,6 @@ impl Closure {
     }
 }
 
-#[derive(Debug)]
 pub struct Class {
     header: Header,
     name: String,
@@ -199,7 +188,6 @@ impl Class {
     }
 }
 
-#[derive(Debug)]
 pub struct Instance {
     header: Header,
     pub class_index: usize,
@@ -216,7 +204,6 @@ impl Instance {
     }
 }
 
-#[derive(Debug)]
 pub struct BoundMethod {
     header: Header,
     pub receiver_idx: usize,
@@ -233,7 +220,6 @@ impl BoundMethod {
     }
 }
 
-#[derive(Debug)]
 pub struct UpValue {
     header: Header,
     /// The value.
@@ -249,7 +235,7 @@ impl UpValue {
     }
 }
 
-#[derive(Debug, EnumAsInner)]
+#[derive(EnumAsInner)]
 pub enum OpenOrClosed {
     /// Open is an upvalue that hasn't been moved off the stack yet.
     Open(Open),
@@ -257,7 +243,6 @@ pub enum OpenOrClosed {
     Closed(Value),
 }
 
-#[derive(Debug)]
 pub struct Open {
     /// The stack slot that holds the associated value.
     pub slot: usize,

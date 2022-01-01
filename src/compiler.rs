@@ -21,7 +21,6 @@ pub(crate) struct Compiler<'opt, 'source, 'vm> {
     class_compilers: Vec<ClassState>,
 }
 
-#[derive(Debug)]
 struct FunctionState<'source> {
     function: Function,
     function_type: FunctionType,
@@ -52,7 +51,6 @@ impl<'source> FunctionState<'source> {
     }
 }
 
-#[derive(Debug)]
 struct ClassState {
     has_superclass: bool,
 }
@@ -989,7 +987,6 @@ impl Rule {
     }
 }
 
-#[derive(Clone, Debug)]
 struct Local<'source> {
     name: Token<'source>,
     depth: Option<usize>,
@@ -1006,7 +1003,7 @@ impl<'source> Local<'source> {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq)]
 pub enum FunctionType {
     Function,
     Initializer,
@@ -1014,7 +1011,7 @@ pub enum FunctionType {
     Script,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Upvalue {
     pub index: usize,
     pub is_local: bool,

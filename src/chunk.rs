@@ -2,7 +2,7 @@ use crate::compiler::Upvalue;
 use crate::value::Value;
 use crate::vm::{Heap, Rewrite};
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum OpCode {
     /// Operand is the index into the constants table.
     Constant(usize),
@@ -68,7 +68,7 @@ pub enum OpCode {
     Method(usize),
 }
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct Chunk {
     pub code: Vec<OpCode>,
     pub constants: Vec<Value>,

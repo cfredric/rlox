@@ -9,7 +9,7 @@ mod obj;
 mod value;
 mod vm;
 
-#[derive(StructOpt, Debug, Default)]
+#[derive(StructOpt, Default)]
 pub struct Opt {
     #[structopt(name = "PATH", parse(from_os_str))]
     pub path: Option<PathBuf>,

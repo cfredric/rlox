@@ -4,7 +4,7 @@ use enum_as_inner::EnumAsInner;
 
 use crate::vm::{Heap, Rewrite};
 
-#[derive(Debug, Copy, Clone, EnumAsInner)]
+#[derive(Copy, Clone, EnumAsInner)]
 pub enum Value {
     Nil,
     Bool(bool),
