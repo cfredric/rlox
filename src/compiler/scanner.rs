@@ -127,13 +127,9 @@ impl<'source> Scanner<'source> {
                     self.line += 1;
                     self.advance();
                 }
-                '/' => {
-                    if self.peek_next() == '/' {
-                        while !self.is_at_end() && self.peek() != '\n' {
-                            self.advance();
-                        }
-                    } else {
-                        return;
+                '/' if self.peek_next() == '/' => {
+                    while !self.is_at_end() && self.peek() != '\n' {
+                        self.advance();
                     }
                 }
                 _ => {
