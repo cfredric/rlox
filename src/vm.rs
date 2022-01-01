@@ -243,7 +243,7 @@ impl<'opt> VM<'opt> {
         for frame in self.frames.iter().rev() {
             let closure = self.heap.as_closure(frame.heap_index);
             let func = self.heap.as_function(closure.function_index);
-            let instruction = frame.ip;
+            let instruction = frame.ip - 1;
             eprintln!("[line {}] in {}", func.chunk.lines[instruction], func.name);
         }
 
