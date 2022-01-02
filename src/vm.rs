@@ -5,8 +5,7 @@ use itertools::Itertools;
 use crate::chunk::OpCode;
 use crate::compiler::Compiler;
 use crate::obj::{
-    BoundMethod, Class, Closure, Function, Instance, LoxString, NativeFn, Obj, Open, OpenOrClosed,
-    UpValue,
+    BoundMethod, Class, Closed, Closure, Function, Instance, LoxString, NativeFn, Obj, Open,
 };
 use crate::value::Value;
 use crate::Opt;
@@ -171,8 +170,8 @@ impl<'opt> VM<'opt> {
         )
     }
 
-    pub fn new_upvalue(&mut self, upvalue: UpValue, prev_to_rewrite: &mut Option<usize>) -> usize {
-        self.allocate_object(Obj::UpValue(upvalue), prev_to_rewrite.as_mut())
+    pub fn new_upvalue(&mut self, open: Open, prev_to_rewrite: &mut Option<usize>) -> usize {
+        self.allocate_object(Obj::OpenUpValue(open), prev_to_rewrite.as_mut())
     }
 
     pub fn allocate_object<R: Rewrite>(
@@ -275,7 +274,11 @@ impl<'opt> VM<'opt> {
     fn call_value(&mut self, callee: Value, arg_count: usize) -> bool {
         if let Value::ObjIndex(heap_index) = callee {
             match &self.heap.heap[heap_index] {
-                Obj::String(_) | Obj::Function(_) | Obj::UpValue(_) | Obj::Instance(_) => {}
+                Obj::String(_)
+                | Obj::Function(_)
+                | Obj::OpenUpValue(_)
+                | Obj::ClosedUpValue(_)
+                | Obj::Instance(_) => {}
                 Obj::Closure(_) => {
                     return self.call(heap_index, arg_count);
                 }
@@ -367,30 +370,21 @@ impl<'opt> VM<'opt> {
     fn capture_upvalue(&mut self, local: usize) -> usize {
         let mut prev_upvalue = None;
         let mut next = self.open_upvalues;
-        while let Some(uv) = next {
-            let open = self.heap.as_up_value(uv).value.as_open().unwrap();
-            if open.slot <= local {
-                break;
-            }
+        while matches!(next, Some(uv) if self.heap.as_open_up_value(uv).slot > local) {
             prev_upvalue = next;
-            next = open.next;
+            next = self.heap.as_open_up_value(next.unwrap()).next;
         }
 
         if let Some(ptr) = next {
-            if self.heap.as_up_value(ptr).value.as_open().unwrap().slot == local {
+            if self.heap.as_open_up_value(ptr).slot == local {
                 return ptr;
             }
         }
 
-        let created_upvalue = self.new_upvalue(UpValue::new(local, next), &mut prev_upvalue);
+        let created_upvalue = self.new_upvalue(Open::new(local, next), &mut prev_upvalue);
 
         if let Some(prev) = prev_upvalue {
-            self.heap
-                .as_up_value_mut(prev)
-                .value
-                .as_open_mut()
-                .unwrap()
-                .next = Some(created_upvalue);
+            self.heap.as_open_up_value_mut(prev).next = Some(created_upvalue);
         } else {
             self.open_upvalues = Some(created_upvalue);
         }
@@ -402,14 +396,13 @@ impl<'opt> VM<'opt> {
     /// that are already closed are ignored.
     fn close_upvalues(&mut self, stack_slot: usize) {
         while let Some(ptr) = self.open_upvalues {
-            let upvalue = self.heap.as_up_value_mut(ptr);
-            let open = upvalue.value.as_open().unwrap();
+            let open = self.heap.as_open_up_value(ptr);
             if open.slot < stack_slot {
                 break;
             }
 
             self.open_upvalues = open.next;
-            upvalue.value = OpenOrClosed::Closed(self.stack.stack[open.slot]);
+            self.heap.heap[ptr] = Obj::ClosedUpValue(Closed::new(self.stack.stack[open.slot]));
         }
     }
 
@@ -488,7 +481,7 @@ impl<'opt> VM<'opt> {
             let mut upvalue = self.open_upvalues;
             while let Some(index) = upvalue {
                 self.heap.mark_object(index);
-                upvalue = self.heap.as_up_value(index).value.as_open().unwrap().next;
+                upvalue = self.heap.as_open_up_value(index).next;
             }
         }
 
@@ -580,12 +573,7 @@ impl<'opt> VM<'opt> {
             .heap
             .iter()
             .enumerate()
-            .filter_map(|(i, o)| {
-                o.as_up_value().and_then(|a| match a.value {
-                    OpenOrClosed::Open(_) => Some(i),
-                    OpenOrClosed::Closed(_) => None,
-                })
-            })
+            .filter_map(|(i, o)| o.as_open_up_value().map(|_| i))
             .collect();
 
         opens_ll == opens_heap && is_sorted_and_unique
@@ -773,20 +761,20 @@ impl<'opt> VM<'opt> {
                 }
                 OpCode::GetUpvalue(slot) => {
                     let uv_index = self.closure().upvalues[*slot];
-                    let uv = self.heap.as_up_value(uv_index);
-                    let val = match uv.value {
-                        OpenOrClosed::Open(Open { slot, .. }) => self.stack.stack[slot],
-                        OpenOrClosed::Closed(val) => val,
+                    let val = match &self.heap.heap[uv_index] {
+                        Obj::ClosedUpValue(c) => c.value,
+                        Obj::OpenUpValue(o) => self.stack.stack[o.slot],
+                        _ => unreachable!(),
                     };
                     self.stack.push(val);
                 }
                 OpCode::SetUpvalue(slot) => {
                     let uv_index = self.closure().upvalues[*slot];
                     let val = self.stack.peek(0);
-                    let uv = self.heap.as_up_value_mut(uv_index);
-                    match uv.value {
-                        OpenOrClosed::Open(Open { slot, .. }) => self.stack.stack[slot] = val,
-                        OpenOrClosed::Closed(_) => uv.value = OpenOrClosed::Closed(val),
+                    match &mut self.heap.heap[uv_index] {
+                        Obj::ClosedUpValue(c) => c.value = val,
+                        Obj::OpenUpValue(o) => self.stack.stack[o.slot] = val,
+                        _ => unreachable!(),
                     };
                 }
                 OpCode::CloseUpvalue => {
@@ -1045,7 +1033,7 @@ impl Heap {
         }
 
         match &self.heap[index] {
-            Obj::String(_) | Obj::NativeFn(_) => {}
+            Obj::String(_) | Obj::NativeFn(_) | Obj::OpenUpValue(_) => {}
             Obj::Function(f) => {
                 // TODO: don't clone here.
                 for v in f.chunk.constants.clone().iter() {
@@ -1060,10 +1048,9 @@ impl Heap {
                     self.mark_object(*uv);
                 }
             }
-            Obj::UpValue(upvalue) => {
-                if let OpenOrClosed::Closed(v) = upvalue.value {
-                    self.mark_value(v);
-                }
+            Obj::ClosedUpValue(c) => {
+                let v = c.value;
+                self.mark_value(v);
             }
             Obj::Class(c) => {
                 let methods = c.methods.values().copied().collect::<Vec<_>>();
@@ -1109,11 +1096,11 @@ impl Heap {
     fn as_instance_mut(&mut self, idx: usize) -> &mut Instance {
         self.heap[idx].as_instance_mut().unwrap()
     }
-    fn as_up_value(&self, idx: usize) -> &UpValue {
-        self.heap[idx].as_up_value().unwrap()
+    fn as_open_up_value(&self, idx: usize) -> &Open {
+        self.heap[idx].as_open_up_value().unwrap()
     }
-    fn as_up_value_mut(&mut self, idx: usize) -> &mut UpValue {
-        self.heap[idx].as_up_value_mut().unwrap()
+    fn as_open_up_value_mut(&mut self, idx: usize) -> &mut Open {
+        self.heap[idx].as_open_up_value_mut().unwrap()
     }
 }
 
@@ -1182,7 +1169,7 @@ impl<'h> Iterator for OpenUpValueIter<'h> {
     fn next(&mut self) -> Option<Self::Item> {
         let cur = self.it;
         if let Some(ptr) = self.it {
-            self.it = self.heap.as_up_value(ptr).value.as_open().unwrap().next;
+            self.it = self.heap.as_open_up_value(ptr).next;
         }
         cur
     }

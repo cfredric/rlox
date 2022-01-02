@@ -42,7 +42,8 @@ pub enum Obj {
     Function(Function),
     Closure(Closure),
     NativeFn(NativeFn),
-    UpValue(UpValue),
+    OpenUpValue(Open),
+    ClosedUpValue(Closed),
     Class(Class),
     Instance(Instance),
     BoundMethod(BoundMethod),
@@ -55,7 +56,8 @@ impl Obj {
             Obj::Function(f) => &f.header,
             Obj::Closure(c) => &c.header,
             Obj::NativeFn(f) => &f.header,
-            Obj::UpValue(u) => &u.header,
+            Obj::OpenUpValue(u) => &u.header,
+            Obj::ClosedUpValue(u) => &u.header,
             Obj::Class(c) => &c.header,
             Obj::Instance(i) => &i.header,
             Obj::BoundMethod(b) => &b.header,
@@ -68,7 +70,8 @@ impl Obj {
             Obj::Function(f) => &mut f.header,
             Obj::Closure(c) => &mut c.header,
             Obj::NativeFn(f) => &mut f.header,
-            Obj::UpValue(u) => &mut u.header,
+            Obj::OpenUpValue(u) => &mut u.header,
+            Obj::ClosedUpValue(u) => &mut u.header,
             Obj::Class(c) => &mut c.header,
             Obj::Instance(i) => &mut i.header,
             Obj::BoundMethod(b) => &mut b.header,
@@ -93,7 +96,8 @@ impl Obj {
             Obj::Function(fun) => format!("<fn {}>", fun.name),
             Obj::NativeFn(_) => "<native fn>".to_string(),
             Obj::Closure(fun) => heap.heap[fun.function_index].print(heap),
-            Obj::UpValue(_upvalue) => unreachable!(),
+            Obj::OpenUpValue(_) => unreachable!(),
+            Obj::ClosedUpValue(_) => unreachable!(),
             Obj::Class(c) => c.name.to_string(),
             Obj::Instance(i) => {
                 format!("{} instance", heap.as_class(i.class_index).name)
@@ -220,46 +224,46 @@ impl BoundMethod {
     }
 }
 
-pub struct UpValue {
-    header: Header,
-    /// The value.
-    pub value: OpenOrClosed,
-}
-
-impl UpValue {
-    pub fn new(local: usize, next: Option<usize>) -> Self {
-        Self {
-            header: Header::new(true),
-            value: OpenOrClosed::Open(Open { slot: local, next }),
-        }
-    }
-}
-
-#[derive(EnumAsInner)]
-pub enum OpenOrClosed {
-    /// Open is an upvalue that hasn't been moved off the stack yet.
-    Open(Open),
-    /// Value holds a closed-over value.
-    Closed(Value),
-}
-
 pub struct Open {
+    header: Header,
     /// The stack slot that holds the associated value.
     pub slot: usize,
     /// Heap pointer to the next open upvalue.
     pub next: Option<usize>,
 }
 
-impl Rewrite for OpenOrClosed {
-    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
-        match self {
-            OpenOrClosed::Open(Open { next, .. }) => {
-                next.rewrite(mapping);
-            }
-            OpenOrClosed::Closed(mut v) => {
-                v.rewrite(mapping);
-            }
+impl Open {
+    pub fn new(slot: usize, next: Option<usize>) -> Self {
+        Self {
+            header: Header::new(true),
+            slot,
+            next,
         }
+    }
+}
+
+pub struct Closed {
+    header: Header,
+    pub value: Value,
+}
+
+impl Closed {
+    pub fn new(value: Value) -> Self {
+        Self {
+            header: Header::new(true),
+            value,
+        }
+    }
+}
+
+impl Rewrite for Open {
+    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+        self.next.rewrite(mapping);
+    }
+}
+impl Rewrite for Closed {
+    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+        self.value.rewrite(mapping);
     }
 }
 
@@ -280,8 +284,11 @@ impl Rewrite for Obj {
                 c.function_index = mapping[&c.function_index];
                 c.upvalues.rewrite(mapping);
             }
-            Obj::UpValue(uv) => {
-                uv.value.rewrite(mapping);
+            Obj::OpenUpValue(uv) => {
+                uv.rewrite(mapping);
+            }
+            Obj::ClosedUpValue(uv) => {
+                uv.rewrite(mapping);
             }
             Obj::Instance(i) => {
                 i.class_index.rewrite(mapping);
