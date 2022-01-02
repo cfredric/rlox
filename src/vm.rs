@@ -7,6 +7,7 @@ use crate::compiler::Compiler;
 use crate::obj::{
     BoundMethod, Class, Closed, Closure, Function, Instance, LoxString, NativeFn, Obj, Open,
 };
+use crate::print::Print;
 use crate::rewrite::Rewrite;
 use crate::value::Value;
 use crate::Opt;

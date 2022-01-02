@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use enum_as_inner::EnumAsInner;
 
-use crate::{chunk::Chunk, rewrite::Rewrite, value::Value, vm::Heap};
+use crate::{chunk::Chunk, print::Print, rewrite::Rewrite, value::Value, vm::Heap};
 
 pub struct Header {
     is_marked: bool,
@@ -85,8 +85,10 @@ impl Obj {
     pub fn is_marked(&self) -> bool {
         self.header().is_marked()
     }
+}
 
-    pub fn print(&self, heap: &Heap) -> String {
+impl Print for Obj {
+    fn print(&self, heap: &Heap) -> String {
         match self {
             Obj::String(s) => s.string.to_string(),
             Obj::Function(fun) => format!("<fn {}>", fun.name),

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use enum_as_inner::EnumAsInner;
 
-use crate::{rewrite::Rewrite, vm::Heap};
+use crate::{print::Print, rewrite::Rewrite, vm::Heap};
 
 #[derive(Copy, Clone, EnumAsInner)]
 pub enum Value {
@@ -33,8 +33,10 @@ impl Value {
             _ => false,
         }
     }
+}
 
-    pub fn print(&self, heap: &Heap) -> String {
+impl Print for Value {
+    fn print(&self, heap: &Heap) -> String {
         match self {
             Value::Double(d) => d.to_string(),
             Value::Nil => "nil".to_string(),

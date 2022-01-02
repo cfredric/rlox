@@ -1,4 +1,5 @@
 use crate::compiler::Upvalue;
+use crate::print::Print;
 use crate::rewrite::Rewrite;
 use crate::value::Value;
 use crate::vm::Heap;
