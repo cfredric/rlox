@@ -91,12 +91,9 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         }
 
         self.consume(TokenType::Eof, "Expect end of expression");
-        let f = self.end_compiler().map(|f| f.0);
-        if !self.had_error {
-            f
-        } else {
-            None
-        }
+        self.end_compiler()
+            .map(|(f, _)| f)
+            .filter(|_| !self.had_error)
     }
 
     fn advance(&mut self) -> Token<'source> {
