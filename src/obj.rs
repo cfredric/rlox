@@ -2,11 +2,7 @@ use std::collections::HashMap;
 
 use enum_as_inner::EnumAsInner;
 
-use crate::{
-    chunk::Chunk,
-    value::Value,
-    vm::{Heap, Rewrite},
-};
+use crate::{chunk::Chunk, rewrite::Rewrite, value::Value, vm::Heap};
 
 pub struct Header {
     is_marked: bool,
@@ -109,6 +105,22 @@ impl Obj {
     }
 }
 
+impl Rewrite for Obj {
+    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+        match self {
+            Obj::String(s) => s.rewrite(mapping),
+            Obj::NativeFn(n) => n.rewrite(mapping),
+            Obj::Class(c) => c.rewrite(mapping),
+            Obj::Function(f) => f.rewrite(mapping),
+            Obj::Closure(c) => c.rewrite(mapping),
+            Obj::OpenUpValue(uv) => uv.rewrite(mapping),
+            Obj::ClosedUpValue(uv) => uv.rewrite(mapping),
+            Obj::Instance(i) => i.rewrite(mapping),
+            Obj::BoundMethod(b) => b.rewrite(mapping),
+        }
+    }
+}
+
 pub struct LoxString {
     pub header: Header,
     pub string: String,
@@ -121,6 +133,9 @@ impl LoxString {
             string: s.to_string(),
         }
     }
+}
+impl Rewrite for LoxString {
+    fn rewrite(&mut self, _mapping: &HashMap<usize, usize>) {}
 }
 
 pub struct Function {
@@ -141,6 +156,12 @@ impl Function {
     }
 }
 
+impl Rewrite for Function {
+    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+        self.chunk.rewrite(mapping);
+    }
+}
+
 type Native = fn(args: &[Value]) -> Value;
 
 pub struct NativeFn {
@@ -155,6 +176,10 @@ impl NativeFn {
             f,
         }
     }
+}
+
+impl Rewrite for NativeFn {
+    fn rewrite(&mut self, _mapping: &HashMap<usize, usize>) {}
 }
 
 pub struct Closure {
@@ -175,6 +200,13 @@ impl Closure {
     }
 }
 
+impl Rewrite for Closure {
+    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+        self.function_index.rewrite(mapping);
+        self.upvalues.rewrite(mapping);
+    }
+}
+
 pub struct Class {
     header: Header,
     name: String,
@@ -189,6 +221,12 @@ impl Class {
             name: name.to_string(),
             methods: HashMap::new(),
         }
+    }
+}
+
+impl Rewrite for Class {
+    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+        self.methods.rewrite(mapping);
     }
 }
 
@@ -208,6 +246,13 @@ impl Instance {
     }
 }
 
+impl Rewrite for Instance {
+    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+        self.class_index.rewrite(mapping);
+        self.fields.rewrite(mapping);
+    }
+}
+
 pub struct BoundMethod {
     header: Header,
     pub receiver_idx: usize,
@@ -221,6 +266,13 @@ impl BoundMethod {
             receiver_idx,
             closure_idx,
         }
+    }
+}
+
+impl Rewrite for BoundMethod {
+    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+        self.receiver_idx.rewrite(mapping);
+        self.closure_idx.rewrite(mapping);
     }
 }
 
@@ -241,6 +293,11 @@ impl Open {
         }
     }
 }
+impl Rewrite for Open {
+    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+        self.next.rewrite(mapping);
+    }
+}
 
 pub struct Closed {
     header: Header,
@@ -255,49 +312,8 @@ impl Closed {
         }
     }
 }
-
-impl Rewrite for Open {
-    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
-        self.next.rewrite(mapping);
-    }
-}
 impl Rewrite for Closed {
     fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
         self.value.rewrite(mapping);
-    }
-}
-
-impl Rewrite for Obj {
-    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
-        self.mark(false);
-        match self {
-            Obj::String(_) | Obj::NativeFn(_) => {
-                // Nothing to do here.
-            }
-            Obj::Class(c) => {
-                c.methods.rewrite(mapping);
-            }
-            Obj::Function(f) => {
-                f.chunk.rewrite(mapping);
-            }
-            Obj::Closure(c) => {
-                c.function_index = mapping[&c.function_index];
-                c.upvalues.rewrite(mapping);
-            }
-            Obj::OpenUpValue(uv) => {
-                uv.rewrite(mapping);
-            }
-            Obj::ClosedUpValue(uv) => {
-                uv.rewrite(mapping);
-            }
-            Obj::Instance(i) => {
-                i.class_index.rewrite(mapping);
-                i.fields.rewrite(mapping);
-            }
-            Obj::BoundMethod(b) => {
-                b.receiver_idx.rewrite(mapping);
-                b.closure_idx.rewrite(mapping);
-            }
-        }
     }
 }

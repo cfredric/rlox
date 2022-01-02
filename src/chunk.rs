@@ -1,6 +1,7 @@
 use crate::compiler::Upvalue;
+use crate::rewrite::Rewrite;
 use crate::value::Value;
-use crate::vm::{Heap, Rewrite};
+use crate::vm::Heap;
 
 #[derive(Clone)]
 pub enum OpCode {

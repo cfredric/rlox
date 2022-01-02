@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use enum_as_inner::EnumAsInner;
 
-use crate::vm::{Heap, Rewrite};
+use crate::{rewrite::Rewrite, vm::Heap};
 
 #[derive(Copy, Clone, EnumAsInner)]
 pub enum Value {

@@ -7,6 +7,7 @@ use crate::compiler::Compiler;
 use crate::obj::{
     BoundMethod, Class, Closed, Closure, Function, Instance, LoxString, NativeFn, Obj, Open,
 };
+use crate::rewrite::Rewrite;
 use crate::value::Value;
 use crate::Opt;
 
@@ -506,14 +507,18 @@ impl<'opt> VM<'opt> {
         let mapping = {
             let mut mapping = HashMap::new();
             let mut post_compaction_index = 0;
-            for (i, obj) in self.heap.heap.iter().enumerate() {
-                if obj.is_marked() {
-                    // If this object is marked, it is reachable, and will be kept.
-                    // We add an entry for this pointer, and then increment the
-                    // post-compaction pointer.
-                    mapping.insert(i, post_compaction_index);
-                    post_compaction_index += 1;
-                }
+            for i in self
+                .heap
+                .heap
+                .iter()
+                .enumerate()
+                .filter_map(|(i, obj)| obj.is_marked().then(|| i))
+            {
+                // Since the object at index `i` is marked, it is reachable, and
+                // will be kept.  We add an entry for this pointer, and then
+                // increment the post-compaction pointer.
+                mapping.insert(i, post_compaction_index);
+                post_compaction_index += 1;
             }
             mapping
         };
@@ -521,6 +526,9 @@ impl<'opt> VM<'opt> {
         // Remove unreachable objects.
         let before = self.heap.heap.len();
         self.heap.heap.retain(|obj| obj.is_marked());
+        for obj in self.heap.heap.iter_mut() {
+            obj.mark(false);
+        }
 
         // Prune out unused strings from the strings table:
         let reachable_strings = self
@@ -1102,54 +1110,6 @@ impl Heap {
 impl Rewrite for Heap {
     fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
         self.heap.rewrite(mapping);
-    }
-}
-
-pub trait Rewrite {
-    fn rewrite(&mut self, mapping: &HashMap<usize, usize>);
-}
-
-impl<T: Rewrite> Rewrite for Vec<T> {
-    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
-        for e in self {
-            e.rewrite(mapping);
-        }
-    }
-}
-
-impl<T: Rewrite> Rewrite for [T] {
-    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
-        for e in self {
-            e.rewrite(mapping);
-        }
-    }
-}
-
-impl<K, V: Rewrite> Rewrite for HashMap<K, V> {
-    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
-        for v in self.values_mut() {
-            v.rewrite(mapping);
-        }
-    }
-}
-
-impl Rewrite for usize {
-    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
-        *self = mapping[self];
-    }
-}
-
-impl<T: Rewrite> Rewrite for Option<T> {
-    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
-        if let Some(t) = self {
-            t.rewrite(mapping);
-        }
-    }
-}
-
-impl<T: Rewrite> Rewrite for &mut T {
-    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
-        (*self).rewrite(mapping);
     }
 }
 
