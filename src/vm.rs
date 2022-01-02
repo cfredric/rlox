@@ -38,7 +38,6 @@ pub struct VM<'opt> {
 const MAX_FRAMES: usize = 1024;
 
 pub enum InterpretResult {
-    Ok,
     CompileError,
     RuntimeError,
 }
@@ -76,24 +75,6 @@ fn now_native(_args: &[Value]) -> Value {
         Err(_) => 0,
     };
     Value::Double(now as f64)
-}
-
-macro_rules! binary_op {
-    ($vm:ident, $op:expr, $value_type:expr) => {{
-        let b = $vm.stack.pop();
-        let a = $vm.stack.pop();
-        match (a, b) {
-            (Value::Double(ad), Value::Double(bd)) => {
-                $vm.stack.push($value_type($op(ad, bd)));
-            }
-            _ => {
-                $vm.runtime_error("Operands must be numbers.");
-                $vm.stack.push(a);
-                $vm.stack.push(b);
-                return InterpretResult::RuntimeError;
-            }
-        }
-    }};
 }
 
 impl<'opt> VM<'opt> {
@@ -236,6 +217,26 @@ impl<'opt> VM<'opt> {
         conc.push_str(s);
         conc.push_str(t);
         Value::ObjIndex(self.take_string(conc))
+    }
+    fn binary_op<R>(
+        &mut self,
+        op: fn(f64, f64) -> R,
+        value_type: fn(R) -> Value,
+    ) -> Result<(), InterpretResult> {
+        let b = self.stack.pop();
+        let a = self.stack.pop();
+        match (a, b) {
+            (Value::Double(ad), Value::Double(bd)) => {
+                self.stack.push(value_type(op(ad, bd)));
+                Ok(())
+            }
+            _ => {
+                self.runtime_error("Operands must be numbers.");
+                self.stack.push(a);
+                self.stack.push(b);
+                Err(InterpretResult::RuntimeError)
+            }
+        }
     }
 
     fn runtime_error(&mut self, message: &str) {
@@ -587,7 +588,7 @@ impl<'opt> VM<'opt> {
         );
     }
 
-    fn run(&mut self) -> InterpretResult {
+    fn run(&mut self) -> Result<(), InterpretResult> {
         loop {
             if self.opt.trace_execution {
                 self.print_stack_slice("stack", 0);
@@ -623,7 +624,7 @@ impl<'opt> VM<'opt> {
                             self.print_stack_slice("stack", 0);
                         }
                         debug_assert!(self.stack.stack.is_empty());
-                        return InterpretResult::Ok;
+                        return Ok(());
                     }
 
                     self.stack.stack.truncate(finished_frame.frame_start);
@@ -633,7 +634,7 @@ impl<'opt> VM<'opt> {
                     Value::Double(d) => self.stack.push(Value::Double(-d)),
                     _ => {
                         self.runtime_error("Operand must be a number.");
-                        return InterpretResult::RuntimeError;
+                        return Err(InterpretResult::RuntimeError);
                     }
                 },
                 OpCode::Add => {
@@ -662,11 +663,11 @@ impl<'opt> VM<'opt> {
                         _ => {}
                     };
                     self.runtime_error("Operands must be two numbers or two strings.");
-                    return InterpretResult::RuntimeError;
+                    return Err(InterpretResult::RuntimeError);
                 }
-                OpCode::Subtract => binary_op!(self, |a, b| a - b, Value::Double),
-                OpCode::Multiply => binary_op!(self, |a, b| a * b, Value::Double),
-                OpCode::Divide => binary_op!(self, |a, b| a / b, Value::Double),
+                OpCode::Subtract => self.binary_op(|a, b| a - b, Value::Double)?,
+                OpCode::Multiply => self.binary_op(|a, b| a * b, Value::Double)?,
+                OpCode::Divide => self.binary_op(|a, b| a / b, Value::Double)?,
                 OpCode::Nil => self.stack.push(Value::Nil),
                 OpCode::Bool(b) => self.stack.push(Value::Bool(*b)),
                 OpCode::Not => {
@@ -678,8 +679,8 @@ impl<'opt> VM<'opt> {
                     let a = self.stack.pop();
                     self.stack.push(Value::Bool(Value::equal(a, b)));
                 }
-                OpCode::Greater => binary_op!(self, |a, b| a > b, Value::Bool),
-                OpCode::Less => binary_op!(self, |a, b| a < b, Value::Bool),
+                OpCode::Greater => self.binary_op(|a, b| a > b, Value::Bool)?,
+                OpCode::Less => self.binary_op(|a, b| a < b, Value::Bool)?,
                 OpCode::Print => {
                     println!("{}", self.stack.pop().print(&self.heap));
                 }
@@ -698,7 +699,7 @@ impl<'opt> VM<'opt> {
                     } else {
                         let msg = format!("Undefined variable '{}'.", name);
                         self.runtime_error(&msg);
-                        return InterpretResult::RuntimeError;
+                        return Err(InterpretResult::RuntimeError);
                     }
                 }
                 OpCode::SetGlobal(index) => {
@@ -712,7 +713,7 @@ impl<'opt> VM<'opt> {
                         std::collections::hash_map::Entry::Vacant(e) => e.key().to_string(),
                     };
                     self.runtime_error(&format!("Undefined variable '{}'.", key));
-                    return InterpretResult::RuntimeError;
+                    return Err(InterpretResult::RuntimeError);
                 }
                 OpCode::SetLocal(slot) => {
                     let index = self.frame().slots() + *slot;
@@ -735,7 +736,7 @@ impl<'opt> VM<'opt> {
                 }
                 OpCode::Call(arity) => {
                     if !self.call_value(self.stack.peek(*arity), *arity) {
-                        return InterpretResult::RuntimeError;
+                        return Err(InterpretResult::RuntimeError);
                     }
                 }
                 OpCode::Closure(constant, upvalues) => {
@@ -795,12 +796,12 @@ impl<'opt> VM<'opt> {
                             }
                             let class_index = i.class_index;
                             if !self.bind_method(class_index, &name) {
-                                return InterpretResult::RuntimeError;
+                                return Err(InterpretResult::RuntimeError);
                             }
                         }
                         _ => {
                             self.runtime_error("Only instances have properties.");
-                            return InterpretResult::RuntimeError;
+                            return Err(InterpretResult::RuntimeError);
                         }
                     };
                 }
@@ -821,7 +822,7 @@ impl<'opt> VM<'opt> {
                         }
                         _ => {
                             self.runtime_error("Only instances have fields.");
-                            return InterpretResult::RuntimeError;
+                            return Err(InterpretResult::RuntimeError);
                         }
                     }
                 }
@@ -829,7 +830,7 @@ impl<'opt> VM<'opt> {
                     let name = self.read_string(*name_index).to_string();
                     let superclass_ptr = *self.stack.pop().as_obj_index().unwrap();
                     if !self.bind_method(superclass_ptr, &name) {
-                        return InterpretResult::RuntimeError;
+                        return Err(InterpretResult::RuntimeError);
                     }
                 }
                 OpCode::Method(constant) => {
@@ -839,7 +840,7 @@ impl<'opt> VM<'opt> {
                     let arg_count = *arg_count;
                     let method = self.read_string(*constant).to_string();
                     if !self.invoke(&method, arg_count) {
-                        return InterpretResult::RuntimeError;
+                        return Err(InterpretResult::RuntimeError);
                     }
                 }
                 OpCode::Inherit => {
@@ -857,7 +858,7 @@ impl<'opt> VM<'opt> {
                         }
                         _ => {
                             self.runtime_error("Superclass must be a class.");
-                            return InterpretResult::RuntimeError;
+                            return Err(InterpretResult::RuntimeError);
                         }
                     }
                 }
@@ -866,14 +867,14 @@ impl<'opt> VM<'opt> {
                     let method = self.read_string(*constant).to_string();
                     let superclass_ptr = *self.stack.pop().as_obj_index().unwrap();
                     if !self.invoke_from_class(superclass_ptr, &method, arg_count) {
-                        return InterpretResult::RuntimeError;
+                        return Err(InterpretResult::RuntimeError);
                     }
                 }
             }
         }
     }
 
-    pub fn interpret(&mut self, source: &str) -> InterpretResult {
+    pub fn interpret(&mut self, source: &str) -> Result<(), InterpretResult> {
         self.is_compiling = true;
         let compiler = Compiler::new(
             self.opt,
@@ -882,6 +883,7 @@ impl<'opt> VM<'opt> {
             crate::compiler::FunctionType::Script,
         );
         let function = compiler.compile();
+        self.is_compiling = false;
         match function {
             Some(function) => {
                 let function_heap_index = self.new_function(function);
@@ -892,14 +894,12 @@ impl<'opt> VM<'opt> {
                 self.call(closure_heap_index, 0);
             }
             None => {
-                self.is_compiling = false;
-                return InterpretResult::CompileError;
+                return Err(InterpretResult::CompileError);
             }
         };
 
-        self.is_compiling = false;
         if self.opt.compile_only {
-            return InterpretResult::Ok;
+            return Ok(());
         }
 
         self.run()

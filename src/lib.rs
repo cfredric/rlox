@@ -43,13 +43,12 @@ impl Opt {
 }
 
 pub fn run_file(opt: &Opt, source: String) -> Result<(), i32> {
-    let result = vm::VM::new(opt).interpret(&source);
-
-    match result {
-        vm::InterpretResult::CompileError => Err(65),
-        vm::InterpretResult::RuntimeError => Err(70),
-        vm::InterpretResult::Ok => Ok(()),
-    }
+    vm::VM::new(opt)
+        .interpret(&source)
+        .map_err(|err| match err {
+            vm::InterpretResult::CompileError => 65,
+            vm::InterpretResult::RuntimeError => 70,
+        })
 }
 
 pub fn repl(opt: &Opt) -> io::Result<()> {
@@ -68,7 +67,7 @@ pub fn repl(opt: &Opt) -> io::Result<()> {
             return Ok(());
         }
         if buffer != "\n" {
-            vm.interpret(&buffer);
+            let _ = vm.interpret(&buffer);
         }
         buffer.clear();
     }
