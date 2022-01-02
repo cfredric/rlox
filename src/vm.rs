@@ -365,8 +365,7 @@ impl<'opt> VM<'opt> {
 
     /// Captures the given stack slot as a local upvalue. Inserts the new
     /// upvalue into the linked list of upvalues on the heap, sorted by stack
-    /// slot (higher first). May insert below previously-closed upvalues, since
-    /// they don't have a meaningful stack index.
+    /// slot (higher first).
     fn capture_upvalue(&mut self, local: usize) -> usize {
         let mut prev_upvalue = None;
         let mut next = self.open_upvalues;
@@ -375,10 +374,8 @@ impl<'opt> VM<'opt> {
             next = self.heap.as_open_up_value(next.unwrap()).next;
         }
 
-        if let Some(ptr) = next {
-            if self.heap.as_open_up_value(ptr).slot == local {
-                return ptr;
-            }
+        if matches!(next, Some(ptr) if self.heap.as_open_up_value(ptr).slot == local) {
+            return next.unwrap();
         }
 
         let created_upvalue = self.new_upvalue(Open::new(local, next), &mut prev_upvalue);
@@ -392,15 +389,13 @@ impl<'opt> VM<'opt> {
         created_upvalue
     }
 
-    /// Closes upvalues that point to or above the given stack slot. Upvalues
-    /// that are already closed are ignored.
+    /// Closes upvalues that point to or above the given stack slot. This
+    /// includes removing the upvalue from the open_upvalues linked list.
     fn close_upvalues(&mut self, stack_slot: usize) {
-        while let Some(ptr) = self.open_upvalues {
+        while matches!(self.open_upvalues, Some(ptr) if self.heap.as_open_up_value(ptr).slot >= stack_slot)
+        {
+            let ptr = self.open_upvalues.unwrap();
             let open = self.heap.as_open_up_value(ptr);
-            if open.slot < stack_slot {
-                break;
-            }
-
             self.open_upvalues = open.next;
             self.heap.heap[ptr] = Obj::ClosedUpValue(Closed::new(self.stack.stack[open.slot]));
         }
