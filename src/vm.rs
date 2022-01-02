@@ -136,13 +136,12 @@ impl<'opt> VM<'opt> {
         self.allocate_object::<usize>(Obj::Class(Class::new(name)), None)
     }
 
-    pub fn new_instance(&mut self, class_index: usize) -> (usize, usize) {
-        let mut class_index = class_index;
+    pub fn new_instance(&mut self, class_index: &mut usize) -> usize {
         let instance = self.allocate_object(
-            Obj::Instance(Instance::new(class_index)),
-            Some(&mut class_index),
+            Obj::Instance(Instance::new(*class_index)),
+            Some(class_index),
         );
-        (instance, class_index)
+        instance
     }
 
     pub fn new_bound_method(&mut self, receiver: usize, closure_idx: usize) -> usize {
@@ -274,13 +273,15 @@ impl<'opt> VM<'opt> {
     }
 
     fn call_value(&mut self, callee: Value, arg_count: usize) -> bool {
-        if let Value::ObjIndex(heap_index) = callee {
+        if let Value::ObjIndex(mut heap_index) = callee {
             match &self.heap.heap[heap_index] {
                 Obj::String(_)
                 | Obj::Function(_)
                 | Obj::OpenUpValue(_)
                 | Obj::ClosedUpValue(_)
-                | Obj::Instance(_) => {}
+                | Obj::Instance(_) => {
+                    // Fall through to error handling.
+                }
                 Obj::Closure(_) => {
                     return self.call(heap_index, arg_count);
                 }
@@ -291,8 +292,8 @@ impl<'opt> VM<'opt> {
                     return true;
                 }
                 Obj::Class(_) => {
+                    let instance = self.new_instance(&mut heap_index);
                     let stack_len = self.stack.stack.len();
-                    let (instance, heap_index) = self.new_instance(heap_index);
                     self.stack.stack[stack_len - arg_count - 1] = Value::ObjIndex(instance);
 
                     if let Some(idx) = self
