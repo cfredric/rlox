@@ -19,6 +19,8 @@ pub(crate) struct Compiler<'opt, 'source, 'vm> {
 
     functions: Vec<FunctionState<'source>>,
     class_compilers: Vec<ClassState>,
+
+    block_depth: usize,
 }
 
 struct FunctionState<'source> {
@@ -80,6 +82,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             vm,
             functions: vec![FunctionState::with_name(function_type, "script")],
             class_compilers: Vec::new(),
+            block_depth: 0,
         }
     }
 
@@ -220,6 +223,11 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
         self.emit_opcode(OpCode::Class(name_constant));
         self.define_variable(name_constant);
+
+        if self.class_compilers.len() > 255 {
+            self.error("Too many nested classes.");
+            return;
+        }
 
         self.class_compilers.push(ClassState::new());
 
@@ -374,14 +382,26 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn block(&mut self) {
-        while !self.check(TokenType::RightBrace) && !self.check(TokenType::Eof) {
-            self.declaration();
+        if self.block_depth > 256 {
+            self.error("Too many nested blocks.");
+            return;
+        }
+        let mut comp = scopeguard::guard(self, |comp| {
+            comp.block_depth = comp.block_depth - 1;
+        });
+        comp.block_depth += 1;
+        while !comp.check(TokenType::RightBrace) && !comp.check(TokenType::Eof) {
+            comp.declaration();
         }
 
-        self.consume(TokenType::RightBrace, "Expect '}' after block.");
+        comp.consume(TokenType::RightBrace, "Expect '}' after block.");
     }
 
     fn function(&mut self, ty: FunctionType) {
+        if self.functions.len() > 255 {
+            self.error("Too many nested functions.");
+            return;
+        }
         self.functions.push(if ty == FunctionType::Script {
             FunctionState::new(ty)
         } else {
