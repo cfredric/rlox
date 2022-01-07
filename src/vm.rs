@@ -138,11 +138,10 @@ impl<'opt> VM<'opt> {
     }
 
     pub fn new_instance(&mut self, class_index: &mut usize) -> usize {
-        let instance = self.allocate_object(
+        self.allocate_object(
             Obj::Instance(Instance::new(*class_index)),
             Some(class_index),
-        );
-        instance
+        )
     }
 
     pub fn new_bound_method(&mut self, receiver: usize, closure_idx: usize) -> usize {
@@ -506,24 +505,15 @@ impl<'opt> VM<'opt> {
         pending_rewrites: Option<(&mut Obj, &mut R)>,
     ) -> usize {
         // Build the mapping from pre-sweep pointers to post-sweep pointers.
-        let mapping = {
-            let mut mapping = HashMap::new();
-            let mut post_compaction_index = 0;
-            for i in self
-                .heap
-                .heap
-                .iter()
-                .enumerate()
-                .filter_map(|(i, obj)| obj.is_marked().then(|| i))
-            {
-                // Since the object at index `i` is marked, it is reachable, and
-                // will be kept.  We add an entry for this pointer, and then
-                // increment the post-compaction pointer.
-                mapping.insert(i, post_compaction_index);
-                post_compaction_index += 1;
-            }
-            mapping
-        };
+        let mapping = self
+            .heap
+            .heap
+            .iter()
+            .enumerate()
+            .filter_map(|(i, obj)| obj.is_marked().then(|| i))
+            .enumerate()
+            .map(|(post, pre)| (pre, post))
+            .collect();
 
         // Remove unreachable objects.
         let before = self.heap.heap.len();

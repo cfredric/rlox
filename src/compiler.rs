@@ -387,7 +387,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             return;
         }
         let mut comp = scopeguard::guard(self, |comp| {
-            comp.block_depth = comp.block_depth - 1;
+            comp.block_depth -= 1;
         });
         comp.block_depth += 1;
         while !comp.check(TokenType::RightBrace) && !comp.check(TokenType::Eof) {
