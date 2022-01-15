@@ -883,7 +883,6 @@ impl<'opt> VM<'opt> {
             crate::compiler::FunctionType::Script,
         );
         let function = compiler.compile();
-        self.is_compiling = false;
         match function {
             Some(function) => {
                 let function_heap_index = self.new_function(function);
@@ -894,10 +893,12 @@ impl<'opt> VM<'opt> {
                 self.call(closure_heap_index, 0);
             }
             None => {
+                self.is_compiling = false;
                 return Err(InterpretResult::CompileError);
             }
         };
 
+        self.is_compiling = false;
         if self.opt.compile_only {
             return Ok(());
         }
