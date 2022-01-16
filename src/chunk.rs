@@ -3,6 +3,7 @@ use crate::heap::{Heap, Ptr};
 use crate::obj::UpValueIndex;
 use crate::print::Print;
 use crate::rewrite::Rewrite;
+use crate::stack::StackSlotOffset;
 use crate::value::Value;
 
 #[derive(Clone)]
@@ -13,12 +14,8 @@ pub enum OpCode {
     GetGlobal(ConstantIndex),
     DefineGlobal(ConstantIndex),
     SetGlobal(ConstantIndex),
-    /// Operand is the stack frame's slot. Starts counting from the start of the
-    /// frame.
-    GetLocal(usize),
-    /// Operand is the stack frame's slot. Starts counting from the start of the
-    /// frame.
-    SetLocal(usize),
+    GetLocal(StackSlotOffset),
+    SetLocal(StackSlotOffset),
     Equal,
     Greater,
     Less,
@@ -146,8 +143,8 @@ impl Chunk {
             OpCode::DefineGlobal(i) => self.constant_instruction("OP_DEFINE_GLOBAL", heap, *i),
             OpCode::GetGlobal(i) => self.constant_instruction("OP_GET_GLOBAL", heap, *i),
             OpCode::SetGlobal(i) => self.constant_instruction("OP_SET_GLOBAL", heap, *i),
-            OpCode::GetLocal(i) => byte_instruction("OP_GET_LOCAL", *i),
-            OpCode::SetLocal(i) => byte_instruction("OP_SET_LOCAL", *i),
+            OpCode::GetLocal(i) => byte_instruction("OP_GET_LOCAL", i.0),
+            OpCode::SetLocal(i) => byte_instruction("OP_SET_LOCAL", i.0),
             OpCode::JumpIfFalse(distance) => jump_instruction("OP_JUMP_IF_FALSE", *distance, true),
             OpCode::Jump(distance) => jump_instruction("OP_JUMP", *distance, true),
             OpCode::Loop(distance) => jump_instruction("OP_LOOP", *distance, false),
@@ -163,7 +160,7 @@ impl Chunk {
                         .iter()
                         .map(|upvalue| {
                             let (ty, index) = match upvalue {
-                                Upvalue::Local { index } => ("local", *index),
+                                Upvalue::Local { index } => ("local", index.0),
                                 Upvalue::Nonlocal { index } => ("upvalue", index.0),
                             };
                             format!("        |   {} {}", ty, index)

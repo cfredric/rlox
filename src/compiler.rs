@@ -2,6 +2,7 @@ mod scanner;
 
 use crate::chunk::{Chunk, ConstantIndex, OpCode};
 use crate::obj::{Function, UpValueIndex};
+use crate::stack::StackSlotOffset;
 use crate::value::Value;
 use crate::vm::VM;
 use crate::Opt;
@@ -50,6 +51,10 @@ impl<'source> FunctionState<'source> {
             scope_depth: 0,
             upvalues: Vec::new(),
         }
+    }
+
+    fn local_at_mut(&mut self, offset: StackSlotOffset) -> &mut Local<'source> {
+        &mut self.locals[offset.0]
     }
 }
 
@@ -739,7 +744,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         }
     }
 
-    fn resolve_local(&mut self, state_idx: usize, name: &str) -> Option<usize> {
+    fn resolve_local(&mut self, state_idx: usize, name: &str) -> Option<StackSlotOffset> {
         if let Some((i, local)) = self.functions[state_idx]
             .locals
             .iter()
@@ -749,9 +754,10 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         {
             if local.depth.is_none() {
                 self.error("Can't read local variable in its own initializer.");
+                return Some(StackSlotOffset::error());
             }
 
-            return Some(i);
+            return Some(StackSlotOffset::new(i));
         }
 
         None
@@ -782,7 +788,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
         let enclosing = state_index - 1;
         if let Some(local) = self.resolve_local(enclosing, name) {
-            self.functions[enclosing].locals[local].is_captured = true;
+            self.functions[enclosing].local_at_mut(local).is_captured = true;
             return Some(self.add_upvalue(state_index, Upvalue::Local { index: local }));
         }
 
@@ -795,7 +801,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
     fn emit_return(&mut self) {
         if self.current().function_type == FunctionType::Initializer {
-            self.emit_opcode(OpCode::GetLocal(0));
+            self.emit_opcode(OpCode::GetLocal(StackSlotOffset::special()));
         } else {
             self.emit_opcode(OpCode::Nil);
         }
@@ -1013,6 +1019,6 @@ pub enum FunctionType {
 
 #[derive(Clone, Eq, PartialEq)]
 pub enum Upvalue {
-    Local { index: usize },
+    Local { index: StackSlotOffset },
     Nonlocal { index: UpValueIndex },
 }

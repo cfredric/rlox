@@ -10,8 +10,25 @@ impl Slot {
         Self(s)
     }
 
-    pub fn offset(&self, n: usize) -> Self {
-        Slot::new(self.0 + n)
+    pub fn offset(&self, offset: StackSlotOffset) -> Self {
+        Slot::new(self.0 + offset.0)
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct StackSlotOffset(pub usize);
+
+impl StackSlotOffset {
+    pub fn new(n: usize) -> Self {
+        Self(n)
+    }
+
+    pub fn error() -> Self {
+        Self(99999)
+    }
+
+    pub fn special() -> Self {
+        Self(0)
     }
 }
 
