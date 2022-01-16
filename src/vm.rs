@@ -247,12 +247,12 @@ impl<'opt> VM<'opt> {
     }
 
     fn define_native(&mut self, name: &str, function: NativeFn) {
-        let ptr = self.copy_string(name);
-        self.heap.deref_mut(ptr).set_gc_exempt();
-        let ptr = Value::ObjReference(ptr);
-        self.stack.push(ptr);
-        let ptr = Value::ObjReference(self.new_native(function));
-        self.stack.push(ptr);
+        let string = self.copy_string(name);
+        self.heap.deref_mut(string).set_gc_exempt();
+        let str_ref = Value::ObjReference(string);
+        self.stack.push(str_ref);
+        let func_ref = Value::ObjReference(self.new_native(function));
+        self.stack.push(func_ref);
 
         let key = self
             .heap
