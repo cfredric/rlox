@@ -215,7 +215,7 @@ impl Rewrite for Closure {
 pub struct Class {
     header: Header,
     name: String,
-    /// Each method value is an index into the heap, pointing to a Closure.
+    /// Each method value is a pointer into the heap, pointing to a Closure.
     pub methods: HashMap<String, Ptr>,
 }
 

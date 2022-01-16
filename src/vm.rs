@@ -723,8 +723,7 @@ impl<'opt> VM<'opt> {
                     }
                 }
                 OpCode::Closure(constant, upvalues) => {
-                    let function_heap_index =
-                        *self.read_constant(*constant).as_obj_reference().unwrap();
+                    let function = *self.read_constant(*constant).as_obj_reference().unwrap();
                     let upvalues = upvalues
                         .iter()
                         .map(|uv| {
@@ -735,8 +734,8 @@ impl<'opt> VM<'opt> {
                             }
                         })
                         .collect();
-                    let closure_heap_index = self.new_closure(function_heap_index, upvalues);
-                    self.stack.push(Value::ObjReference(closure_heap_index));
+                    let closure = self.new_closure(function, upvalues);
+                    self.stack.push(Value::ObjReference(closure));
                 }
                 OpCode::GetUpvalue(slot) => {
                     let uv = self.closure().upvalues[*slot];
