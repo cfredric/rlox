@@ -768,7 +768,8 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             .upvalues
             .iter()
             .enumerate()
-            .find_map(|(idx, uv)| if upvalue == *uv { Some(idx) } else { None })
+            .find(|(_, uv)| upvalue == **uv)
+            .map(|(i, _)| i)
         {
             return UpValueIndex(index);
         }
