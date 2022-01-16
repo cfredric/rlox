@@ -4,11 +4,11 @@ use enum_as_inner::EnumAsInner;
 
 use crate::{
     chunk::Chunk,
+    heap::{Heap, Ptr},
     print::Print,
     rewrite::Rewrite,
     stack::Slot,
     value::Value,
-    vm::{Heap, Ptr},
 };
 
 pub struct Header {

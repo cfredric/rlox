@@ -3,9 +3,9 @@ use std::collections::HashMap;
 use enum_as_inner::EnumAsInner;
 
 use crate::{
+    heap::{Heap, Ptr},
     print::Print,
     rewrite::Rewrite,
-    vm::{Heap, Ptr},
 };
 
 #[derive(Copy, Clone, EnumAsInner)]
