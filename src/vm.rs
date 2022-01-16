@@ -711,19 +711,21 @@ impl<'opt> VM<'opt> {
                     let function = *self.read_constant(*constant).as_obj_reference().unwrap();
                     let upvalues = upvalues
                         .iter()
-                        .map(|uv| {
-                            if uv.is_local {
-                                self.capture_upvalue(self.frame().start_slot.offset(uv.index))
-                            } else {
-                                self.heap.as_closure(self.frame().closure).upvalues[uv.index]
+                        .map(|uv| match uv {
+                            crate::compiler::Upvalue::Local { index } => {
+                                self.capture_upvalue(self.frame().start_slot.offset(*index))
                             }
+                            crate::compiler::Upvalue::Nonlocal { index } => self
+                                .heap
+                                .as_closure(self.frame().closure)
+                                .upvalue_at(*index),
                         })
                         .collect();
                     let closure = self.new_closure(function, upvalues);
                     self.stack.push(Value::ObjReference(closure));
                 }
                 OpCode::GetUpvalue(slot) => {
-                    let uv = self.closure().upvalues[*slot];
+                    let uv = self.closure().upvalue_at(*slot);
                     let val = match &self.heap.deref(uv) {
                         Obj::ClosedUpValue(c) => c.value,
                         Obj::OpenUpValue(o) => self.stack.at(o.slot),
@@ -732,7 +734,7 @@ impl<'opt> VM<'opt> {
                     self.stack.push(val);
                 }
                 OpCode::SetUpvalue(slot) => {
-                    let uv = self.closure().upvalues[*slot];
+                    let uv = self.closure().upvalue_at(*slot);
                     let val = self.stack.peek(0);
                     match &mut self.heap.deref_mut(uv) {
                         Obj::ClosedUpValue(c) => c.value = val,

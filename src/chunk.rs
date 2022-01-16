@@ -1,5 +1,6 @@
 use crate::compiler::Upvalue;
 use crate::heap::{Heap, Ptr};
+use crate::obj::UpValueIndex;
 use crate::print::Print;
 use crate::rewrite::Rewrite;
 use crate::value::Value;
@@ -44,10 +45,8 @@ pub enum OpCode {
     /// second operand is the list of upvalue metadata used by the closure.
     Closure(ConstantIndex, Vec<Upvalue>),
     CloseUpvalue,
-    /// Operand is the index into the closure's upvalue array.
-    GetUpvalue(usize),
-    /// Operand is the index into the closure's upvalue array.
-    SetUpvalue(usize),
+    GetUpvalue(UpValueIndex),
+    SetUpvalue(UpValueIndex),
     GetProperty(ConstantIndex),
     SetProperty(ConstantIndex),
     /// Operand is the index into the constants table for the superclass method name.
@@ -162,16 +161,18 @@ impl Chunk {
                     "{}",
                     upvalues
                         .iter()
-                        .map(|upvalue| format!(
-                            "        |   {} {}",
-                            if upvalue.is_local { "local" } else { "upvalue" },
-                            upvalue.index
-                        ))
+                        .map(|upvalue| {
+                            let (ty, index) = match upvalue {
+                                Upvalue::Local { index } => ("local", *index),
+                                Upvalue::Nonlocal { index } => ("upvalue", index.0),
+                            };
+                            format!("        |   {} {}", ty, index)
+                        })
                         .collect::<String>()
                 );
             }
-            OpCode::GetUpvalue(index) => byte_instruction("OP_GET_UPVALUE", *index),
-            OpCode::SetUpvalue(index) => byte_instruction("OP_SET_UPVALUE", *index),
+            OpCode::GetUpvalue(index) => byte_instruction("OP_GET_UPVALUE", index.0),
+            OpCode::SetUpvalue(index) => byte_instruction("OP_SET_UPVALUE", index.0),
             OpCode::CloseUpvalue => simple_instruction("OP_CLOSE_UPVALUE"),
             OpCode::Class(index) => self.constant_instruction("OP_CLASS", heap, *index),
             OpCode::GetProperty(constant) => {

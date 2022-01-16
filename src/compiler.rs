@@ -1,7 +1,7 @@
 mod scanner;
 
 use crate::chunk::{Chunk, ConstantIndex, OpCode};
-use crate::obj::Function;
+use crate::obj::{Function, UpValueIndex};
 use crate::value::Value;
 use crate::vm::VM;
 use crate::Opt;
@@ -740,56 +740,42 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn resolve_local(&mut self, state_idx: usize, name: &str) -> Option<usize> {
-        let local = self.functions[state_idx]
+        if let Some((i, local)) = self.functions[state_idx]
             .locals
             .iter()
             .enumerate()
             .rev()
-            .find_map(|(i, local)| {
-                if local.name.lexeme == name {
-                    Some((i, local))
-                } else {
-                    None
-                }
-            });
-
-        if let Some((i, local)) = local {
+            .find(|(_, local)| local.name.lexeme == name)
+        {
             if local.depth.is_none() {
                 self.error("Can't read local variable in its own initializer.");
             }
+
             return Some(i);
         }
 
         None
     }
 
-    fn add_upvalue(&mut self, func_state_index: usize, index: usize, is_local: bool) -> usize {
+    fn add_upvalue(&mut self, func_state_index: usize, upvalue: Upvalue) -> UpValueIndex {
         if let Some(index) = self.functions[func_state_index]
             .upvalues
             .iter()
             .enumerate()
-            .find_map(|(idx, upvalue)| {
-                if upvalue.index == index && upvalue.is_local == is_local {
-                    Some(idx)
-                } else {
-                    None
-                }
-            })
+            .find_map(|(idx, uv)| if upvalue == *uv { Some(idx) } else { None })
         {
-            return index;
+            return UpValueIndex(index);
         }
 
         if self.functions[func_state_index].upvalues.len() >= 256 {
             self.error("Too many closure variables in function.");
-            return 0;
+            return UpValueIndex(99999);
         }
-        self.functions[func_state_index]
-            .upvalues
-            .push(Upvalue { index, is_local });
-        self.functions[func_state_index].upvalues.len() - 1
+        self.functions[func_state_index].upvalues.push(upvalue);
+        UpValueIndex(self.functions[func_state_index].upvalues.len() - 1)
     }
 
-    fn resolve_upvalue(&mut self, state_index: usize, name: &str) -> Option<usize> {
+    fn resolve_upvalue(&mut self, state_index: usize, name: &str) -> Option<UpValueIndex> {
         if state_index == 0 {
             return None;
         }
@@ -797,11 +783,11 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         let enclosing = state_index - 1;
         if let Some(local) = self.resolve_local(enclosing, name) {
             self.functions[enclosing].locals[local].is_captured = true;
-            return Some(self.add_upvalue(state_index, local, true));
+            return Some(self.add_upvalue(state_index, Upvalue::Local { index: local }));
         }
 
         if let Some(upvalue) = self.resolve_upvalue(enclosing, name) {
-            return Some(self.add_upvalue(state_index, upvalue, false));
+            return Some(self.add_upvalue(state_index, Upvalue::Nonlocal { index: upvalue }));
         }
 
         None
@@ -1025,8 +1011,8 @@ pub enum FunctionType {
     Script,
 }
 
-#[derive(Clone)]
-pub struct Upvalue {
-    pub index: usize,
-    pub is_local: bool,
+#[derive(Clone, Eq, PartialEq)]
+pub enum Upvalue {
+    Local { index: usize },
+    Nonlocal { index: UpValueIndex },
 }

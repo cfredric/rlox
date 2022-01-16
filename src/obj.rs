@@ -192,7 +192,7 @@ impl Rewrite for NativeFn {
 pub struct Closure {
     header: Header,
     pub function: Ptr,
-    pub upvalues: Vec<Ptr>,
+    upvalues: Vec<Ptr>,
 }
 
 impl Closure {
@@ -203,7 +203,18 @@ impl Closure {
             upvalues,
         }
     }
+
+    pub fn upvalue_at(&self, index: UpValueIndex) -> Ptr {
+        self.upvalues[index.0]
+    }
+
+    pub fn upvalues<'s>(&'s self) -> impl Iterator<Item = &Ptr> + 's {
+        self.upvalues.iter()
+    }
 }
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct UpValueIndex(pub usize);
 
 impl Rewrite for Closure {
     fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {

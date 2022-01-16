@@ -87,7 +87,7 @@ impl Heap {
             }
             Obj::Closure(c) => {
                 let func = c.function;
-                let uvs = c.upvalues.clone();
+                let uvs = c.upvalues().cloned().collect::<Vec<_>>();
                 self.mark_object(func);
                 for uv in &uvs {
                     self.mark_object(*uv);
