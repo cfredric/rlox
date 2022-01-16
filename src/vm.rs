@@ -575,7 +575,7 @@ impl<'opt> VM<'opt> {
         loop {
             if self.opt.trace_execution {
                 self.print_stack_slice("stack", Slot::new(0));
-                self.print_stack_slice("frame", self.frame().frame_start);
+                self.print_stack_slice("frame", self.frame().start_slot);
 
                 self.function()
                     .chunk
@@ -599,7 +599,7 @@ impl<'opt> VM<'opt> {
                 }
                 OpCode::Return => {
                     let result = self.stack.pop();
-                    self.close_upvalues(self.frame().slots());
+                    self.close_upvalues(self.frame().start_slot);
                     let finished_frame = self.frames.pop().unwrap();
                     if self.frames.is_empty() {
                         self.stack.pop();
@@ -610,7 +610,7 @@ impl<'opt> VM<'opt> {
                         return Ok(());
                     }
 
-                    self.stack.truncate_from(finished_frame.frame_start);
+                    self.stack.truncate_from(finished_frame.start_slot);
                     self.stack.push(result);
                 }
                 OpCode::Negate => match self.stack.pop() {
@@ -699,11 +699,11 @@ impl<'opt> VM<'opt> {
                     return Err(InterpretResult::RuntimeError);
                 }
                 OpCode::SetLocal(slot_offset) => {
-                    let slot = self.frame().slots().offset(*slot_offset);
+                    let slot = self.frame().start_slot.offset(*slot_offset);
                     self.stack.assign(slot, self.stack.peek(0));
                 }
                 OpCode::GetLocal(slot_offset) => {
-                    let value = self.stack.at(self.frame().slots().offset(*slot_offset));
+                    let value = self.stack.at(self.frame().start_slot.offset(*slot_offset));
                     self.stack.push(value);
                 }
                 OpCode::JumpIfFalse(distance) => {
@@ -728,7 +728,7 @@ impl<'opt> VM<'opt> {
                         .iter()
                         .map(|uv| {
                             if uv.is_local {
-                                self.capture_upvalue(self.frame().slots().offset(uv.index))
+                                self.capture_upvalue(self.frame().start_slot.offset(uv.index))
                             } else {
                                 self.heap.as_closure(self.frame().closure).upvalues[uv.index]
                             }
@@ -894,20 +894,16 @@ struct CallFrame {
     // Offset into function.chunk.code.
     ip: usize,
     // The first stack slot that belongs to this frame.
-    frame_start: Slot,
+    start_slot: Slot,
 }
 
 impl CallFrame {
-    fn new(closure: Ptr, frame_start: Slot) -> Self {
+    fn new(closure: Ptr, start_slot: Slot) -> Self {
         Self {
             closure,
             ip: 0,
-            frame_start,
+            start_slot,
         }
-    }
-
-    fn slots(&self) -> Slot {
-        self.frame_start
     }
 }
 
