@@ -155,31 +155,39 @@ impl Heap {
     }
 
     pub fn as_string(&self, ptr: Ptr) -> &LoxString {
-        self.heap[ptr.0].as_string().unwrap()
+        self.heap[ptr.0].as_string().expect("expected a LoxString")
     }
     pub fn as_function(&self, ptr: Ptr) -> &Function {
-        self.heap[ptr.0].as_function().unwrap()
+        self.heap[ptr.0].as_function().expect("expected a Function")
     }
     pub fn as_closure(&self, ptr: Ptr) -> &Closure {
-        self.heap[ptr.0].as_closure().unwrap()
+        self.heap[ptr.0].as_closure().expect("expected a Closure")
     }
     pub fn as_class(&self, ptr: Ptr) -> &Class {
-        self.heap[ptr.0].as_class().unwrap()
+        self.heap[ptr.0].as_class().expect("expected a Class")
     }
     pub fn as_class_mut(&mut self, ptr: Ptr) -> &mut Class {
-        self.heap[ptr.0].as_class_mut().unwrap()
+        self.heap[ptr.0].as_class_mut().expect("expected a Class")
     }
     pub fn as_instance(&self, ptr: Ptr) -> &Instance {
-        self.heap[ptr.0].as_instance().unwrap()
+        self.heap[ptr.0]
+            .as_instance()
+            .expect("expected an Instance")
     }
     pub fn as_instance_mut(&mut self, ptr: Ptr) -> &mut Instance {
-        self.heap[ptr.0].as_instance_mut().unwrap()
+        self.heap[ptr.0]
+            .as_instance_mut()
+            .expect("expected an Instance")
     }
     pub fn as_open_up_value(&self, ptr: Ptr) -> &Open {
-        self.heap[ptr.0].as_open_up_value().unwrap()
+        self.heap[ptr.0]
+            .as_open_up_value()
+            .expect("expected an OpenUpValue")
     }
     pub fn as_open_up_value_mut(&mut self, ptr: Ptr) -> &mut Open {
-        self.heap[ptr.0].as_open_up_value_mut().unwrap()
+        self.heap[ptr.0]
+            .as_open_up_value_mut()
+            .expect("expected an OpenUpValue")
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Obj> + '_ {

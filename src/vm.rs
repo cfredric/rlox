@@ -197,7 +197,10 @@ impl<'opt> VM<'opt> {
 
     /// Reads a string from the constants table.
     fn read_string(&self, index: ConstantIndex) -> &str {
-        let ptr = *self.read_constant(index).as_obj_reference().unwrap();
+        let ptr = *self
+            .read_constant(index)
+            .as_obj_reference()
+            .expect("constant index should be a string reference");
         &self.heap.as_string(ptr).string
     }
 
@@ -254,13 +257,7 @@ impl<'opt> VM<'opt> {
         let func_ref = Value::ObjReference(self.new_native(function));
         self.stack.push(func_ref);
 
-        let key = self
-            .heap
-            .as_string(*self.stack.at(Slot::new(0)).as_obj_reference().unwrap())
-            .string
-            .to_string();
-        let value = self.stack.at(Slot::new(1));
-        self.globals.insert(key, value);
+        self.globals.insert(name.to_string(), func_ref);
 
         self.stack.pop();
         self.stack.pop();
@@ -326,7 +323,11 @@ impl<'opt> VM<'opt> {
     }
 
     fn invoke(&mut self, name: &str, arg_count: usize) -> bool {
-        let receiver = *self.stack.peek(arg_count).as_obj_reference().unwrap();
+        let receiver = *self
+            .stack
+            .peek(arg_count)
+            .as_obj_reference()
+            .expect("receiver stack slot should have been an object reference");
         let (class, field) = match self.heap.deref(receiver).as_instance() {
             Some(i) => (i.class, i.fields.get(name).copied()),
             None => {
@@ -352,7 +353,14 @@ impl<'opt> VM<'opt> {
             }
         };
 
-        let bound = self.new_bound_method(*self.stack.peek(0).as_obj_reference().unwrap(), method);
+        let bound = self.new_bound_method(
+            *self
+                .stack
+                .peek(0)
+                .as_obj_reference()
+                .expect("receiver stack slot should have been an object reference"),
+            method,
+        );
         self.stack.pop();
         self.stack.push(Value::ObjReference(bound));
         true
@@ -366,11 +374,14 @@ impl<'opt> VM<'opt> {
         let mut next = self.open_upvalues;
         while matches!(next, Some(uv) if self.heap.as_open_up_value(uv).slot > slot) {
             prev_upvalue = next;
-            next = self.heap.as_open_up_value(next.unwrap()).next;
+            next = self
+                .heap
+                .as_open_up_value(next.expect("already checked via matches!"))
+                .next;
         }
 
         if matches!(next, Some(ptr) if self.heap.as_open_up_value(ptr).slot == slot) {
-            return next.unwrap();
+            return next.expect("already checked via matches!");
         }
 
         let created_upvalue = self.new_upvalue(Open::new(slot, next), &mut prev_upvalue);
@@ -389,7 +400,7 @@ impl<'opt> VM<'opt> {
     fn close_upvalues(&mut self, slot: Slot) {
         while matches!(self.open_upvalues, Some(ptr) if self.heap.as_open_up_value(ptr).slot >= slot)
         {
-            let ptr = self.open_upvalues.unwrap();
+            let ptr = self.open_upvalues.expect("already checked via matches!");
             let open = self.heap.as_open_up_value(ptr);
             self.open_upvalues = open.next;
             let obj = Obj::ClosedUpValue(Closed::new(self.stack.at(open.slot)));
@@ -398,8 +409,16 @@ impl<'opt> VM<'opt> {
     }
 
     fn define_method(&mut self, name_ptr: Ptr) {
-        let method = *self.stack.peek(0).as_obj_reference().unwrap();
-        let class = *self.stack.peek(1).as_obj_reference().unwrap();
+        let method = *self
+            .stack
+            .peek(0)
+            .as_obj_reference()
+            .expect("stack slot should have been a method reference");
+        let class = *self
+            .stack
+            .peek(1)
+            .as_obj_reference()
+            .expect("stack slot should have been a class reference");
         let name = self.heap.as_string(name_ptr).string.clone();
         let class = self.heap.as_class_mut(class);
 
@@ -585,7 +604,7 @@ impl<'opt> VM<'opt> {
                 OpCode::Return => {
                     let result = self.stack.pop();
                     self.close_upvalues(self.frame().start_slot);
-                    let finished_frame = self.frames.pop().unwrap();
+                    let finished_frame = self.frames.pop().expect("frames cannot be empty");
                     if self.frames.is_empty() {
                         self.stack.pop();
                         if self.opt.trace_execution {
@@ -710,7 +729,10 @@ impl<'opt> VM<'opt> {
                     }
                 }
                 OpCode::Closure { function, upvalues } => {
-                    let function = *self.read_constant(*function).as_obj_reference().unwrap();
+                    let function = *self
+                        .read_constant(*function)
+                        .as_obj_reference()
+                        .expect("constant should have been a function reference");
                     let upvalues = upvalues
                         .iter()
                         .map(|uv| match uv {
@@ -799,13 +821,22 @@ impl<'opt> VM<'opt> {
                 }
                 OpCode::GetSuper { method } => {
                     let name = self.read_string(*method).to_string();
-                    let superclass = *self.stack.pop().as_obj_reference().unwrap();
+                    let superclass = *self
+                        .stack
+                        .pop()
+                        .as_obj_reference()
+                        .expect("top of stack should have been a class reference");
                     if !self.bind_method(superclass, &name) {
                         return Err(InterpretResult::RuntimeError);
                     }
                 }
                 OpCode::Method { name } => {
-                    self.define_method(*self.read_constant(*name).as_obj_reference().unwrap());
+                    self.define_method(
+                        *self
+                            .read_constant(*name)
+                            .as_obj_reference()
+                            .expect("constant should have been a string reference"),
+                    );
                 }
                 OpCode::Invoke {
                     method_name,
@@ -823,7 +854,11 @@ impl<'opt> VM<'opt> {
                             if self.heap.deref(superclass).as_class().is_some() =>
                         {
                             let superclass_methods = self.heap.as_class(superclass).methods.clone();
-                            let subclass = *self.stack.peek(0).as_obj_reference().unwrap();
+                            let subclass = *self
+                                .stack
+                                .peek(0)
+                                .as_obj_reference()
+                                .expect("stack top should have been a superclass reference");
                             self.heap
                                 .as_class_mut(subclass)
                                 .methods
@@ -839,7 +874,11 @@ impl<'opt> VM<'opt> {
                 OpCode::SuperInvoke { method, arg_count } => {
                     let arg_count = *arg_count;
                     let method = self.read_string(*method).to_string();
-                    let superclass = *self.stack.pop().as_obj_reference().unwrap();
+                    let superclass = *self
+                        .stack
+                        .pop()
+                        .as_obj_reference()
+                        .expect("stack top should have been a superclass reference");
                     if !self.invoke_from_class(superclass, &method, arg_count) {
                         return Err(InterpretResult::RuntimeError);
                     }

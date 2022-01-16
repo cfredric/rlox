@@ -464,7 +464,13 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
         while matches!(self.current().locals.last(), Some(local) if local.depth.map_or(false, |d| d > self.current().scope_depth))
         {
-            if self.current().locals.last().unwrap().is_captured {
+            if self
+                .current()
+                .locals
+                .last()
+                .expect("already checked via matches!")
+                .is_captured
+            {
                 self.emit_opcode(OpCode::CloseUpvalue);
             } else {
                 self.emit_opcode(OpCode::Pop);
@@ -667,7 +673,11 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         if self.current().scope_depth == 0 {
             return;
         }
-        self.current_mut().locals.last_mut().unwrap().depth = Some(self.current().scope_depth);
+        self.current_mut()
+            .locals
+            .last_mut()
+            .expect("locals is never empty")
+            .depth = Some(self.current().scope_depth);
     }
 
     fn declare_variable(&mut self) {
@@ -840,19 +850,27 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn current(&self) -> &FunctionState<'source> {
-        self.functions.last().unwrap()
+        self.functions
+            .last()
+            .expect("function stack should not be empty")
     }
 
     fn current_mut(&mut self) -> &mut FunctionState<'source> {
-        self.functions.last_mut().unwrap()
+        self.functions
+            .last_mut()
+            .expect("function stack should not be empty")
     }
 
     fn current_class(&self) -> &ClassState {
-        self.class_compilers.last().unwrap()
+        self.class_compilers
+            .last()
+            .expect("class stack should not be empty")
     }
 
     fn current_class_mut(&mut self) -> &mut ClassState {
-        self.class_compilers.last_mut().unwrap()
+        self.class_compilers
+            .last_mut()
+            .expect("class stack should not be empty")
     }
 
     fn error_at_current(&mut self, message: &str) {

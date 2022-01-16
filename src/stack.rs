@@ -47,7 +47,7 @@ impl Stack {
 
     /// Pops a value from the stack.
     pub fn pop(&mut self) -> Value {
-        self.stack.pop().unwrap()
+        self.stack.pop().expect("stack should not have been empty")
     }
 
     pub fn peek(&self, offset: usize) -> Value {
