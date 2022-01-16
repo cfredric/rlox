@@ -11,7 +11,7 @@ use crate::{
 pub struct Ptr(usize);
 
 impl Ptr {
-    pub fn new(index: usize) -> Self {
+    fn new(index: usize) -> Self {
         Self(index)
     }
 }
@@ -178,6 +178,13 @@ impl Heap {
 
     pub fn len(&self) -> usize {
         self.heap.len()
+    }
+
+    pub fn open_upvalues<'s>(&'s self) -> impl Iterator<Item = Ptr> + 's {
+        self.heap
+            .iter()
+            .enumerate()
+            .filter_map(|(i, o)| o.as_open_up_value().map(|_| Ptr::new(i)))
     }
 }
 

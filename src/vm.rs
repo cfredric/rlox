@@ -556,12 +556,7 @@ impl<'opt> VM<'opt> {
             .all(|(a, b)| a > b);
         let opens_ll = self.open_upvalues_iter().collect::<HashSet<_>>();
 
-        let opens_heap = self
-            .heap
-            .iter()
-            .enumerate()
-            .filter_map(|(i, o)| o.as_open_up_value().map(|_| Ptr::new(i)))
-            .collect();
+        let opens_heap = self.heap.open_upvalues().collect();
 
         opens_ll == opens_heap && is_sorted_and_unique
     }
