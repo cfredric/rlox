@@ -8,9 +8,13 @@ use crate::value::Value;
 
 #[derive(Clone)]
 pub enum OpCode {
-    Constant(ConstantIndex),
+    Constant {
+        index: ConstantIndex,
+    },
     Nil,
-    Bool(bool),
+    Bool {
+        value: bool,
+    },
     GetGlobal(ConstantIndex),
     DefineGlobal(ConstantIndex),
     SetGlobal(ConstantIndex),
@@ -27,34 +31,50 @@ pub enum OpCode {
     Negate,
     Pop,
     Print,
-    /// Operand is the distance to jump.
-    JumpIfFalse(usize),
-    /// Operand is the distance to jump.
-    Jump(usize),
-    /// Operand is the distance to jump backwards.
-    Loop(usize),
-    /// Operand is the number of arguments passed to the callee.
-    Call(usize),
-    /// First operand is the index into the constants table of the method name;
-    /// second operand is the argument count.
-    Invoke(ConstantIndex, usize),
-    /// First operand is the index into the constants table for the function;
-    /// second operand is the list of upvalue metadata used by the closure.
-    Closure(ConstantIndex, Vec<Upvalue>),
+    JumpIfFalse {
+        distance: usize,
+    },
+    Jump {
+        distance: usize,
+    },
+    Loop {
+        distance_to_loop_start: usize,
+    },
+    Call {
+        arg_count: usize,
+    },
+    Invoke {
+        method_name: ConstantIndex,
+        arg_count: usize,
+    },
+    Closure {
+        function: ConstantIndex,
+        upvalues: Vec<Upvalue>,
+    },
     CloseUpvalue,
     GetUpvalue(UpValueIndex),
     SetUpvalue(UpValueIndex),
-    GetProperty(ConstantIndex),
-    SetProperty(ConstantIndex),
-    /// Operand is the index into the constants table for the superclass method name.
-    GetSuper(ConstantIndex),
-    /// First operand is the index into the constants table of the superclass method name;
-    /// second operand is the argument count.
-    SuperInvoke(ConstantIndex, usize),
+    GetProperty {
+        name: ConstantIndex,
+    },
+    SetProperty {
+        name: ConstantIndex,
+    },
+    GetSuper {
+        method: ConstantIndex,
+    },
+    SuperInvoke {
+        method: ConstantIndex,
+        arg_count: usize,
+    },
     Return,
-    Class(ConstantIndex),
+    Class {
+        name: ConstantIndex,
+    },
     Inherit,
-    Method(ConstantIndex),
+    Method {
+        name: ConstantIndex,
+    },
 }
 
 #[derive(Default)]
@@ -126,14 +146,16 @@ impl Chunk {
 
         match &self.code[offset] {
             OpCode::Return => simple_instruction("OP_RETURN"),
-            OpCode::Constant(i) => self.constant_instruction("OP_CONSTANT", heap, *i),
+            OpCode::Constant { index } => self.constant_instruction("OP_CONSTANT", heap, *index),
             OpCode::Negate => simple_instruction("OP_NEGATE"),
             OpCode::Add => simple_instruction("OP_ADD"),
             OpCode::Subtract => simple_instruction("OP_SUBTRACT"),
             OpCode::Multiply => simple_instruction("OP_MULTIPLY"),
             OpCode::Divide => simple_instruction("OP_DIVIDE"),
             OpCode::Nil => simple_instruction("OP_NIL"),
-            OpCode::Bool(b) => simple_instruction(if *b { "OP_TRUE" } else { "OP_FALSE" }),
+            OpCode::Bool { value } => {
+                simple_instruction(if *value { "OP_TRUE" } else { "OP_FALSE" })
+            }
             OpCode::Not => simple_instruction("OP_NOT"),
             OpCode::Equal => simple_instruction("OP_EQUAL"),
             OpCode::Greater => simple_instruction("OP_GREATER"),
@@ -145,13 +167,17 @@ impl Chunk {
             OpCode::SetGlobal(i) => self.constant_instruction("OP_SET_GLOBAL", heap, *i),
             OpCode::GetLocal(i) => byte_instruction("OP_GET_LOCAL", i.0),
             OpCode::SetLocal(i) => byte_instruction("OP_SET_LOCAL", i.0),
-            OpCode::JumpIfFalse(distance) => jump_instruction("OP_JUMP_IF_FALSE", *distance, true),
-            OpCode::Jump(distance) => jump_instruction("OP_JUMP", *distance, true),
-            OpCode::Loop(distance) => jump_instruction("OP_LOOP", *distance, false),
-            OpCode::Call(arity) => byte_instruction("OP_CALL", *arity),
-            OpCode::Closure(constant, upvalues) => {
-                print!("{:16} {} ", "OP_CLOSURE", constant.0);
-                print!("{}", self.constant_at(*constant).print(heap));
+            OpCode::JumpIfFalse { distance } => {
+                jump_instruction("OP_JUMP_IF_FALSE", *distance, true)
+            }
+            OpCode::Jump { distance } => jump_instruction("OP_JUMP", *distance, true),
+            OpCode::Loop {
+                distance_to_loop_start,
+            } => jump_instruction("OP_LOOP", *distance_to_loop_start, false),
+            OpCode::Call { arg_count } => byte_instruction("OP_CALL", *arg_count),
+            OpCode::Closure { function, upvalues } => {
+                print!("{:16} {} ", "OP_CLOSURE", function.0);
+                print!("{}", self.constant_at(*function).print(heap));
                 println!();
 
                 println!(
@@ -171,21 +197,22 @@ impl Chunk {
             OpCode::GetUpvalue(index) => byte_instruction("OP_GET_UPVALUE", index.0),
             OpCode::SetUpvalue(index) => byte_instruction("OP_SET_UPVALUE", index.0),
             OpCode::CloseUpvalue => simple_instruction("OP_CLOSE_UPVALUE"),
-            OpCode::Class(index) => self.constant_instruction("OP_CLASS", heap, *index),
-            OpCode::GetProperty(constant) => {
-                self.constant_instruction("OP_GET_PROPERTY", heap, *constant)
+            OpCode::Class { name } => self.constant_instruction("OP_CLASS", heap, *name),
+            OpCode::GetProperty { name } => {
+                self.constant_instruction("OP_GET_PROPERTY", heap, *name)
             }
-            OpCode::SetProperty(constant) => {
-                self.constant_instruction("OP_SET_PROPERTY", heap, *constant)
+            OpCode::SetProperty { name } => {
+                self.constant_instruction("OP_SET_PROPERTY", heap, *name)
             }
-            OpCode::Method(constant) => self.constant_instruction("OP_METHOD", heap, *constant),
-            OpCode::Invoke(constant, arg_count) => {
-                invoke_instruction("OP_INVOKE", *constant, *arg_count)
-            }
+            OpCode::Method { name } => self.constant_instruction("OP_METHOD", heap, *name),
+            OpCode::Invoke {
+                method_name,
+                arg_count,
+            } => invoke_instruction("OP_INVOKE", *method_name, *arg_count),
             OpCode::Inherit => simple_instruction("OP_INHERIT"),
-            OpCode::GetSuper(c) => self.constant_instruction("OP_GET_SUPER", heap, *c),
-            OpCode::SuperInvoke(name, arg_count) => {
-                invoke_instruction("OP_SUPER_INVOKE", *name, *arg_count);
+            OpCode::GetSuper { method } => self.constant_instruction("OP_GET_SUPER", heap, *method),
+            OpCode::SuperInvoke { method, arg_count } => {
+                invoke_instruction("OP_SUPER_INVOKE", *method, *arg_count);
             }
         }
     }

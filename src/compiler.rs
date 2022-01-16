@@ -148,18 +148,20 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             self.error("Too much code to jump over.");
         }
         self.current_chunk_mut().code[jump_index] = match self.current_chunk().code[jump_index] {
-            OpCode::JumpIfFalse(_) => OpCode::JumpIfFalse(distance),
-            OpCode::Jump(_) => OpCode::Jump(distance),
+            OpCode::JumpIfFalse { .. } => OpCode::JumpIfFalse { distance },
+            OpCode::Jump { .. } => OpCode::Jump { distance },
             _ => unreachable!("Tried to patch non-jump OpCode"),
         }
     }
 
     fn emit_loop(&mut self, loop_start: usize) {
-        let distance = self.current_chunk().code.len() - loop_start + 1;
-        if distance >= 2_usize.pow(16) {
+        let distance_to_loop_start = self.current_chunk().code.len() - loop_start + 1;
+        if distance_to_loop_start >= 2_usize.pow(16) {
             self.error("Loop body too large.");
         }
-        self.emit_opcode(OpCode::Loop(distance));
+        self.emit_opcode(OpCode::Loop {
+            distance_to_loop_start,
+        });
     }
 
     fn emit_opcode(&mut self, opcode: OpCode) {
@@ -221,7 +223,9 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         let name_constant = self.identifier_constant(self.previous.lexeme);
         self.declare_variable();
 
-        self.emit_opcode(OpCode::Class(name_constant));
+        self.emit_opcode(OpCode::Class {
+            name: name_constant,
+        });
         self.define_variable(name_constant);
 
         if self.class_compilers.len() > 255 {
@@ -322,12 +326,12 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             self.expression();
             self.consume(TokenType::Semicolon, "Expect ';' after loop condition.");
 
-            exit_jump = Some(self.emit_jump(OpCode::JumpIfFalse(0)));
+            exit_jump = Some(self.emit_jump(OpCode::JumpIfFalse { distance: 0 }));
             self.emit_opcode(OpCode::Pop);
         }
 
         if !self.matches(TokenType::RightParen) {
-            let body_jump = self.emit_jump(OpCode::Jump(0));
+            let body_jump = self.emit_jump(OpCode::Jump { distance: 0 });
             let increment_start = self.current_chunk().code.len();
             self.expression();
             self.emit_opcode(OpCode::Pop);
@@ -354,10 +358,10 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.expression();
         self.consume(TokenType::RightParen, "Expect ')' after condition.");
 
-        let then_jump = self.emit_jump(OpCode::JumpIfFalse(0));
+        let then_jump = self.emit_jump(OpCode::JumpIfFalse { distance: 0 });
         self.emit_opcode(OpCode::Pop);
         self.statement();
-        let else_jump = self.emit_jump(OpCode::Jump(0));
+        let else_jump = self.emit_jump(OpCode::Jump { distance: 0 });
         self.patch_jump(then_jump);
         self.emit_opcode(OpCode::Pop);
         if self.matches(TokenType::Else) {
@@ -372,7 +376,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.expression();
         self.consume(TokenType::RightParen, "Expect ')' after condition.");
 
-        let exit_jump = self.emit_jump(OpCode::JumpIfFalse(0));
+        let exit_jump = self.emit_jump(OpCode::JumpIfFalse { distance: 0 });
         self.emit_opcode(OpCode::Pop);
         self.statement();
         self.emit_loop(loop_start);
@@ -433,14 +437,14 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.end_scope();
         if let Some((function, upvalues)) = self.end_compiler() {
             let function = self.vm.new_function(function);
-            let constant = self.make_constant(Value::ObjReference(function));
-            self.emit_opcode(OpCode::Closure(constant, upvalues));
+            let function = self.make_constant(Value::ObjReference(function));
+            self.emit_opcode(OpCode::Closure { function, upvalues });
         }
     }
 
     fn method(&mut self) {
         self.consume(TokenType::Identifier, "Expect method name.");
-        let constant = self.identifier_constant(self.previous.lexeme);
+        let name = self.identifier_constant(self.previous.lexeme);
 
         let mut ty = FunctionType::Method;
         if self.previous.lexeme == "init" {
@@ -448,7 +452,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         }
         self.function(ty);
 
-        self.emit_opcode(OpCode::Method(constant));
+        self.emit_opcode(OpCode::Method { name });
     }
 
     fn begin_scope(&mut self) {
@@ -545,7 +549,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
     fn call(&mut self) {
         let arg_count = self.argument_list();
-        self.emit_opcode(OpCode::Call(arg_count));
+        self.emit_opcode(OpCode::Call { arg_count });
     }
 
     fn dot(&mut self, can_assign: bool) {
@@ -554,20 +558,23 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
         if can_assign && self.matches(TokenType::Equal) {
             self.expression();
-            self.emit_opcode(OpCode::SetProperty(name));
+            self.emit_opcode(OpCode::SetProperty { name });
         } else if self.matches(TokenType::LeftParen) {
             let arg_count = self.argument_list();
-            self.emit_opcode(OpCode::Invoke(name, arg_count));
+            self.emit_opcode(OpCode::Invoke {
+                method_name: name,
+                arg_count,
+            });
         } else {
-            self.emit_opcode(OpCode::GetProperty(name));
+            self.emit_opcode(OpCode::GetProperty { name });
         }
     }
 
     fn literal(&mut self) {
         match self.previous.ty {
-            TokenType::False => self.emit_opcode(OpCode::Bool(false)),
+            TokenType::False => self.emit_opcode(OpCode::Bool { value: false }),
             TokenType::Nil => self.emit_opcode(OpCode::Nil),
-            TokenType::True => self.emit_opcode(OpCode::Bool(true)),
+            TokenType::True => self.emit_opcode(OpCode::Bool { value: true }),
             _ => unreachable!("Unexpected TokenType in literal"),
         }
     }
@@ -639,15 +646,15 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn and(&mut self) {
-        let end_jump = self.emit_jump(OpCode::JumpIfFalse(0));
+        let end_jump = self.emit_jump(OpCode::JumpIfFalse { distance: 0 });
         self.emit_opcode(OpCode::Pop);
         self.parse_precedence(Precedence::And);
         self.patch_jump(end_jump);
     }
 
     fn or(&mut self) {
-        let else_jump = self.emit_jump(OpCode::JumpIfFalse(0));
-        let end_jump = self.emit_jump(OpCode::Jump(0));
+        let else_jump = self.emit_jump(OpCode::JumpIfFalse { distance: 0 });
+        let end_jump = self.emit_jump(OpCode::Jump { distance: 0 });
 
         self.patch_jump(else_jump);
         self.emit_opcode(OpCode::Pop);
@@ -713,16 +720,16 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         }
         self.consume(TokenType::Dot, "Expect '.' after 'super'.");
         self.consume(TokenType::Identifier, "Expect superclass method name.");
-        let name = self.identifier_constant(self.previous.lexeme);
+        let method = self.identifier_constant(self.previous.lexeme);
 
         self.named_variable("this", false);
         if self.matches(TokenType::LeftParen) {
             let arg_count = self.argument_list();
             self.named_variable("super", false);
-            self.emit_opcode(OpCode::SuperInvoke(name, arg_count));
+            self.emit_opcode(OpCode::SuperInvoke { method, arg_count });
         } else {
             self.named_variable("super", false);
-            self.emit_opcode(OpCode::GetSuper(name));
+            self.emit_opcode(OpCode::GetSuper { method });
         }
     }
 
@@ -820,8 +827,8 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn emit_constant(&mut self, value: Value) {
-        let idx = self.make_constant(value);
-        self.emit_opcode(OpCode::Constant(idx));
+        let index = self.make_constant(value);
+        self.emit_opcode(OpCode::Constant { index });
     }
 
     fn current_chunk_mut(&mut self) -> &mut Chunk {

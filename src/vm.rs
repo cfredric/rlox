@@ -578,7 +578,7 @@ impl<'opt> VM<'opt> {
 
             use crate::value::*;
             match &self.read_byte().clone() {
-                OpCode::Constant(index) => {
+                OpCode::Constant { index } => {
                     let constant = self.read_constant(*index);
                     self.stack.push(constant);
                 }
@@ -637,7 +637,7 @@ impl<'opt> VM<'opt> {
                 OpCode::Multiply => self.binary_op(|a, b| a * b, Value::Double)?,
                 OpCode::Divide => self.binary_op(|a, b| a / b, Value::Double)?,
                 OpCode::Nil => self.stack.push(Value::Nil),
-                OpCode::Bool(b) => self.stack.push(Value::Bool(*b)),
+                OpCode::Bool { value } => self.stack.push(Value::Bool(*value)),
                 OpCode::Not => {
                     let falsey = self.stack.pop().is_falsey();
                     self.stack.push(Value::Bool(falsey));
@@ -691,24 +691,26 @@ impl<'opt> VM<'opt> {
                     let value = self.stack.at(self.frame().start_slot.offset(*slot_offset));
                     self.stack.push(value);
                 }
-                OpCode::JumpIfFalse(distance) => {
+                OpCode::JumpIfFalse { distance } => {
                     if self.stack.peek(0).is_falsey() {
                         self.frame_mut().ip += distance;
                     }
                 }
-                OpCode::Jump(distance) => {
+                OpCode::Jump { distance } => {
                     self.frame_mut().ip += distance;
                 }
-                OpCode::Loop(distance) => {
-                    self.frame_mut().ip -= distance;
+                OpCode::Loop {
+                    distance_to_loop_start,
+                } => {
+                    self.frame_mut().ip -= distance_to_loop_start;
                 }
-                OpCode::Call(arity) => {
-                    if !self.call_value(self.stack.peek(*arity), *arity) {
+                OpCode::Call { arg_count } => {
+                    if !self.call_value(self.stack.peek(*arg_count), *arg_count) {
                         return Err(InterpretResult::RuntimeError);
                     }
                 }
-                OpCode::Closure(constant, upvalues) => {
-                    let function = *self.read_constant(*constant).as_obj_reference().unwrap();
+                OpCode::Closure { function, upvalues } => {
+                    let function = *self.read_constant(*function).as_obj_reference().unwrap();
                     let upvalues = upvalues
                         .iter()
                         .map(|uv| match uv {
@@ -746,17 +748,17 @@ impl<'opt> VM<'opt> {
                     self.close_upvalues(self.stack.top_slot());
                     self.stack.pop();
                 }
-                OpCode::Class(index) => {
-                    let name = self.read_string(*index).to_string();
+                OpCode::Class { name } => {
+                    let name = self.read_string(*name).to_string();
                     let class = self.new_class(&name);
                     self.stack.push(Value::ObjReference(class));
                 }
-                OpCode::GetProperty(constant) => {
+                OpCode::GetProperty { name } => {
                     match self.stack.peek(0) {
                         Value::ObjReference(instance)
                             if self.heap.deref(instance).as_instance().is_some() =>
                         {
-                            let name = self.read_string(*constant).to_string();
+                            let name = self.read_string(*name).to_string();
                             let i = self.heap.as_instance(instance);
                             if let Some(v) = i.fields.get(&name) {
                                 self.stack.pop(); // Instance.
@@ -774,12 +776,12 @@ impl<'opt> VM<'opt> {
                         }
                     };
                 }
-                OpCode::SetProperty(constant) => {
+                OpCode::SetProperty { name } => {
                     match self.stack.peek(1) {
                         Value::ObjReference(instance)
                             if self.heap.deref(instance).as_instance().is_some() =>
                         {
-                            let name = self.read_string(*constant).to_string();
+                            let name = self.read_string(*name).to_string();
                             let value = self.stack.peek(0);
                             self.heap
                                 .as_instance_mut(instance)
@@ -795,19 +797,22 @@ impl<'opt> VM<'opt> {
                         }
                     }
                 }
-                OpCode::GetSuper(name_index) => {
-                    let name = self.read_string(*name_index).to_string();
+                OpCode::GetSuper { method } => {
+                    let name = self.read_string(*method).to_string();
                     let superclass = *self.stack.pop().as_obj_reference().unwrap();
                     if !self.bind_method(superclass, &name) {
                         return Err(InterpretResult::RuntimeError);
                     }
                 }
-                OpCode::Method(constant) => {
-                    self.define_method(*self.read_constant(*constant).as_obj_reference().unwrap());
+                OpCode::Method { name } => {
+                    self.define_method(*self.read_constant(*name).as_obj_reference().unwrap());
                 }
-                OpCode::Invoke(constant, arg_count) => {
+                OpCode::Invoke {
+                    method_name,
+                    arg_count,
+                } => {
                     let arg_count = *arg_count;
-                    let method = self.read_string(*constant).to_string();
+                    let method = self.read_string(*method_name).to_string();
                     if !self.invoke(&method, arg_count) {
                         return Err(InterpretResult::RuntimeError);
                     }
@@ -831,9 +836,9 @@ impl<'opt> VM<'opt> {
                         }
                     }
                 }
-                OpCode::SuperInvoke(constant, arg_count) => {
+                OpCode::SuperInvoke { method, arg_count } => {
                     let arg_count = *arg_count;
-                    let method = self.read_string(*constant).to_string();
+                    let method = self.read_string(*method).to_string();
                     let superclass = *self.stack.pop().as_obj_reference().unwrap();
                     if !self.invoke_from_class(superclass, &method, arg_count) {
                         return Err(InterpretResult::RuntimeError);
