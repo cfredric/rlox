@@ -15,7 +15,6 @@ use crate::value::Value;
 use crate::Opt;
 
 const GC_HEAP_GROWTH_FACTOR: usize = 2;
-const INIT_STR: &str = "init";
 
 pub struct VM<'opt> {
     opt: &'opt Opt,
@@ -293,7 +292,7 @@ impl<'opt> VM<'opt> {
                         Value::ObjIndex(instance),
                     );
 
-                    if let Some(closure) = self.heap.as_class(ptr).methods.get(INIT_STR).copied() {
+                    if let Some(closure) = self.heap.as_class(ptr).methods.get("init").copied() {
                         return self.call(closure, arg_count);
                     } else if arg_count != 0 {
                         self.runtime_error(&format!("Expected 0 arguments but got {}.", arg_count));
