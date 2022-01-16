@@ -116,26 +116,26 @@ impl<'opt> VM<'opt> {
     }
 
     fn allocate_string(&mut self, s: String) -> Ptr {
-        let ptr = self.allocate_object::<Ptr>(Obj::String(LoxString::new(&s)), None);
+        let ptr = self.allocate_object::<()>(Obj::String(LoxString::new(&s)), None);
         self.strings
             .insert(self.heap.as_string(ptr).string.to_string(), ptr);
         ptr
     }
 
     pub fn new_function(&mut self, f: Function) -> Ptr {
-        self.allocate_object::<Ptr>(Obj::Function(f), None)
+        self.allocate_object::<()>(Obj::Function(f), None)
     }
 
     pub fn new_native(&mut self, f: NativeFn) -> Ptr {
-        self.allocate_object::<Ptr>(Obj::NativeFn(f), None)
+        self.allocate_object::<()>(Obj::NativeFn(f), None)
     }
 
     pub fn new_closure(&mut self, func: Ptr, upvalues: Vec<Ptr>) -> Ptr {
-        self.allocate_object::<Ptr>(Obj::Closure(Closure::new(func, upvalues)), None)
+        self.allocate_object::<()>(Obj::Closure(Closure::new(func, upvalues)), None)
     }
 
     pub fn new_class(&mut self, name: &str) -> Ptr {
-        self.allocate_object::<Ptr>(Obj::Class(Class::new(name)), None)
+        self.allocate_object::<()>(Obj::Class(Class::new(name)), None)
     }
 
     pub fn new_instance(&mut self, class: &mut Ptr) -> Ptr {
@@ -143,7 +143,7 @@ impl<'opt> VM<'opt> {
     }
 
     pub fn new_bound_method(&mut self, receiver: Ptr, closure: Ptr) -> Ptr {
-        self.allocate_object::<Ptr>(Obj::BoundMethod(BoundMethod::new(receiver, closure)), None)
+        self.allocate_object::<()>(Obj::BoundMethod(BoundMethod::new(receiver, closure)), None)
     }
 
     pub fn new_upvalue(&mut self, open: Open, prev_to_rewrite: &mut Option<Ptr>) -> Ptr {
@@ -573,7 +573,7 @@ impl<'opt> VM<'opt> {
             }
 
             if self.opt.stress_garbage_collector {
-                self.collect_garbage::<Ptr>(None);
+                self.collect_garbage::<()>(None);
             }
 
             use crate::value::*;

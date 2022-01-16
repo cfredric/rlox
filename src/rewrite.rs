@@ -6,6 +6,10 @@ pub trait Rewrite {
     fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>);
 }
 
+impl Rewrite for () {
+    fn rewrite(&mut self, _: &HashMap<Ptr, Ptr>) {}
+}
+
 impl<T: Rewrite> Rewrite for Vec<T> {
     fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
         for e in self {
