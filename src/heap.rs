@@ -186,7 +186,7 @@ impl Heap {
         self.heap.iter()
     }
 
-    pub fn open_upvalues<'s>(&'s self) -> impl Iterator<Item = Ptr> + 's {
+    pub fn open_upvalues(&self) -> impl Iterator<Item = Ptr> + '_ {
         self.heap
             .iter()
             .enumerate()
