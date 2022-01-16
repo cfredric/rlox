@@ -706,10 +706,10 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             Some(c) if !c.has_superclass => {
                 self.error("Can't use 'super' in a class with no superclass.");
             }
+            Some(_) => {}
             None => {
                 self.error("Can't use 'super' outside of a class.");
             }
-            _ => {}
         }
         self.consume(TokenType::Dot, "Expect '.' after 'super'.");
         self.consume(TokenType::Identifier, "Expect superclass method name.");
@@ -809,13 +809,12 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn make_constant(&mut self, value: Value) -> ConstantIndex {
-        let idx = self.current_chunk_mut().add_constant(value);
-        match idx {
-            Err(idx) => {
+        match self.current_chunk_mut().add_constant(value) {
+            None => {
                 self.error("Too many constants in one chunk.");
-                idx
+                ConstantIndex::error()
             }
-            Ok(idx) => idx,
+            Some(idx) => idx,
         }
     }
 

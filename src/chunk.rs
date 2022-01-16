@@ -91,12 +91,12 @@ impl Chunk {
         self.lines.push(line);
     }
 
-    pub fn add_constant(&mut self, value: Value) -> Result<ConstantIndex, ConstantIndex> {
+    pub fn add_constant(&mut self, value: Value) -> Option<ConstantIndex> {
         self.constants.push(value);
         if self.constants.len() > 2_usize.pow(8) {
-            return Err(ConstantIndex::error());
+            return None;
         }
-        Ok(ConstantIndex::new(self.constants.len() - 1))
+        Some(ConstantIndex::new(self.constants.len() - 1))
     }
 
     pub fn constant_at(&self, index: ConstantIndex) -> Value {

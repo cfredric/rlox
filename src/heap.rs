@@ -44,11 +44,8 @@ impl Heap {
         if self.log_gc {
             eprintln!("    mark value ({})", value.print(self));
         }
-        match value {
-            Value::Nil | Value::Bool(_) | Value::Double(_) => {}
-            Value::ObjReference(index) => {
-                self.mark_object(index);
-            }
+        if let Value::ObjReference(ptr) = value {
+            self.mark_object(ptr);
         }
     }
 
