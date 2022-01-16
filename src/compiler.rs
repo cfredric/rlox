@@ -66,12 +66,7 @@ impl ClassState {
 }
 
 impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
-    pub fn new(
-        opt: &'opt Opt,
-        source: &'source str,
-        vm: &'vm mut VM<'opt>,
-        function_type: FunctionType,
-    ) -> Self {
+    pub fn new(opt: &'opt Opt, source: &'source str, vm: &'vm mut VM<'opt>) -> Self {
         Self {
             opt,
             scanner: scanner::Scanner::new(source),
@@ -80,7 +75,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             had_error: false,
             panic_mode: false,
             vm,
-            functions: vec![FunctionState::with_name(function_type, "script")],
+            functions: vec![FunctionState::with_name(FunctionType::Script, "script")],
             class_compilers: Vec::new(),
             block_depth: 0,
         }

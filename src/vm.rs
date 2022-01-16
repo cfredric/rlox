@@ -843,12 +843,7 @@ impl<'opt> VM<'opt> {
 
     pub fn interpret(&mut self, source: &str) -> Result<(), InterpretResult> {
         self.is_compiling = true;
-        let compiler = Compiler::new(
-            self.opt,
-            source,
-            self,
-            crate::compiler::FunctionType::Script,
-        );
+        let compiler = Compiler::new(self.opt, source, self);
         let function = compiler.compile();
         match function {
             Some(function) => {
