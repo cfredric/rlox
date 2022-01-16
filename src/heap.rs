@@ -17,8 +17,8 @@ impl Ptr {
 }
 
 impl Rewrite for Ptr {
-    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
-        self.0.rewrite(mapping);
+    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
+        *self = mapping[self];
     }
 }
 
@@ -120,6 +120,27 @@ impl Heap {
         }
     }
 
+    pub fn sweep_and_compact(&mut self) -> (HashMap<Ptr, Ptr>, usize) {
+        // Build the mapping from pre-sweep pointers to post-sweep pointers.
+        let mapping = self
+            .heap
+            .iter()
+            .enumerate()
+            .filter_map(|(i, obj)| obj.is_marked().then(|| i))
+            .enumerate()
+            .map(|(post, pre)| (Ptr::new(pre), Ptr::new(post)))
+            .collect();
+
+        // Remove unreachable objects.
+        let before = self.heap.len();
+        self.heap.retain(|obj| obj.is_marked());
+        for obj in self.heap.iter_mut() {
+            obj.mark(false);
+        }
+
+        (mapping, before - self.heap.len())
+    }
+
     pub fn deref(&self, ptr: Ptr) -> &Obj {
         &self.heap[ptr.0]
     }
@@ -168,18 +189,6 @@ impl Heap {
         self.heap.iter()
     }
 
-    pub fn iter_mut<'s>(&'s mut self) -> impl Iterator<Item = &mut Obj> + 's {
-        self.heap.iter_mut()
-    }
-
-    pub fn retain<F: FnMut(&Obj) -> bool>(&mut self, predicate: F) {
-        self.heap.retain(predicate);
-    }
-
-    pub fn len(&self) -> usize {
-        self.heap.len()
-    }
-
     pub fn open_upvalues<'s>(&'s self) -> impl Iterator<Item = Ptr> + 's {
         self.heap
             .iter()
@@ -189,7 +198,7 @@ impl Heap {
 }
 
 impl Rewrite for Heap {
-    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
         self.heap.rewrite(mapping);
     }
 }

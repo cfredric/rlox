@@ -51,7 +51,7 @@ impl Print for Value {
 }
 
 impl Rewrite for Value {
-    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
         if let Value::ObjReference(i) = self {
             i.rewrite(mapping);
         }

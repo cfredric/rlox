@@ -1,5 +1,5 @@
 use crate::compiler::Upvalue;
-use crate::heap::Heap;
+use crate::heap::{Heap, Ptr};
 use crate::print::Print;
 use crate::rewrite::Rewrite;
 use crate::value::Value;
@@ -196,7 +196,7 @@ impl Chunk {
 }
 
 impl Rewrite for Chunk {
-    fn rewrite(&mut self, mapping: &std::collections::HashMap<usize, usize>) {
+    fn rewrite(&mut self, mapping: &std::collections::HashMap<Ptr, Ptr>) {
         self.constants.rewrite(mapping);
     }
 }

@@ -116,26 +116,26 @@ impl<'opt> VM<'opt> {
     }
 
     fn allocate_string(&mut self, s: String) -> Ptr {
-        let ptr = self.allocate_object::<usize>(Obj::String(LoxString::new(&s)), None);
+        let ptr = self.allocate_object::<Ptr>(Obj::String(LoxString::new(&s)), None);
         self.strings
             .insert(self.heap.as_string(ptr).string.to_string(), ptr);
         ptr
     }
 
     pub fn new_function(&mut self, f: Function) -> Ptr {
-        self.allocate_object::<usize>(Obj::Function(f), None)
+        self.allocate_object::<Ptr>(Obj::Function(f), None)
     }
 
     pub fn new_native(&mut self, f: NativeFn) -> Ptr {
-        self.allocate_object::<usize>(Obj::NativeFn(f), None)
+        self.allocate_object::<Ptr>(Obj::NativeFn(f), None)
     }
 
     pub fn new_closure(&mut self, func: Ptr, upvalues: Vec<Ptr>) -> Ptr {
-        self.allocate_object::<usize>(Obj::Closure(Closure::new(func, upvalues)), None)
+        self.allocate_object::<Ptr>(Obj::Closure(Closure::new(func, upvalues)), None)
     }
 
     pub fn new_class(&mut self, name: &str) -> Ptr {
-        self.allocate_object::<usize>(Obj::Class(Class::new(name)), None)
+        self.allocate_object::<Ptr>(Obj::Class(Class::new(name)), None)
     }
 
     pub fn new_instance(&mut self, class: &mut Ptr) -> Ptr {
@@ -143,7 +143,7 @@ impl<'opt> VM<'opt> {
     }
 
     pub fn new_bound_method(&mut self, receiver: Ptr, closure: Ptr) -> Ptr {
-        self.allocate_object::<usize>(Obj::BoundMethod(BoundMethod::new(receiver, closure)), None)
+        self.allocate_object::<Ptr>(Obj::BoundMethod(BoundMethod::new(receiver, closure)), None)
     }
 
     pub fn new_upvalue(&mut self, open: Open, prev_to_rewrite: &mut Option<Ptr>) -> Ptr {
@@ -497,22 +497,7 @@ impl<'opt> VM<'opt> {
         &mut self,
         pending_rewrites: Option<(&mut Obj, &mut R)>,
     ) -> usize {
-        // Build the mapping from pre-sweep pointers to post-sweep pointers.
-        let mapping = self
-            .heap
-            .iter()
-            .enumerate()
-            .filter_map(|(i, obj)| obj.is_marked().then(|| i))
-            .enumerate()
-            .map(|(post, pre)| (pre, post))
-            .collect();
-
-        // Remove unreachable objects.
-        let before = self.heap.len();
-        self.heap.retain(|obj| obj.is_marked());
-        for obj in self.heap.iter_mut() {
-            obj.mark(false);
-        }
+        let (mapping, diff) = self.heap.sweep_and_compact();
 
         // Prune out unused strings from the strings table:
         let reachable_strings = self
@@ -538,7 +523,7 @@ impl<'opt> VM<'opt> {
 
         debug_assert!(self.check_upvalues());
 
-        before - self.heap.len()
+        diff
     }
 
     fn open_upvalues_iter(&self) -> OpenUpValueIter {
@@ -588,7 +573,7 @@ impl<'opt> VM<'opt> {
             }
 
             if self.opt.stress_garbage_collector {
-                self.collect_garbage::<usize>(None);
+                self.collect_garbage::<Ptr>(None);
             }
 
             use crate::value::*;
@@ -908,7 +893,7 @@ impl CallFrame {
 }
 
 impl Rewrite for CallFrame {
-    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
         self.closure.rewrite(mapping);
     }
 }

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{rewrite::Rewrite, value::Value};
+use crate::{heap::Ptr, rewrite::Rewrite, value::Value};
 
 #[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Slot(usize);
@@ -82,7 +82,7 @@ impl Stack {
 }
 
 impl Rewrite for Stack {
-    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
         self.stack.rewrite(mapping);
     }
 }

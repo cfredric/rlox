@@ -113,7 +113,7 @@ impl Print for Obj {
 }
 
 impl Rewrite for Obj {
-    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
         match self {
             Obj::String(s) => s.rewrite(mapping),
             Obj::NativeFn(n) => n.rewrite(mapping),
@@ -142,7 +142,7 @@ impl LoxString {
     }
 }
 impl Rewrite for LoxString {
-    fn rewrite(&mut self, _mapping: &HashMap<usize, usize>) {}
+    fn rewrite(&mut self, _mapping: &HashMap<Ptr, Ptr>) {}
 }
 
 pub struct Function {
@@ -164,7 +164,7 @@ impl Function {
 }
 
 impl Rewrite for Function {
-    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
         self.chunk.rewrite(mapping);
     }
 }
@@ -186,7 +186,7 @@ impl NativeFn {
 }
 
 impl Rewrite for NativeFn {
-    fn rewrite(&mut self, _mapping: &HashMap<usize, usize>) {}
+    fn rewrite(&mut self, _mapping: &HashMap<Ptr, Ptr>) {}
 }
 
 pub struct Closure {
@@ -206,7 +206,7 @@ impl Closure {
 }
 
 impl Rewrite for Closure {
-    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
         self.function.rewrite(mapping);
         self.upvalues.rewrite(mapping);
     }
@@ -230,7 +230,7 @@ impl Class {
 }
 
 impl Rewrite for Class {
-    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
         self.methods.rewrite(mapping);
     }
 }
@@ -252,7 +252,7 @@ impl Instance {
 }
 
 impl Rewrite for Instance {
-    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
         self.class.rewrite(mapping);
         self.fields.rewrite(mapping);
     }
@@ -275,7 +275,7 @@ impl BoundMethod {
 }
 
 impl Rewrite for BoundMethod {
-    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
         self.receiver.rewrite(mapping);
         self.closure.rewrite(mapping);
     }
@@ -299,7 +299,7 @@ impl Open {
     }
 }
 impl Rewrite for Open {
-    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
         self.next.rewrite(mapping);
     }
 }
@@ -318,7 +318,7 @@ impl Closed {
     }
 }
 impl Rewrite for Closed {
-    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
         self.value.rewrite(mapping);
     }
 }
