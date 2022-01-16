@@ -2,7 +2,13 @@ use std::collections::HashMap;
 
 use enum_as_inner::EnumAsInner;
 
-use crate::{chunk::Chunk, print::Print, rewrite::Rewrite, value::Value, vm::Heap};
+use crate::{
+    chunk::Chunk,
+    print::Print,
+    rewrite::Rewrite,
+    value::Value,
+    vm::{Heap, Ptr},
+};
 
 pub struct Header {
     is_marked: bool,
@@ -93,16 +99,14 @@ impl Print for Obj {
             Obj::String(s) => s.string.to_string(),
             Obj::Function(fun) => format!("<fn {}>", fun.name),
             Obj::NativeFn(_) => "<native fn>".to_string(),
-            Obj::Closure(fun) => heap.heap[fun.function_index].print(heap),
+            Obj::Closure(fun) => heap.deref(fun.function).print(heap),
             Obj::OpenUpValue(_) => unreachable!(),
             Obj::ClosedUpValue(_) => unreachable!(),
             Obj::Class(c) => c.name.to_string(),
             Obj::Instance(i) => {
-                format!("{} instance", heap.as_class(i.class_index).name)
+                format!("{} instance", heap.as_class(i.class).name)
             }
-            Obj::BoundMethod(b) => {
-                heap.heap[heap.as_closure(b.closure_idx).function_index].print(heap)
-            }
+            Obj::BoundMethod(b) => heap.deref(heap.as_closure(b.closure).function).print(heap),
         }
     }
 }
@@ -186,17 +190,15 @@ impl Rewrite for NativeFn {
 
 pub struct Closure {
     header: Header,
-    /// The heap index of the underlying function.
-    pub function_index: usize,
-    /// Pointers into the heap.
-    pub upvalues: Vec<usize>,
+    pub function: Ptr,
+    pub upvalues: Vec<Ptr>,
 }
 
 impl Closure {
-    pub fn new(function_index: usize, upvalues: Vec<usize>) -> Self {
+    pub fn new(function: Ptr, upvalues: Vec<Ptr>) -> Self {
         Self {
             header: Header::new(true),
-            function_index,
+            function,
             upvalues,
         }
     }
@@ -204,7 +206,7 @@ impl Closure {
 
 impl Rewrite for Closure {
     fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
-        self.function_index.rewrite(mapping);
+        self.function.rewrite(mapping);
         self.upvalues.rewrite(mapping);
     }
 }
@@ -213,7 +215,7 @@ pub struct Class {
     header: Header,
     name: String,
     /// Each method value is an index into the heap, pointing to a Closure.
-    pub methods: HashMap<String, usize>,
+    pub methods: HashMap<String, Ptr>,
 }
 
 impl Class {
@@ -234,15 +236,15 @@ impl Rewrite for Class {
 
 pub struct Instance {
     header: Header,
-    pub class_index: usize,
+    pub class: Ptr,
     pub fields: HashMap<String, Value>,
 }
 
 impl Instance {
-    pub fn new(class_index: usize) -> Self {
+    pub fn new(class: Ptr) -> Self {
         Self {
             header: Header::new(true),
-            class_index,
+            class,
             fields: HashMap::new(),
         }
     }
@@ -250,31 +252,31 @@ impl Instance {
 
 impl Rewrite for Instance {
     fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
-        self.class_index.rewrite(mapping);
+        self.class.rewrite(mapping);
         self.fields.rewrite(mapping);
     }
 }
 
 pub struct BoundMethod {
     header: Header,
-    pub receiver_idx: usize,
-    pub closure_idx: usize,
+    pub receiver: Ptr,
+    pub closure: Ptr,
 }
 
 impl BoundMethod {
-    pub fn new(receiver_idx: usize, closure_idx: usize) -> Self {
+    pub fn new(receiver: Ptr, closure: Ptr) -> Self {
         Self {
             header: Header::new(true),
-            receiver_idx,
-            closure_idx,
+            receiver,
+            closure,
         }
     }
 }
 
 impl Rewrite for BoundMethod {
     fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
-        self.receiver_idx.rewrite(mapping);
-        self.closure_idx.rewrite(mapping);
+        self.receiver.rewrite(mapping);
+        self.closure.rewrite(mapping);
     }
 }
 
@@ -283,11 +285,11 @@ pub struct Open {
     /// The stack slot that holds the associated value.
     pub slot: usize,
     /// Heap pointer to the next open upvalue.
-    pub next: Option<usize>,
+    pub next: Option<Ptr>,
 }
 
 impl Open {
-    pub fn new(slot: usize, next: Option<usize>) -> Self {
+    pub fn new(slot: usize, next: Option<Ptr>) -> Self {
         Self {
             header: Header::new(true),
             slot,

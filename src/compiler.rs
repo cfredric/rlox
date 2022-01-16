@@ -606,8 +606,8 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn identifier_constant(&mut self, name: &str) -> usize {
-        let idx = self.vm.copy_string(name);
-        self.make_constant(Value::ObjIndex(idx))
+        let ptr = self.vm.copy_string(name);
+        self.make_constant(Value::ObjIndex(ptr))
     }
 
     fn define_variable(&mut self, global: usize) {

@@ -2,14 +2,18 @@ use std::collections::HashMap;
 
 use enum_as_inner::EnumAsInner;
 
-use crate::{print::Print, rewrite::Rewrite, vm::Heap};
+use crate::{
+    print::Print,
+    rewrite::Rewrite,
+    vm::{Heap, Ptr},
+};
 
 #[derive(Copy, Clone, EnumAsInner)]
 pub enum Value {
     Nil,
     Bool(bool),
     Double(f64),
-    ObjIndex(usize),
+    ObjIndex(Ptr),
 }
 
 const ERROR_MARGIN: f64 = 0.00000000001;
@@ -41,7 +45,7 @@ impl Print for Value {
             Value::Double(d) => d.to_string(),
             Value::Nil => "nil".to_string(),
             Value::Bool(b) => b.to_string(),
-            Value::ObjIndex(i) => heap.heap[*i].print(heap),
+            Value::ObjIndex(i) => heap.deref(*i).print(heap),
         }
     }
 }

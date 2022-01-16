@@ -23,10 +23,10 @@ pub struct VM<'opt> {
     pub heap: Heap,
     stack: Stack,
     /// Values are pointers into the heap, to LoxStrings.
-    pub strings: HashMap<String, usize>,
+    pub strings: HashMap<String, Ptr>,
     /// open_upvalues is a pointer into the heap, to the head of the linked list
     /// of upvalue objects.
-    open_upvalues: Option<usize>,
+    open_upvalues: Option<Ptr>,
     globals: HashMap<String, Value>,
 
     bytes_allocated: usize,
@@ -100,58 +100,52 @@ impl<'opt> VM<'opt> {
         vm
     }
 
-    pub fn copy_string(&mut self, s: &str) -> usize {
+    pub fn copy_string(&mut self, s: &str) -> Ptr {
         if let Some(v) = self.strings.get(s) {
             return *v;
         }
         self.allocate_string(s.to_string())
     }
 
-    pub fn take_string(&mut self, s: String) -> usize {
+    pub fn take_string(&mut self, s: String) -> Ptr {
         if let Some(v) = self.strings.get(&s) {
             return *v;
         }
         self.allocate_string(s)
     }
 
-    fn allocate_string(&mut self, s: String) -> usize {
-        let idx = self.allocate_object::<usize>(Obj::String(LoxString::new(&s)), None);
+    fn allocate_string(&mut self, s: String) -> Ptr {
+        let ptr = self.allocate_object::<usize>(Obj::String(LoxString::new(&s)), None);
         self.strings
-            .insert(self.heap.as_string(idx).string.to_string(), idx);
-        idx
+            .insert(self.heap.as_string(ptr).string.to_string(), ptr);
+        ptr
     }
 
-    pub fn new_function(&mut self, f: Function) -> usize {
+    pub fn new_function(&mut self, f: Function) -> Ptr {
         self.allocate_object::<usize>(Obj::Function(f), None)
     }
 
-    pub fn new_native(&mut self, f: NativeFn) -> usize {
+    pub fn new_native(&mut self, f: NativeFn) -> Ptr {
         self.allocate_object::<usize>(Obj::NativeFn(f), None)
     }
 
-    pub fn new_closure(&mut self, func_index: usize, upvalues: Vec<usize>) -> usize {
-        self.allocate_object::<usize>(Obj::Closure(Closure::new(func_index, upvalues)), None)
+    pub fn new_closure(&mut self, func: Ptr, upvalues: Vec<Ptr>) -> Ptr {
+        self.allocate_object::<usize>(Obj::Closure(Closure::new(func, upvalues)), None)
     }
 
-    pub fn new_class(&mut self, name: &str) -> usize {
+    pub fn new_class(&mut self, name: &str) -> Ptr {
         self.allocate_object::<usize>(Obj::Class(Class::new(name)), None)
     }
 
-    pub fn new_instance(&mut self, class_index: &mut usize) -> usize {
-        self.allocate_object(
-            Obj::Instance(Instance::new(*class_index)),
-            Some(class_index),
-        )
+    pub fn new_instance(&mut self, class: &mut Ptr) -> Ptr {
+        self.allocate_object(Obj::Instance(Instance::new(*class)), Some(class))
     }
 
-    pub fn new_bound_method(&mut self, receiver: usize, closure_idx: usize) -> usize {
-        self.allocate_object::<usize>(
-            Obj::BoundMethod(BoundMethod::new(receiver, closure_idx)),
-            None,
-        )
+    pub fn new_bound_method(&mut self, receiver: Ptr, closure: Ptr) -> Ptr {
+        self.allocate_object::<usize>(Obj::BoundMethod(BoundMethod::new(receiver, closure)), None)
     }
 
-    pub fn new_upvalue(&mut self, open: Open, prev_to_rewrite: &mut Option<usize>) -> usize {
+    pub fn new_upvalue(&mut self, open: Open, prev_to_rewrite: &mut Option<Ptr>) -> Ptr {
         self.allocate_object(Obj::OpenUpValue(open), prev_to_rewrite.as_mut())
     }
 
@@ -159,7 +153,7 @@ impl<'opt> VM<'opt> {
         &mut self,
         mut obj: Obj,
         mut pending_rewrite: Option<R>,
-    ) -> usize {
+    ) -> Ptr {
         if self.opt.log_garbage_collection {
             eprintln!("allocate for {}", obj.print(&self.heap));
         }
@@ -169,11 +163,11 @@ impl<'opt> VM<'opt> {
             self.collect_garbage(Some((&mut obj, &mut pending_rewrite)));
         }
         self.heap.heap.push(obj);
-        self.heap.heap.len() - 1
+        Ptr(self.heap.heap.len() - 1)
     }
 
     fn function(&self) -> &Function {
-        self.heap.as_function(self.closure().function_index)
+        self.heap.as_function(self.closure().function)
     }
 
     fn frame(&self) -> &CallFrame {
@@ -187,7 +181,7 @@ impl<'opt> VM<'opt> {
     }
 
     fn closure(&self) -> &Closure {
-        self.heap.as_closure(self.frame().heap_index)
+        self.heap.as_closure(self.frame().closure)
     }
 
     fn read_byte(&mut self) -> &OpCode {
@@ -203,8 +197,8 @@ impl<'opt> VM<'opt> {
 
     /// Reads a string from the constants table.
     fn read_string(&self, offset: usize) -> &str {
-        let heap_idx = *self.read_constant(offset).as_obj_index().unwrap();
-        &self.heap.as_string(heap_idx).string
+        let ptr = *self.read_constant(offset).as_obj_index().unwrap();
+        &self.heap.as_string(ptr).string
     }
 
     fn reset_stack(&mut self) {
@@ -243,8 +237,8 @@ impl<'opt> VM<'opt> {
         eprintln!("{}", message);
 
         for frame in self.frames.iter().rev() {
-            let closure = self.heap.as_closure(frame.heap_index);
-            let func = self.heap.as_function(closure.function_index);
+            let closure = self.heap.as_closure(frame.closure);
+            let func = self.heap.as_function(closure.function);
             let instruction = frame.ip - 1;
             eprintln!("[line {}] in {}", func.chunk.lines[instruction], func.name);
         }
@@ -253,12 +247,12 @@ impl<'opt> VM<'opt> {
     }
 
     fn define_native(&mut self, name: &str, function: NativeFn) {
-        let index = self.copy_string(name);
-        self.heap.heap[index].set_gc_exempt();
-        let index = Value::ObjIndex(index);
-        self.stack.push(index);
-        let index = Value::ObjIndex(self.new_native(function));
-        self.stack.push(index);
+        let ptr = self.copy_string(name);
+        self.heap.deref_mut(ptr).set_gc_exempt();
+        let ptr = Value::ObjIndex(ptr);
+        self.stack.push(ptr);
+        let ptr = Value::ObjIndex(self.new_native(function));
+        self.stack.push(ptr);
 
         let key = self
             .heap
@@ -273,8 +267,8 @@ impl<'opt> VM<'opt> {
     }
 
     fn call_value(&mut self, callee: Value, arg_count: usize) -> bool {
-        if let Value::ObjIndex(mut heap_index) = callee {
-            match &self.heap.heap[heap_index] {
+        if let Value::ObjIndex(mut ptr) = callee {
+            match &self.heap.deref(ptr) {
                 Obj::String(_)
                 | Obj::Function(_)
                 | Obj::OpenUpValue(_)
@@ -283,7 +277,7 @@ impl<'opt> VM<'opt> {
                     // Fall through to error handling.
                 }
                 Obj::Closure(_) => {
-                    return self.call(heap_index, arg_count);
+                    return self.call(ptr, arg_count);
                 }
                 Obj::NativeFn(native) => {
                     let result = (native.f)(self.stack.top_n(arg_count));
@@ -292,18 +286,12 @@ impl<'opt> VM<'opt> {
                     return true;
                 }
                 Obj::Class(_) => {
-                    let instance = self.new_instance(&mut heap_index);
+                    let instance = self.new_instance(&mut ptr);
                     let stack_len = self.stack.stack.len();
                     self.stack.stack[stack_len - arg_count - 1] = Value::ObjIndex(instance);
 
-                    if let Some(idx) = self
-                        .heap
-                        .as_class(heap_index)
-                        .methods
-                        .get(INIT_STR)
-                        .copied()
-                    {
-                        return self.call(idx, arg_count);
+                    if let Some(closure) = self.heap.as_class(ptr).methods.get(INIT_STR).copied() {
+                        return self.call(closure, arg_count);
                     } else if arg_count != 0 {
                         self.runtime_error(&format!("Expected 0 arguments but got {}.", arg_count));
                         return false;
@@ -311,9 +299,9 @@ impl<'opt> VM<'opt> {
                     return true;
                 }
                 Obj::BoundMethod(b) => {
-                    let bound_ptr = b.closure_idx;
+                    let bound_ptr = b.closure;
                     let stack_top = self.stack.stack.len();
-                    self.stack.stack[stack_top - arg_count - 1] = Value::ObjIndex(b.receiver_idx);
+                    self.stack.stack[stack_top - arg_count - 1] = Value::ObjIndex(b.receiver);
                     return self.call(bound_ptr, arg_count);
                 }
             };
@@ -322,9 +310,9 @@ impl<'opt> VM<'opt> {
         false
     }
 
-    fn invoke_from_class(&mut self, class_index: usize, name: &str, arg_count: usize) -> bool {
-        let method = match self.heap.as_class(class_index).methods.get(name) {
-            Some(idx) => *idx,
+    fn invoke_from_class(&mut self, class: Ptr, name: &str, arg_count: usize) -> bool {
+        let method = match self.heap.as_class(class).methods.get(name) {
+            Some(ptr) => *ptr,
             None => {
                 self.runtime_error(&format!("Undefined property '{}'.", name));
                 return false;
@@ -335,8 +323,8 @@ impl<'opt> VM<'opt> {
 
     fn invoke(&mut self, name: &str, arg_count: usize) -> bool {
         let receiver = *self.stack.peek(arg_count).as_obj_index().unwrap();
-        let (class_index, field) = match self.heap.heap[receiver].as_instance() {
-            Some(i) => (i.class_index, i.fields.get(name).copied()),
+        let (class, field) = match self.heap.deref(receiver).as_instance() {
+            Some(i) => (i.class, i.fields.get(name).copied()),
             None => {
                 self.runtime_error("Only instances have methods.");
                 return false;
@@ -348,12 +336,12 @@ impl<'opt> VM<'opt> {
             self.stack.stack[stack_len - arg_count - 1] = value;
             return self.call_value(value, arg_count);
         }
-        self.invoke_from_class(class_index, name, arg_count)
+        self.invoke_from_class(class, name, arg_count)
     }
 
-    fn bind_method(&mut self, class_idx: usize, name: &str) -> bool {
-        let method = match self.heap.as_class(class_idx).methods.get(name) {
-            Some(idx) => *idx,
+    fn bind_method(&mut self, class: Ptr, name: &str) -> bool {
+        let method = match self.heap.as_class(class).methods.get(name) {
+            Some(ptr) => *ptr,
             None => {
                 self.runtime_error(&format!("Undefined property '{}'.", name));
                 return false;
@@ -369,7 +357,7 @@ impl<'opt> VM<'opt> {
     /// Captures the given stack slot as a local upvalue. Inserts the new
     /// upvalue into the linked list of upvalues on the heap, sorted by stack
     /// slot (higher first).
-    fn capture_upvalue(&mut self, local: usize) -> usize {
+    fn capture_upvalue(&mut self, local: usize) -> Ptr {
         let mut prev_upvalue = None;
         let mut next = self.open_upvalues;
         while matches!(next, Some(uv) if self.heap.as_open_up_value(uv).slot > local) {
@@ -400,23 +388,24 @@ impl<'opt> VM<'opt> {
             let ptr = self.open_upvalues.unwrap();
             let open = self.heap.as_open_up_value(ptr);
             self.open_upvalues = open.next;
-            self.heap.heap[ptr] = Obj::ClosedUpValue(Closed::new(self.stack.stack[open.slot]));
+            let obj = Obj::ClosedUpValue(Closed::new(self.stack.stack[open.slot]));
+            self.heap.assign(ptr, obj);
         }
     }
 
-    fn define_method(&mut self, name_idx: usize) {
-        let method_idx = *self.stack.peek(0).as_obj_index().unwrap();
-        let class_index = *self.stack.peek(1).as_obj_index().unwrap();
-        let name = self.heap.as_string(name_idx).string.clone();
-        let class = self.heap.as_class_mut(class_index);
+    fn define_method(&mut self, name_ptr: Ptr) {
+        let method = *self.stack.peek(0).as_obj_index().unwrap();
+        let class = *self.stack.peek(1).as_obj_index().unwrap();
+        let name = self.heap.as_string(name_ptr).string.clone();
+        let class = self.heap.as_class_mut(class);
 
-        class.methods.insert(name, method_idx);
+        class.methods.insert(name, method);
         self.stack.pop();
     }
 
-    fn call(&mut self, closure_heap_index: usize, arg_count: usize) -> bool {
-        let closure = self.heap.as_closure(closure_heap_index);
-        let arity = self.heap.as_function(closure.function_index).arity;
+    fn call(&mut self, closure_ptr: Ptr, arg_count: usize) -> bool {
+        let closure = self.heap.as_closure(closure_ptr);
+        let arity = self.heap.as_function(closure.function).arity;
         if arg_count != arity {
             self.runtime_error(&format!(
                 "Expected {} arguments but got {}.",
@@ -431,7 +420,7 @@ impl<'opt> VM<'opt> {
         }
 
         self.frames.push(CallFrame::new(
-            closure_heap_index,
+            closure_ptr,
             self.stack.stack.len() - arg_count - 1,
         ));
         true
@@ -471,15 +460,15 @@ impl<'opt> VM<'opt> {
             self.heap.mark_value(*slot);
         }
 
-        for index in self.frames.iter().map(|f| f.heap_index) {
-            self.heap.mark_object(index)
+        for closure in self.frames.iter().map(|f| f.closure) {
+            self.heap.mark_object(closure)
         }
 
         {
             let mut upvalue = self.open_upvalues;
-            while let Some(index) = upvalue {
-                self.heap.mark_object(index);
-                upvalue = self.heap.as_open_up_value(index).next;
+            while let Some(ptr) = upvalue {
+                self.heap.mark_object(ptr);
+                upvalue = self.heap.as_open_up_value(ptr).next;
             }
         }
 
@@ -569,7 +558,7 @@ impl<'opt> VM<'opt> {
             .heap
             .iter()
             .enumerate()
-            .filter_map(|(i, o)| o.as_open_up_value().map(|_| i))
+            .filter_map(|(i, o)| o.as_open_up_value().map(|_| Ptr(i)))
             .collect();
 
         opens_ll == opens_heap && is_sorted_and_unique
@@ -646,7 +635,7 @@ impl<'opt> VM<'opt> {
                             continue;
                         }
                         (Value::ObjIndex(i), Value::ObjIndex(j)) => {
-                            match (&self.heap.heap[i], &self.heap.heap[j]) {
+                            match (&self.heap.deref(i), &self.heap.deref(j)) {
                                 (Obj::String(t), Obj::String(s)) => {
                                     // Have to clone here, since adding to the heap
                                     // might invalidate references to s and t.
@@ -748,7 +737,7 @@ impl<'opt> VM<'opt> {
                             if uv.is_local {
                                 self.capture_upvalue(self.frame().slots() + uv.index)
                             } else {
-                                self.heap.as_closure(self.frame().heap_index).upvalues[uv.index]
+                                self.heap.as_closure(self.frame().closure).upvalues[uv.index]
                             }
                         })
                         .collect();
@@ -756,8 +745,8 @@ impl<'opt> VM<'opt> {
                     self.stack.push(Value::ObjIndex(closure_heap_index));
                 }
                 OpCode::GetUpvalue(slot) => {
-                    let uv_index = self.closure().upvalues[*slot];
-                    let val = match &self.heap.heap[uv_index] {
+                    let uv = self.closure().upvalues[*slot];
+                    let val = match &self.heap.deref(uv) {
                         Obj::ClosedUpValue(c) => c.value,
                         Obj::OpenUpValue(o) => self.stack.stack[o.slot],
                         _ => unreachable!(),
@@ -765,9 +754,9 @@ impl<'opt> VM<'opt> {
                     self.stack.push(val);
                 }
                 OpCode::SetUpvalue(slot) => {
-                    let uv_index = self.closure().upvalues[*slot];
+                    let uv = self.closure().upvalues[*slot];
                     let val = self.stack.peek(0);
-                    match &mut self.heap.heap[uv_index] {
+                    match &mut self.heap.deref_mut(uv) {
                         Obj::ClosedUpValue(c) => c.value = val,
                         Obj::OpenUpValue(o) => self.stack.stack[o.slot] = val,
                         _ => unreachable!(),
@@ -779,23 +768,23 @@ impl<'opt> VM<'opt> {
                 }
                 OpCode::Class(index) => {
                     let name = self.read_string(*index).to_string();
-                    let heap_index = self.new_class(&name);
-                    self.stack.push(Value::ObjIndex(heap_index));
+                    let class = self.new_class(&name);
+                    self.stack.push(Value::ObjIndex(class));
                 }
                 OpCode::GetProperty(constant) => {
                     match self.stack.peek(0) {
-                        Value::ObjIndex(instance_idx)
-                            if self.heap.heap[instance_idx].as_instance().is_some() =>
+                        Value::ObjIndex(instance)
+                            if self.heap.deref(instance).as_instance().is_some() =>
                         {
                             let name = self.read_string(*constant).to_string();
-                            let i = self.heap.as_instance(instance_idx);
+                            let i = self.heap.as_instance(instance);
                             if let Some(v) = i.fields.get(&name) {
                                 self.stack.pop(); // Instance.
                                 self.stack.push(*v);
                                 continue;
                             }
-                            let class_index = i.class_index;
-                            if !self.bind_method(class_index, &name) {
+                            let class = i.class;
+                            if !self.bind_method(class, &name) {
                                 return Err(InterpretResult::RuntimeError);
                             }
                         }
@@ -807,13 +796,13 @@ impl<'opt> VM<'opt> {
                 }
                 OpCode::SetProperty(constant) => {
                     match self.stack.peek(1) {
-                        Value::ObjIndex(instance_idx)
-                            if self.heap.heap[instance_idx].as_instance().is_some() =>
+                        Value::ObjIndex(instance)
+                            if self.heap.deref(instance).as_instance().is_some() =>
                         {
                             let name = self.read_string(*constant).to_string();
                             let value = self.stack.peek(0);
                             self.heap
-                                .as_instance_mut(instance_idx)
+                                .as_instance_mut(instance)
                                 .fields
                                 .insert(name, value);
                             self.stack.pop(); // Value.
@@ -828,8 +817,8 @@ impl<'opt> VM<'opt> {
                 }
                 OpCode::GetSuper(name_index) => {
                     let name = self.read_string(*name_index).to_string();
-                    let superclass_ptr = *self.stack.pop().as_obj_index().unwrap();
-                    if !self.bind_method(superclass_ptr, &name) {
+                    let superclass = *self.stack.pop().as_obj_index().unwrap();
+                    if !self.bind_method(superclass, &name) {
                         return Err(InterpretResult::RuntimeError);
                     }
                 }
@@ -846,7 +835,7 @@ impl<'opt> VM<'opt> {
                 OpCode::Inherit => {
                     match self.stack.peek(1) {
                         Value::ObjIndex(superclass)
-                            if self.heap.heap[superclass].as_class().is_some() =>
+                            if self.heap.deref(superclass).as_class().is_some() =>
                         {
                             let superclass_methods = self.heap.as_class(superclass).methods.clone();
                             let subclass = *self.stack.peek(0).as_obj_index().unwrap();
@@ -865,8 +854,8 @@ impl<'opt> VM<'opt> {
                 OpCode::SuperInvoke(constant, arg_count) => {
                     let arg_count = *arg_count;
                     let method = self.read_string(*constant).to_string();
-                    let superclass_ptr = *self.stack.pop().as_obj_index().unwrap();
-                    if !self.invoke_from_class(superclass_ptr, &method, arg_count) {
+                    let superclass = *self.stack.pop().as_obj_index().unwrap();
+                    if !self.invoke_from_class(superclass, &method, arg_count) {
                         return Err(InterpretResult::RuntimeError);
                     }
                 }
@@ -885,12 +874,12 @@ impl<'opt> VM<'opt> {
         let function = compiler.compile();
         match function {
             Some(function) => {
-                let function_heap_index = self.new_function(function);
-                self.stack.push(Value::ObjIndex(function_heap_index));
-                let closure_heap_index = self.new_closure(function_heap_index, Vec::new());
+                let function = self.new_function(function);
+                self.stack.push(Value::ObjIndex(function));
+                let closure = self.new_closure(function, Vec::new());
                 self.stack.pop();
-                self.stack.push(Value::ObjIndex(closure_heap_index));
-                self.call(closure_heap_index, 0);
+                self.stack.push(Value::ObjIndex(closure));
+                self.call(closure, 0);
             }
             None => {
                 self.is_compiling = false;
@@ -908,8 +897,7 @@ impl<'opt> VM<'opt> {
 }
 
 struct CallFrame {
-    // Offset into heap. Points to a Closure.
-    heap_index: usize,
+    closure: Ptr,
     // Offset into function.chunk.code.
     ip: usize,
     // The first index of the stack that belongs to this frame.
@@ -917,9 +905,9 @@ struct CallFrame {
 }
 
 impl CallFrame {
-    fn new(heap_index: usize, frame_start: usize) -> Self {
+    fn new(closure: Ptr, frame_start: usize) -> Self {
         Self {
-            heap_index,
+            closure,
             ip: 0,
             frame_start,
         }
@@ -932,7 +920,7 @@ impl CallFrame {
 
 impl Rewrite for CallFrame {
     fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
-        self.heap_index.rewrite(mapping);
+        self.closure.rewrite(mapping);
     }
 }
 
@@ -973,11 +961,20 @@ impl Rewrite for Stack {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash)]
+pub struct Ptr(usize);
+
+impl Rewrite for Ptr {
+    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
+        self.0.rewrite(mapping);
+    }
+}
+
 pub struct Heap {
-    pub heap: Vec<Obj>,
+    heap: Vec<Obj>,
 
     /// Vector of heap indices, used during GC.
-    pub gray_stack: Vec<usize>,
+    gray_stack: Vec<Ptr>,
 
     log_gc: bool,
 }
@@ -1003,32 +1000,32 @@ impl Heap {
         }
     }
 
-    fn mark_object(&mut self, index: usize) {
+    fn mark_object(&mut self, ptr: Ptr) {
         if self.log_gc {
-            eprintln!("{:3} mark object {}", index, self.heap[index].print(self));
+            eprintln!("{:3} mark object {}", ptr.0, self.heap[ptr.0].print(self));
         }
 
-        if self.heap[index].is_marked() {
+        if self.heap[ptr.0].is_marked() {
             return;
         }
 
-        self.heap[index].mark(true);
+        self.heap[ptr.0].mark(true);
 
-        self.gray_stack.push(index);
+        self.gray_stack.push(ptr);
     }
 
     fn trace_references(&mut self) {
-        while let Some(index) = self.gray_stack.pop() {
-            self.blacken_object(index);
+        while let Some(ptr) = self.gray_stack.pop() {
+            self.blacken_object(ptr);
         }
     }
 
-    fn blacken_object(&mut self, index: usize) {
+    fn blacken_object(&mut self, ptr: Ptr) {
         if self.log_gc {
-            eprintln!("{} blacken {}", index, self.heap[index].print(self));
+            eprintln!("{} blacken {}", ptr.0, self.heap[ptr.0].print(self));
         }
 
-        match &self.heap[index] {
+        match &self.heap[ptr.0] {
             Obj::String(_) | Obj::NativeFn(_) | Obj::OpenUpValue(_) => {}
             Obj::Function(f) => {
                 // TODO: don't clone here.
@@ -1037,9 +1034,9 @@ impl Heap {
                 }
             }
             Obj::Closure(c) => {
-                let fn_idx = c.function_index;
+                let func = c.function;
                 let uvs = c.upvalues.clone();
-                self.mark_object(fn_idx);
+                self.mark_object(func);
                 for uv in &uvs {
                     self.mark_object(*uv);
                 }
@@ -1055,48 +1052,59 @@ impl Heap {
                 }
             }
             Obj::Instance(i) => {
-                let idx = i.class_index;
+                let class = i.class;
                 let field_values = i.fields.values().copied().collect::<Vec<_>>();
-                self.mark_object(idx);
+                self.mark_object(class);
                 for value in field_values {
                     self.mark_value(value);
                 }
             }
             Obj::BoundMethod(b) => {
-                let r = b.receiver_idx;
-                let c = b.closure_idx;
+                let r = b.receiver;
+                let c = b.closure;
                 self.mark_object(r);
                 self.mark_object(c);
             }
         }
     }
 
-    fn as_string(&self, idx: usize) -> &LoxString {
-        self.heap[idx].as_string().unwrap()
+    pub fn deref(&self, ptr: Ptr) -> &Obj {
+        &self.heap[ptr.0]
     }
-    pub fn as_function(&self, idx: usize) -> &Function {
-        self.heap[idx].as_function().unwrap()
+    pub fn deref_mut(&mut self, ptr: Ptr) -> &mut Obj {
+        &mut self.heap[ptr.0]
     }
-    pub fn as_closure(&self, idx: usize) -> &Closure {
-        self.heap[idx].as_closure().unwrap()
+
+    pub fn assign(&mut self, ptr: Ptr, obj: Obj) {
+        self.heap[ptr.0] = obj;
     }
-    pub fn as_class(&self, idx: usize) -> &Class {
-        self.heap[idx].as_class().unwrap()
+
+    fn as_string(&self, ptr: Ptr) -> &LoxString {
+        self.heap[ptr.0].as_string().unwrap()
     }
-    fn as_class_mut(&mut self, idx: usize) -> &mut Class {
-        self.heap[idx].as_class_mut().unwrap()
+    pub fn as_function(&self, ptr: Ptr) -> &Function {
+        self.heap[ptr.0].as_function().unwrap()
     }
-    fn as_instance(&self, idx: usize) -> &Instance {
-        self.heap[idx].as_instance().unwrap()
+    pub fn as_closure(&self, ptr: Ptr) -> &Closure {
+        self.heap[ptr.0].as_closure().unwrap()
     }
-    fn as_instance_mut(&mut self, idx: usize) -> &mut Instance {
-        self.heap[idx].as_instance_mut().unwrap()
+    pub fn as_class(&self, ptr: Ptr) -> &Class {
+        self.heap[ptr.0].as_class().unwrap()
     }
-    fn as_open_up_value(&self, idx: usize) -> &Open {
-        self.heap[idx].as_open_up_value().unwrap()
+    fn as_class_mut(&mut self, ptr: Ptr) -> &mut Class {
+        self.heap[ptr.0].as_class_mut().unwrap()
     }
-    fn as_open_up_value_mut(&mut self, idx: usize) -> &mut Open {
-        self.heap[idx].as_open_up_value_mut().unwrap()
+    fn as_instance(&self, ptr: Ptr) -> &Instance {
+        self.heap[ptr.0].as_instance().unwrap()
+    }
+    fn as_instance_mut(&mut self, ptr: Ptr) -> &mut Instance {
+        self.heap[ptr.0].as_instance_mut().unwrap()
+    }
+    fn as_open_up_value(&self, ptr: Ptr) -> &Open {
+        self.heap[ptr.0].as_open_up_value().unwrap()
+    }
+    fn as_open_up_value_mut(&mut self, ptr: Ptr) -> &mut Open {
+        self.heap[ptr.0].as_open_up_value_mut().unwrap()
     }
 }
 
@@ -1108,11 +1116,11 @@ impl Rewrite for Heap {
 
 struct OpenUpValueIter<'h> {
     heap: &'h Heap,
-    it: Option<usize>,
+    it: Option<Ptr>,
 }
 
 impl<'h> Iterator for OpenUpValueIter<'h> {
-    type Item = usize;
+    type Item = Ptr;
 
     fn next(&mut self) -> Option<Self::Item> {
         let cur = self.it;
