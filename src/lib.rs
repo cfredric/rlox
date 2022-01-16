@@ -8,6 +8,7 @@ mod compiler;
 mod obj;
 mod print;
 mod rewrite;
+mod stack;
 mod value;
 mod vm;
 

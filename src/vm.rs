@@ -9,6 +9,7 @@ use crate::obj::{
 };
 use crate::print::Print;
 use crate::rewrite::Rewrite;
+use crate::stack::{Slot, Stack};
 use crate::value::Value;
 use crate::Opt;
 
@@ -202,7 +203,7 @@ impl<'opt> VM<'opt> {
     }
 
     fn reset_stack(&mut self) {
-        self.stack.stack.clear();
+        self.stack.clear();
         self.open_upvalues = None;
     }
 
@@ -256,10 +257,10 @@ impl<'opt> VM<'opt> {
 
         let key = self
             .heap
-            .as_string(*self.stack.stack[0].as_obj_index().unwrap())
+            .as_string(*self.stack.at(Slot::new(0)).as_obj_index().unwrap())
             .string
             .to_string();
-        let value = self.stack.stack[1];
+        let value = self.stack.at(Slot::new(1));
         self.globals.insert(key, value);
 
         self.stack.pop();
@@ -287,8 +288,10 @@ impl<'opt> VM<'opt> {
                 }
                 Obj::Class(_) => {
                     let instance = self.new_instance(&mut ptr);
-                    let stack_len = self.stack.stack.len();
-                    self.stack.stack[stack_len - arg_count - 1] = Value::ObjIndex(instance);
+                    self.stack.assign(
+                        self.stack.from_top_slot(arg_count),
+                        Value::ObjIndex(instance),
+                    );
 
                     if let Some(closure) = self.heap.as_class(ptr).methods.get(INIT_STR).copied() {
                         return self.call(closure, arg_count);
@@ -300,8 +303,10 @@ impl<'opt> VM<'opt> {
                 }
                 Obj::BoundMethod(b) => {
                     let bound_ptr = b.closure;
-                    let stack_top = self.stack.stack.len();
-                    self.stack.stack[stack_top - arg_count - 1] = Value::ObjIndex(b.receiver);
+                    self.stack.assign(
+                        self.stack.from_top_slot(arg_count),
+                        Value::ObjIndex(b.receiver),
+                    );
                     return self.call(bound_ptr, arg_count);
                 }
             };
@@ -332,8 +337,8 @@ impl<'opt> VM<'opt> {
         };
 
         if let Some(value) = field {
-            let stack_len = self.stack.stack.len();
-            self.stack.stack[stack_len - arg_count - 1] = value;
+            self.stack
+                .assign(self.stack.from_top_slot(arg_count), value);
             return self.call_value(value, arg_count);
         }
         self.invoke_from_class(class, name, arg_count)
@@ -357,19 +362,19 @@ impl<'opt> VM<'opt> {
     /// Captures the given stack slot as a local upvalue. Inserts the new
     /// upvalue into the linked list of upvalues on the heap, sorted by stack
     /// slot (higher first).
-    fn capture_upvalue(&mut self, local: usize) -> Ptr {
+    fn capture_upvalue(&mut self, slot: Slot) -> Ptr {
         let mut prev_upvalue = None;
         let mut next = self.open_upvalues;
-        while matches!(next, Some(uv) if self.heap.as_open_up_value(uv).slot > local) {
+        while matches!(next, Some(uv) if self.heap.as_open_up_value(uv).slot > slot) {
             prev_upvalue = next;
             next = self.heap.as_open_up_value(next.unwrap()).next;
         }
 
-        if matches!(next, Some(ptr) if self.heap.as_open_up_value(ptr).slot == local) {
+        if matches!(next, Some(ptr) if self.heap.as_open_up_value(ptr).slot == slot) {
             return next.unwrap();
         }
 
-        let created_upvalue = self.new_upvalue(Open::new(local, next), &mut prev_upvalue);
+        let created_upvalue = self.new_upvalue(Open::new(slot, next), &mut prev_upvalue);
 
         if let Some(prev) = prev_upvalue {
             self.heap.as_open_up_value_mut(prev).next = Some(created_upvalue);
@@ -382,13 +387,13 @@ impl<'opt> VM<'opt> {
 
     /// Closes upvalues that point to or above the given stack slot. This
     /// includes removing the upvalue from the open_upvalues linked list.
-    fn close_upvalues(&mut self, stack_slot: usize) {
-        while matches!(self.open_upvalues, Some(ptr) if self.heap.as_open_up_value(ptr).slot >= stack_slot)
+    fn close_upvalues(&mut self, slot: Slot) {
+        while matches!(self.open_upvalues, Some(ptr) if self.heap.as_open_up_value(ptr).slot >= slot)
         {
             let ptr = self.open_upvalues.unwrap();
             let open = self.heap.as_open_up_value(ptr);
             self.open_upvalues = open.next;
-            let obj = Obj::ClosedUpValue(Closed::new(self.stack.stack[open.slot]));
+            let obj = Obj::ClosedUpValue(Closed::new(self.stack.at(open.slot)));
             self.heap.assign(ptr, obj);
         }
     }
@@ -421,7 +426,7 @@ impl<'opt> VM<'opt> {
 
         self.frames.push(CallFrame::new(
             closure_ptr,
-            self.stack.stack.len() - arg_count - 1,
+            self.stack.from_top_slot(arg_count),
         ));
         true
     }
@@ -456,8 +461,8 @@ impl<'opt> VM<'opt> {
     }
 
     fn mark_roots(&mut self) {
-        for slot in &self.stack.stack {
-            self.heap.mark_value(*slot);
+        for value in self.stack.iter() {
+            self.heap.mark_value(*value);
         }
 
         for closure in self.frames.iter().map(|f| f.closure) {
@@ -564,14 +569,12 @@ impl<'opt> VM<'opt> {
         opens_ll == opens_heap && is_sorted_and_unique
     }
 
-    fn print_stack_slice(&self, label: &str, skip: usize) {
+    fn print_stack_slice(&self, label: &str, start: Slot) {
         eprintln!(
             "{}:    {}",
             label,
             self.stack
-                .stack
-                .iter()
-                .skip(skip)
+                .iter_from(start)
                 .map(|i| format!("[ {} ]", i.print(&self.heap)))
                 .collect::<String>()
         );
@@ -580,7 +583,7 @@ impl<'opt> VM<'opt> {
     fn run(&mut self) -> Result<(), InterpretResult> {
         loop {
             if self.opt.trace_execution {
-                self.print_stack_slice("stack", 0);
+                self.print_stack_slice("stack", Slot::new(0));
                 self.print_stack_slice("frame", self.frame().frame_start);
 
                 self.function()
@@ -610,13 +613,13 @@ impl<'opt> VM<'opt> {
                     if self.frames.is_empty() {
                         self.stack.pop();
                         if self.opt.trace_execution {
-                            self.print_stack_slice("stack", 0);
+                            self.print_stack_slice("stack", Slot::new(0));
                         }
-                        debug_assert!(self.stack.stack.is_empty());
+                        debug_assert!(self.stack.is_empty());
                         return Ok(());
                     }
 
-                    self.stack.stack.truncate(finished_frame.frame_start);
+                    self.stack.truncate_from(finished_frame.frame_start);
                     self.stack.push(result);
                 }
                 OpCode::Negate => match self.stack.pop() {
@@ -704,12 +707,12 @@ impl<'opt> VM<'opt> {
                     self.runtime_error(&format!("Undefined variable '{}'.", key));
                     return Err(InterpretResult::RuntimeError);
                 }
-                OpCode::SetLocal(slot) => {
-                    let index = self.frame().slots() + *slot;
-                    self.stack.stack[index] = self.stack.peek(0);
+                OpCode::SetLocal(slot_offset) => {
+                    let slot = self.frame().slots().offset(*slot_offset);
+                    self.stack.assign(slot, self.stack.peek(0));
                 }
-                OpCode::GetLocal(slot) => {
-                    let value = self.stack.stack[self.frame().slots() + *slot];
+                OpCode::GetLocal(slot_offset) => {
+                    let value = self.stack.at(self.frame().slots().offset(*slot_offset));
                     self.stack.push(value);
                 }
                 OpCode::JumpIfFalse(distance) => {
@@ -735,7 +738,7 @@ impl<'opt> VM<'opt> {
                         .iter()
                         .map(|uv| {
                             if uv.is_local {
-                                self.capture_upvalue(self.frame().slots() + uv.index)
+                                self.capture_upvalue(self.frame().slots().offset(uv.index))
                             } else {
                                 self.heap.as_closure(self.frame().closure).upvalues[uv.index]
                             }
@@ -748,7 +751,7 @@ impl<'opt> VM<'opt> {
                     let uv = self.closure().upvalues[*slot];
                     let val = match &self.heap.deref(uv) {
                         Obj::ClosedUpValue(c) => c.value,
-                        Obj::OpenUpValue(o) => self.stack.stack[o.slot],
+                        Obj::OpenUpValue(o) => self.stack.at(o.slot),
                         _ => unreachable!(),
                     };
                     self.stack.push(val);
@@ -758,12 +761,12 @@ impl<'opt> VM<'opt> {
                     let val = self.stack.peek(0);
                     match &mut self.heap.deref_mut(uv) {
                         Obj::ClosedUpValue(c) => c.value = val,
-                        Obj::OpenUpValue(o) => self.stack.stack[o.slot] = val,
+                        Obj::OpenUpValue(o) => self.stack.assign(o.slot, val),
                         _ => unreachable!(),
                     };
                 }
                 OpCode::CloseUpvalue => {
-                    self.close_upvalues(self.stack.stack.len() - 1);
+                    self.close_upvalues(self.stack.top_slot());
                     self.stack.pop();
                 }
                 OpCode::Class(index) => {
@@ -900,12 +903,12 @@ struct CallFrame {
     closure: Ptr,
     // Offset into function.chunk.code.
     ip: usize,
-    // The first index of the stack that belongs to this frame.
-    frame_start: usize,
+    // The first stack slot that belongs to this frame.
+    frame_start: Slot,
 }
 
 impl CallFrame {
-    fn new(closure: Ptr, frame_start: usize) -> Self {
+    fn new(closure: Ptr, frame_start: Slot) -> Self {
         Self {
             closure,
             ip: 0,
@@ -913,7 +916,7 @@ impl CallFrame {
         }
     }
 
-    fn slots(&self) -> usize {
+    fn slots(&self) -> Slot {
         self.frame_start
     }
 }
@@ -921,43 +924,6 @@ impl CallFrame {
 impl Rewrite for CallFrame {
     fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
         self.closure.rewrite(mapping);
-    }
-}
-
-struct Stack {
-    pub stack: Vec<Value>,
-}
-
-impl Stack {
-    fn new() -> Self {
-        Self { stack: Vec::new() }
-    }
-
-    fn push(&mut self, value: Value) {
-        self.stack.push(value);
-    }
-
-    /// Pops a value from the stack.
-    fn pop(&mut self) -> Value {
-        self.stack.pop().unwrap()
-    }
-
-    fn peek(&self, offset: usize) -> Value {
-        self.stack[self.stack.len() - 1 - offset]
-    }
-
-    fn top_n(&self, n: usize) -> &[Value] {
-        &self.stack[self.stack.len() - n..]
-    }
-
-    fn pop_n(&mut self, n: usize) {
-        self.stack.truncate(self.stack.len() - n);
-    }
-}
-
-impl Rewrite for Stack {
-    fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
-        self.stack.rewrite(mapping);
     }
 }
 

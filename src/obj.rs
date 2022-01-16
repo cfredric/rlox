@@ -6,6 +6,7 @@ use crate::{
     chunk::Chunk,
     print::Print,
     rewrite::Rewrite,
+    stack::Slot,
     value::Value,
     vm::{Heap, Ptr},
 };
@@ -283,13 +284,13 @@ impl Rewrite for BoundMethod {
 pub struct Open {
     header: Header,
     /// The stack slot that holds the associated value.
-    pub slot: usize,
+    pub slot: Slot,
     /// Heap pointer to the next open upvalue.
     pub next: Option<Ptr>,
 }
 
 impl Open {
-    pub fn new(slot: usize, next: Option<Ptr>) -> Self {
+    pub fn new(slot: Slot, next: Option<Ptr>) -> Self {
         Self {
             header: Header::new(true),
             slot,
