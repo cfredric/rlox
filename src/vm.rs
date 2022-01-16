@@ -32,10 +32,8 @@ pub struct VM<'opt> {
 
     bytes_allocated: usize,
     next_gc: usize,
-    /// Hack: we don't do garbage collection during compilation, since we don't
-    /// have visibility into the compiler's data structures and therefore can't
-    /// trace the roots it is in the process of adding.
-    is_compiling: bool,
+    /// Hack: we don't do garbage collection until we start executing. Differs from the book.
+    is_executing: bool,
 }
 
 const MAX_FRAMES: usize = 1024;
@@ -92,7 +90,7 @@ impl<'opt> VM<'opt> {
             globals: HashMap::new(),
             bytes_allocated: 0,
             next_gc: 1024 * 1024,
-            is_compiling: false,
+            is_executing: false,
         };
         vm.define_native("clock", NativeFn::new(clock_native));
         vm.define_native("sleep", NativeFn::new(sleep_native));
@@ -250,17 +248,12 @@ impl<'opt> VM<'opt> {
     }
 
     fn define_native(&mut self, name: &str, function: NativeFn) {
+        debug_assert!(!self.should_run_garbage_collection());
         let string = self.copy_string(name);
         self.heap.deref_mut(string).set_gc_exempt();
-        let str_ref = Value::ObjReference(string);
-        self.stack.push(str_ref);
         let func_ref = Value::ObjReference(self.new_native(function));
-        self.stack.push(func_ref);
 
         self.globals.insert(name.to_string(), func_ref);
-
-        self.stack.pop();
-        self.stack.pop();
     }
 
     fn call_value(&mut self, callee: Value, arg_count: usize) -> bool {
@@ -449,8 +442,12 @@ impl<'opt> VM<'opt> {
         true
     }
 
+    fn should_run_garbage_collection(&self) -> bool {
+        self.is_executing && !self.opt.disable_garbage_collection
+    }
+
     fn collect_garbage<R: Rewrite>(&mut self, pending_rewrites: Option<(&mut Obj, &mut R)>) {
-        if self.is_compiling || self.opt.disable_garbage_collection {
+        if !self.should_run_garbage_collection() {
             return;
         }
         if self.opt.log_garbage_collection {
@@ -888,7 +885,6 @@ impl<'opt> VM<'opt> {
     }
 
     pub fn interpret(&mut self, source: &str) -> Result<(), InterpretResult> {
-        self.is_compiling = true;
         match Compiler::new(self.opt, source, self).compile() {
             Some(function) => {
                 let function = self.new_function(function);
@@ -899,17 +895,18 @@ impl<'opt> VM<'opt> {
                 self.call(closure, 0);
             }
             None => {
-                self.is_compiling = false;
                 return Err(InterpretResult::CompileError);
             }
         };
 
-        self.is_compiling = false;
         if self.opt.compile_only {
             return Ok(());
         }
 
-        self.run()
+        self.is_executing = true;
+        let result = self.run();
+        self.is_executing = false;
+        result
     }
 }
 
