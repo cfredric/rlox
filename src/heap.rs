@@ -46,7 +46,7 @@ impl Heap {
         }
         match value {
             Value::Nil | Value::Bool(_) | Value::Double(_) => {}
-            Value::ObjIndex(index) => {
+            Value::ObjReference(index) => {
                 self.mark_object(index);
             }
         }

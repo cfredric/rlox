@@ -197,7 +197,7 @@ impl<'opt> VM<'opt> {
 
     /// Reads a string from the constants table.
     fn read_string(&self, offset: usize) -> &str {
-        let ptr = *self.read_constant(offset).as_obj_index().unwrap();
+        let ptr = *self.read_constant(offset).as_obj_reference().unwrap();
         &self.heap.as_string(ptr).string
     }
 
@@ -210,7 +210,7 @@ impl<'opt> VM<'opt> {
         let mut conc = String::new();
         conc.push_str(s);
         conc.push_str(t);
-        Value::ObjIndex(self.take_string(conc))
+        Value::ObjReference(self.take_string(conc))
     }
     fn binary_op<R>(
         &mut self,
@@ -249,14 +249,14 @@ impl<'opt> VM<'opt> {
     fn define_native(&mut self, name: &str, function: NativeFn) {
         let ptr = self.copy_string(name);
         self.heap.deref_mut(ptr).set_gc_exempt();
-        let ptr = Value::ObjIndex(ptr);
+        let ptr = Value::ObjReference(ptr);
         self.stack.push(ptr);
-        let ptr = Value::ObjIndex(self.new_native(function));
+        let ptr = Value::ObjReference(self.new_native(function));
         self.stack.push(ptr);
 
         let key = self
             .heap
-            .as_string(*self.stack.at(Slot::new(0)).as_obj_index().unwrap())
+            .as_string(*self.stack.at(Slot::new(0)).as_obj_reference().unwrap())
             .string
             .to_string();
         let value = self.stack.at(Slot::new(1));
@@ -267,7 +267,7 @@ impl<'opt> VM<'opt> {
     }
 
     fn call_value(&mut self, callee: Value, arg_count: usize) -> bool {
-        if let Value::ObjIndex(mut ptr) = callee {
+        if let Value::ObjReference(mut ptr) = callee {
             match &self.heap.deref(ptr) {
                 Obj::String(_)
                 | Obj::Function(_)
@@ -289,7 +289,7 @@ impl<'opt> VM<'opt> {
                     let instance = self.new_instance(&mut ptr);
                     self.stack.assign(
                         self.stack.from_top_slot(arg_count),
-                        Value::ObjIndex(instance),
+                        Value::ObjReference(instance),
                     );
 
                     if let Some(closure) = self.heap.as_class(ptr).methods.get("init").copied() {
@@ -304,7 +304,7 @@ impl<'opt> VM<'opt> {
                     let bound_ptr = b.closure;
                     self.stack.assign(
                         self.stack.from_top_slot(arg_count),
-                        Value::ObjIndex(b.receiver),
+                        Value::ObjReference(b.receiver),
                     );
                     return self.call(bound_ptr, arg_count);
                 }
@@ -326,7 +326,7 @@ impl<'opt> VM<'opt> {
     }
 
     fn invoke(&mut self, name: &str, arg_count: usize) -> bool {
-        let receiver = *self.stack.peek(arg_count).as_obj_index().unwrap();
+        let receiver = *self.stack.peek(arg_count).as_obj_reference().unwrap();
         let (class, field) = match self.heap.deref(receiver).as_instance() {
             Some(i) => (i.class, i.fields.get(name).copied()),
             None => {
@@ -352,9 +352,9 @@ impl<'opt> VM<'opt> {
             }
         };
 
-        let bound = self.new_bound_method(*self.stack.peek(0).as_obj_index().unwrap(), method);
+        let bound = self.new_bound_method(*self.stack.peek(0).as_obj_reference().unwrap(), method);
         self.stack.pop();
-        self.stack.push(Value::ObjIndex(bound));
+        self.stack.push(Value::ObjReference(bound));
         true
     }
 
@@ -398,8 +398,8 @@ impl<'opt> VM<'opt> {
     }
 
     fn define_method(&mut self, name_ptr: Ptr) {
-        let method = *self.stack.peek(0).as_obj_index().unwrap();
-        let class = *self.stack.peek(1).as_obj_index().unwrap();
+        let method = *self.stack.peek(0).as_obj_reference().unwrap();
+        let class = *self.stack.peek(1).as_obj_reference().unwrap();
         let name = self.heap.as_string(name_ptr).string.clone();
         let class = self.heap.as_class_mut(class);
 
@@ -628,7 +628,7 @@ impl<'opt> VM<'opt> {
                             self.stack.push(Value::Double(a + b));
                             continue;
                         }
-                        (Value::ObjIndex(i), Value::ObjIndex(j)) => {
+                        (Value::ObjReference(i), Value::ObjReference(j)) => {
                             match (&self.heap.deref(i), &self.heap.deref(j)) {
                                 (Obj::String(t), Obj::String(s)) => {
                                     // Have to clone here, since adding to the heap
@@ -724,7 +724,7 @@ impl<'opt> VM<'opt> {
                 }
                 OpCode::Closure(constant, upvalues) => {
                     let function_heap_index =
-                        *self.read_constant(*constant).as_obj_index().unwrap();
+                        *self.read_constant(*constant).as_obj_reference().unwrap();
                     let upvalues = upvalues
                         .iter()
                         .map(|uv| {
@@ -736,7 +736,7 @@ impl<'opt> VM<'opt> {
                         })
                         .collect();
                     let closure_heap_index = self.new_closure(function_heap_index, upvalues);
-                    self.stack.push(Value::ObjIndex(closure_heap_index));
+                    self.stack.push(Value::ObjReference(closure_heap_index));
                 }
                 OpCode::GetUpvalue(slot) => {
                     let uv = self.closure().upvalues[*slot];
@@ -763,11 +763,11 @@ impl<'opt> VM<'opt> {
                 OpCode::Class(index) => {
                     let name = self.read_string(*index).to_string();
                     let class = self.new_class(&name);
-                    self.stack.push(Value::ObjIndex(class));
+                    self.stack.push(Value::ObjReference(class));
                 }
                 OpCode::GetProperty(constant) => {
                     match self.stack.peek(0) {
-                        Value::ObjIndex(instance)
+                        Value::ObjReference(instance)
                             if self.heap.deref(instance).as_instance().is_some() =>
                         {
                             let name = self.read_string(*constant).to_string();
@@ -790,7 +790,7 @@ impl<'opt> VM<'opt> {
                 }
                 OpCode::SetProperty(constant) => {
                     match self.stack.peek(1) {
-                        Value::ObjIndex(instance)
+                        Value::ObjReference(instance)
                             if self.heap.deref(instance).as_instance().is_some() =>
                         {
                             let name = self.read_string(*constant).to_string();
@@ -811,13 +811,13 @@ impl<'opt> VM<'opt> {
                 }
                 OpCode::GetSuper(name_index) => {
                     let name = self.read_string(*name_index).to_string();
-                    let superclass = *self.stack.pop().as_obj_index().unwrap();
+                    let superclass = *self.stack.pop().as_obj_reference().unwrap();
                     if !self.bind_method(superclass, &name) {
                         return Err(InterpretResult::RuntimeError);
                     }
                 }
                 OpCode::Method(constant) => {
-                    self.define_method(*self.read_constant(*constant).as_obj_index().unwrap());
+                    self.define_method(*self.read_constant(*constant).as_obj_reference().unwrap());
                 }
                 OpCode::Invoke(constant, arg_count) => {
                     let arg_count = *arg_count;
@@ -828,11 +828,11 @@ impl<'opt> VM<'opt> {
                 }
                 OpCode::Inherit => {
                     match self.stack.peek(1) {
-                        Value::ObjIndex(superclass)
+                        Value::ObjReference(superclass)
                             if self.heap.deref(superclass).as_class().is_some() =>
                         {
                             let superclass_methods = self.heap.as_class(superclass).methods.clone();
-                            let subclass = *self.stack.peek(0).as_obj_index().unwrap();
+                            let subclass = *self.stack.peek(0).as_obj_reference().unwrap();
                             self.heap
                                 .as_class_mut(subclass)
                                 .methods
@@ -848,7 +848,7 @@ impl<'opt> VM<'opt> {
                 OpCode::SuperInvoke(constant, arg_count) => {
                     let arg_count = *arg_count;
                     let method = self.read_string(*constant).to_string();
-                    let superclass = *self.stack.pop().as_obj_index().unwrap();
+                    let superclass = *self.stack.pop().as_obj_reference().unwrap();
                     if !self.invoke_from_class(superclass, &method, arg_count) {
                         return Err(InterpretResult::RuntimeError);
                     }
@@ -869,10 +869,10 @@ impl<'opt> VM<'opt> {
         match function {
             Some(function) => {
                 let function = self.new_function(function);
-                self.stack.push(Value::ObjIndex(function));
+                self.stack.push(Value::ObjReference(function));
                 let closure = self.new_closure(function, Vec::new());
                 self.stack.pop();
-                self.stack.push(Value::ObjIndex(closure));
+                self.stack.push(Value::ObjReference(closure));
                 self.call(closure, 0);
             }
             None => {

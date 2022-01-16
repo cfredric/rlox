@@ -433,7 +433,8 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.end_scope();
         if let Some((function, upvalues)) = self.end_compiler() {
             let function_heap_index = self.vm.new_function(function);
-            let function_constant_index = self.make_constant(Value::ObjIndex(function_heap_index));
+            let function_constant_index =
+                self.make_constant(Value::ObjReference(function_heap_index));
             self.emit_opcode(OpCode::Closure(function_constant_index, upvalues));
         }
     }
@@ -510,7 +511,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     fn string(&mut self) {
         let len = self.previous.lexeme.len();
         let index = self.vm.copy_string(&self.previous.lexeme[1..len - 1]);
-        self.emit_constant(Value::ObjIndex(index));
+        self.emit_constant(Value::ObjReference(index));
     }
 
     fn unary(&mut self) {
@@ -607,7 +608,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
     fn identifier_constant(&mut self, name: &str) -> usize {
         let ptr = self.vm.copy_string(name);
-        self.make_constant(Value::ObjIndex(ptr))
+        self.make_constant(Value::ObjReference(ptr))
     }
 
     fn define_variable(&mut self, global: usize) {

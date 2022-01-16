@@ -13,7 +13,7 @@ pub enum Value {
     Nil,
     Bool(bool),
     Double(f64),
-    ObjIndex(Ptr),
+    ObjReference(Ptr),
 }
 
 const ERROR_MARGIN: f64 = 0.00000000001;
@@ -33,7 +33,7 @@ impl Value {
             (Nil, Nil) => true,
             (Bool(a), Bool(b)) => a == b,
             (Double(f), Double(g)) => (f - g).abs() < ERROR_MARGIN,
-            (ObjIndex(i), ObjIndex(j)) => i == j,
+            (ObjReference(i), ObjReference(j)) => i == j,
             _ => false,
         }
     }
@@ -45,14 +45,14 @@ impl Print for Value {
             Value::Double(d) => d.to_string(),
             Value::Nil => "nil".to_string(),
             Value::Bool(b) => b.to_string(),
-            Value::ObjIndex(i) => heap.deref(*i).print(heap),
+            Value::ObjReference(i) => heap.deref(*i).print(heap),
         }
     }
 }
 
 impl Rewrite for Value {
     fn rewrite(&mut self, mapping: &HashMap<usize, usize>) {
-        if let Value::ObjIndex(i) = self {
+        if let Value::ObjReference(i) = self {
             i.rewrite(mapping);
         }
     }
