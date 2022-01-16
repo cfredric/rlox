@@ -108,32 +108,30 @@ impl Chunk {
         }
 
         match &self.code[offset] {
-            OpCode::Return => Self::simple_instruction("OP_RETURN"),
+            OpCode::Return => simple_instruction("OP_RETURN"),
             OpCode::Constant(i) => self.constant_instruction("OP_CONSTANT", heap, *i),
-            OpCode::Negate => Self::simple_instruction("OP_NEGATE"),
-            OpCode::Add => Self::simple_instruction("OP_ADD"),
-            OpCode::Subtract => Self::simple_instruction("OP_SUBTRACT"),
-            OpCode::Multiply => Self::simple_instruction("OP_MULTIPLY"),
-            OpCode::Divide => Self::simple_instruction("OP_DIVIDE"),
-            OpCode::Nil => Self::simple_instruction("OP_NIL"),
-            OpCode::Bool(b) => Self::simple_instruction(if *b { "OP_TRUE" } else { "OP_FALSE" }),
-            OpCode::Not => Self::simple_instruction("OP_NOT"),
-            OpCode::Equal => Self::simple_instruction("OP_EQUAL"),
-            OpCode::Greater => Self::simple_instruction("OP_GREATER"),
-            OpCode::Less => Self::simple_instruction("OP_LESS"),
-            OpCode::Print => Self::simple_instruction("OP_PRINT"),
-            OpCode::Pop => Self::simple_instruction("OP_POP"),
+            OpCode::Negate => simple_instruction("OP_NEGATE"),
+            OpCode::Add => simple_instruction("OP_ADD"),
+            OpCode::Subtract => simple_instruction("OP_SUBTRACT"),
+            OpCode::Multiply => simple_instruction("OP_MULTIPLY"),
+            OpCode::Divide => simple_instruction("OP_DIVIDE"),
+            OpCode::Nil => simple_instruction("OP_NIL"),
+            OpCode::Bool(b) => simple_instruction(if *b { "OP_TRUE" } else { "OP_FALSE" }),
+            OpCode::Not => simple_instruction("OP_NOT"),
+            OpCode::Equal => simple_instruction("OP_EQUAL"),
+            OpCode::Greater => simple_instruction("OP_GREATER"),
+            OpCode::Less => simple_instruction("OP_LESS"),
+            OpCode::Print => simple_instruction("OP_PRINT"),
+            OpCode::Pop => simple_instruction("OP_POP"),
             OpCode::DefineGlobal(i) => self.constant_instruction("OP_DEFINE_GLOBAL", heap, *i),
             OpCode::GetGlobal(i) => self.constant_instruction("OP_GET_GLOBAL", heap, *i),
             OpCode::SetGlobal(i) => self.constant_instruction("OP_SET_GLOBAL", heap, *i),
-            OpCode::GetLocal(i) => self.byte_instruction("OP_GET_LOCAL", *i),
-            OpCode::SetLocal(i) => self.byte_instruction("OP_SET_LOCAL", *i),
-            OpCode::JumpIfFalse(distance) => {
-                self.jump_instruction("OP_JUMP_IF_FALSE", *distance, true)
-            }
-            OpCode::Jump(distance) => self.jump_instruction("OP_JUMP", *distance, true),
-            OpCode::Loop(distance) => self.jump_instruction("OP_LOOP", *distance, false),
-            OpCode::Call(arity) => self.byte_instruction("OP_CALL", *arity),
+            OpCode::GetLocal(i) => byte_instruction("OP_GET_LOCAL", *i),
+            OpCode::SetLocal(i) => byte_instruction("OP_SET_LOCAL", *i),
+            OpCode::JumpIfFalse(distance) => jump_instruction("OP_JUMP_IF_FALSE", *distance, true),
+            OpCode::Jump(distance) => jump_instruction("OP_JUMP", *distance, true),
+            OpCode::Loop(distance) => jump_instruction("OP_LOOP", *distance, false),
+            OpCode::Call(arity) => byte_instruction("OP_CALL", *arity),
             OpCode::Closure(constant, upvalues) => {
                 print!("{:16} {} ", "OP_CLOSURE", constant);
                 print!("{}", self.constants[*constant].print(heap));
@@ -151,9 +149,9 @@ impl Chunk {
                         .collect::<String>()
                 );
             }
-            OpCode::GetUpvalue(index) => self.byte_instruction("OP_GET_UPVALUE", *index),
-            OpCode::SetUpvalue(index) => self.byte_instruction("OP_SET_UPVALUE", *index),
-            OpCode::CloseUpvalue => Self::simple_instruction("OP_CLOSE_UPVALUE"),
+            OpCode::GetUpvalue(index) => byte_instruction("OP_GET_UPVALUE", *index),
+            OpCode::SetUpvalue(index) => byte_instruction("OP_SET_UPVALUE", *index),
+            OpCode::CloseUpvalue => simple_instruction("OP_CLOSE_UPVALUE"),
             OpCode::Class(index) => self.constant_instruction("OP_CLASS", heap, *index),
             OpCode::GetProperty(constant) => {
                 self.constant_instruction("OP_GET_PROPERTY", heap, *constant)
@@ -163,36 +161,34 @@ impl Chunk {
             }
             OpCode::Method(constant) => self.constant_instruction("OP_METHOD", heap, *constant),
             OpCode::Invoke(constant, arg_count) => {
-                self.invoke_instruction("OP_INVOKE", *constant, *arg_count)
+                invoke_instruction("OP_INVOKE", *constant, *arg_count)
             }
-            OpCode::Inherit => Self::simple_instruction("OP_INHERIT"),
+            OpCode::Inherit => simple_instruction("OP_INHERIT"),
             OpCode::GetSuper(c) => self.constant_instruction("OP_GET_SUPER", heap, *c),
             OpCode::SuperInvoke(name, arg_count) => {
-                self.invoke_instruction("OP_SUPER_INVOKE", *name, *arg_count);
+                invoke_instruction("OP_SUPER_INVOKE", *name, *arg_count);
             }
         }
-    }
-
-    fn simple_instruction(name: &str) {
-        println!("{}", name);
     }
 
     fn constant_instruction(&self, name: &str, heap: &Heap, offset: usize) {
         println!("{:16} {}", name, self.constants[offset].print(heap));
     }
+}
 
-    fn byte_instruction(&self, name: &str, slot: usize) {
-        println!("{:16} {}", name, slot);
-    }
+fn simple_instruction(name: &str) {
+    println!("{}", name);
+}
+fn byte_instruction(name: &str, slot: usize) {
+    println!("{:16} {}", name, slot);
+}
+fn jump_instruction(name: &str, distance: usize, positive: bool) {
+    let distance = distance as isize * if positive { 1 } else { -1 };
+    println!("{:16} {}", name, distance);
+}
 
-    fn jump_instruction(&self, name: &str, distance: usize, positive: bool) {
-        let distance = distance as isize * if positive { 1 } else { -1 };
-        println!("{:16} {}", name, distance);
-    }
-
-    fn invoke_instruction(&self, name: &str, constant: usize, arg_count: usize) {
-        println!("{:16} ({} args) {}", name, arg_count, constant)
-    }
+fn invoke_instruction(name: &str, constant: usize, arg_count: usize) {
+    println!("{:16} ({} args) {}", name, arg_count, constant)
 }
 
 impl Rewrite for Chunk {
