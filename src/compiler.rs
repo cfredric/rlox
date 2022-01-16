@@ -1,6 +1,6 @@
 mod scanner;
 
-use crate::chunk::{Chunk, OpCode};
+use crate::chunk::{Chunk, ConstantIndex, OpCode};
 use crate::obj::Function;
 use crate::value::Value;
 use crate::vm::VM;
@@ -236,7 +236,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
             self.begin_scope(); // Matched with end below.
             self.add_local(Token::new(TokenType::Super, "super"));
-            self.define_variable(0);
+            self.define_variable(ConstantIndex::special());
 
             self.named_variable(name, false);
             self.emit_opcode(OpCode::Inherit);
@@ -590,22 +590,22 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         }
     }
 
-    fn parse_variable<'e: 'source>(&mut self, error_message: &'e str) -> usize {
+    fn parse_variable<'e: 'source>(&mut self, error_message: &'e str) -> ConstantIndex {
         self.consume(TokenType::Identifier, error_message);
         self.declare_variable();
         if self.current().scope_depth > 0 {
-            return 0;
+            return ConstantIndex::error();
         }
         let name = self.previous.lexeme;
         self.identifier_constant(name)
     }
 
-    fn identifier_constant(&mut self, name: &str) -> usize {
+    fn identifier_constant(&mut self, name: &str) -> ConstantIndex {
         let ptr = self.vm.copy_string(name);
         self.make_constant(Value::ObjReference(ptr))
     }
 
-    fn define_variable(&mut self, global: usize) {
+    fn define_variable(&mut self, global: ConstantIndex) {
         if self.current().scope_depth > 0 {
             self.mark_initialized();
             return;
@@ -816,13 +816,15 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.emit_opcode(OpCode::Return);
     }
 
-    fn make_constant(&mut self, value: Value) -> usize {
+    fn make_constant(&mut self, value: Value) -> ConstantIndex {
         let idx = self.current_chunk_mut().add_constant(value);
-        if idx >= 2_usize.pow(8) {
-            self.error("Too many constants in one chunk.");
-            return 0;
+        match idx {
+            Err(idx) => {
+                self.error("Too many constants in one chunk.");
+                idx
+            }
+            Ok(idx) => idx,
         }
-        idx
     }
 
     fn emit_constant(&mut self, value: Value) {

@@ -6,17 +6,12 @@ use crate::value::Value;
 
 #[derive(Clone)]
 pub enum OpCode {
-    /// Operand is the index into the constants table.
-    Constant(usize),
+    Constant(ConstantIndex),
     Nil,
-    /// Operand is the boolean value itself.
     Bool(bool),
-    /// Operand is the index into the constants table.
-    GetGlobal(usize),
-    /// Operand is the index into the constants table.
-    DefineGlobal(usize),
-    /// Operand is the index into the constants table.
-    SetGlobal(usize),
+    GetGlobal(ConstantIndex),
+    DefineGlobal(ConstantIndex),
+    SetGlobal(ConstantIndex),
     /// Operand is the stack frame's slot. Starts counting from the start of the
     /// frame.
     GetLocal(usize),
@@ -44,50 +39,76 @@ pub enum OpCode {
     Call(usize),
     /// First operand is the index into the constants table of the method name;
     /// second operand is the argument count.
-    Invoke(usize, usize),
+    Invoke(ConstantIndex, usize),
     /// First operand is the index into the constants table for the function;
     /// second operand is the list of upvalue metadata used by the closure.
-    Closure(usize, Vec<Upvalue>),
+    Closure(ConstantIndex, Vec<Upvalue>),
     CloseUpvalue,
     /// Operand is the index into the closure's upvalue array.
     GetUpvalue(usize),
     /// Operand is the index into the closure's upvalue array.
     SetUpvalue(usize),
-    /// Operand is the index into the constants table for the property name.
-    GetProperty(usize),
-    /// Operand is the index into the constants table for the property name.
-    SetProperty(usize),
+    GetProperty(ConstantIndex),
+    SetProperty(ConstantIndex),
     /// Operand is the index into the constants table for the superclass method name.
-    GetSuper(usize),
+    GetSuper(ConstantIndex),
     /// First operand is the index into the constants table of the superclass method name;
     /// second operand is the argument count.
-    SuperInvoke(usize, usize),
+    SuperInvoke(ConstantIndex, usize),
     Return,
-    /// Operand is the index into the constants table for the class name.
-    Class(usize),
+    Class(ConstantIndex),
     Inherit,
-    /// Operand is the index into the constants table for the method name.
-    Method(usize),
+    Method(ConstantIndex),
 }
 
 #[derive(Default)]
 pub struct Chunk {
     pub code: Vec<OpCode>,
-    pub constants: Vec<Value>,
+    constants: Vec<Value>,
     pub lines: Vec<usize>,
+}
+
+#[derive(Copy, Clone)]
+pub struct ConstantIndex(usize);
+
+impl ConstantIndex {
+    fn new(index: usize) -> Self {
+        Self(index)
+    }
+
+    pub fn error() -> Self {
+        Self(999999)
+    }
+
+    pub fn special() -> Self {
+        Self(0)
+    }
 }
 
 impl Chunk {
     pub fn new() -> Self {
         Self::default()
     }
+
     pub fn write_chunk(&mut self, op: OpCode, line: usize) {
         self.code.push(op);
         self.lines.push(line);
     }
-    pub fn add_constant(&mut self, value: Value) -> usize {
+
+    pub fn add_constant(&mut self, value: Value) -> Result<ConstantIndex, ConstantIndex> {
         self.constants.push(value);
-        self.constants.len() - 1
+        if self.constants.len() > 2_usize.pow(8) {
+            return Err(ConstantIndex::error());
+        }
+        Ok(ConstantIndex::new(self.constants.len() - 1))
+    }
+
+    pub fn constant_at(&self, index: ConstantIndex) -> Value {
+        self.constants[index.0]
+    }
+
+    pub fn constants_iter<'s>(&'s self) -> impl Iterator<Item = &Value> + 's {
+        self.constants.iter()
     }
 
     pub fn disassemble_chunk(&self, name: &str, heap: &Heap) {
@@ -133,8 +154,8 @@ impl Chunk {
             OpCode::Loop(distance) => jump_instruction("OP_LOOP", *distance, false),
             OpCode::Call(arity) => byte_instruction("OP_CALL", *arity),
             OpCode::Closure(constant, upvalues) => {
-                print!("{:16} {} ", "OP_CLOSURE", constant);
-                print!("{}", self.constants[*constant].print(heap));
+                print!("{:16} {} ", "OP_CLOSURE", constant.0);
+                print!("{}", self.constant_at(*constant).print(heap));
                 println!();
 
                 println!(
@@ -171,8 +192,8 @@ impl Chunk {
         }
     }
 
-    fn constant_instruction(&self, name: &str, heap: &Heap, offset: usize) {
-        println!("{:16} {}", name, self.constants[offset].print(heap));
+    fn constant_instruction(&self, name: &str, heap: &Heap, index: ConstantIndex) {
+        println!("{:16} {}", name, self.constant_at(index).print(heap));
     }
 }
 
@@ -187,8 +208,8 @@ fn jump_instruction(name: &str, distance: usize, positive: bool) {
     println!("{:16} {}", name, distance);
 }
 
-fn invoke_instruction(name: &str, constant: usize, arg_count: usize) {
-    println!("{:16} ({} args) {}", name, arg_count, constant)
+fn invoke_instruction(name: &str, constant: ConstantIndex, arg_count: usize) {
+    println!("{:16} ({} args) {}", name, arg_count, constant.0)
 }
 
 impl Rewrite for Chunk {

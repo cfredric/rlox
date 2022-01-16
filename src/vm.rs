@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use itertools::Itertools;
 
-use crate::chunk::OpCode;
+use crate::chunk::{ConstantIndex, OpCode};
 use crate::compiler::Compiler;
 use crate::heap::{Heap, Ptr};
 use crate::obj::{
@@ -191,13 +191,13 @@ impl<'opt> VM<'opt> {
     }
 
     // Reads a constant from the constants table.
-    fn read_constant(&self, offset: usize) -> Value {
-        self.function().chunk.constants[offset]
+    fn read_constant(&self, index: ConstantIndex) -> Value {
+        self.function().chunk.constant_at(index)
     }
 
     /// Reads a string from the constants table.
-    fn read_string(&self, offset: usize) -> &str {
-        let ptr = *self.read_constant(offset).as_obj_reference().unwrap();
+    fn read_string(&self, index: ConstantIndex) -> &str {
+        let ptr = *self.read_constant(index).as_obj_reference().unwrap();
         &self.heap.as_string(ptr).string
     }
 
@@ -578,8 +578,8 @@ impl<'opt> VM<'opt> {
 
             use crate::value::*;
             match &self.read_byte().clone() {
-                OpCode::Constant(offset) => {
-                    let constant = self.read_constant(*offset);
+                OpCode::Constant(index) => {
+                    let constant = self.read_constant(*index);
                     self.stack.push(constant);
                 }
                 OpCode::Return => {

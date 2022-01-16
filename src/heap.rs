@@ -81,8 +81,8 @@ impl Heap {
             Obj::String(_) | Obj::NativeFn(_) | Obj::OpenUpValue(_) => {}
             Obj::Function(f) => {
                 // TODO: don't clone here.
-                for v in f.chunk.constants.clone().iter() {
-                    self.mark_value(*v);
+                for v in f.chunk.constants_iter().cloned().collect::<Vec<_>>() {
+                    self.mark_value(v);
                 }
             }
             Obj::Closure(c) => {
