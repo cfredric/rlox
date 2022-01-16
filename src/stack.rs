@@ -90,10 +90,10 @@ impl Stack {
         self.stack[slot.0] = val;
     }
 
-    pub fn iter<'s>(&'s self) -> impl Iterator<Item = &Value> + 's {
+    pub fn iter(&self) -> impl Iterator<Item = &Value> + '_ {
         self.stack.iter()
     }
-    pub fn iter_from<'s>(&'s self, s: Slot) -> impl Iterator<Item = &Value> + 's {
+    pub fn iter_from(&self, s: Slot) -> impl Iterator<Item = &Value> + '_ {
         self.stack.iter().skip(s.0)
     }
 }

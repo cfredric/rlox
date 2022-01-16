@@ -182,7 +182,7 @@ impl Heap {
         self.heap[ptr.0].as_open_up_value_mut().unwrap()
     }
 
-    pub fn iter<'s>(&'s self) -> impl Iterator<Item = &Obj> + 's {
+    pub fn iter(&self) -> impl Iterator<Item = &Obj> + '_ {
         self.heap.iter()
     }
 
