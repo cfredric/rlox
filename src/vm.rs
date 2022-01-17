@@ -201,11 +201,6 @@ impl<'opt> VM<'opt> {
         &self.heap.as_string(ptr).string
     }
 
-    fn reset_stack(&mut self) {
-        self.stack.clear();
-        self.open_upvalues = None;
-    }
-
     fn concatenate(&mut self, s: &str, t: &str) -> Value {
         Value::ObjReference(self.take_string(format!("{}{}", s, t)))
     }
@@ -222,16 +217,11 @@ impl<'opt> VM<'opt> {
                 self.stack.push(value_type(op(ad, bd)));
                 Ok(())
             }
-            _ => {
-                self.runtime_error("Operands must be numbers.");
-                self.stack.push(a);
-                self.stack.push(b);
-                Err(InterpretResult::RuntimeError)
-            }
+            _ => self.runtime_error("Operands must be numbers."),
         }
     }
 
-    fn runtime_error(&mut self, message: &str) {
+    fn runtime_error(&mut self, message: &str) -> Result<(), InterpretResult> {
         eprintln!("{}", message);
 
         for frame in self.frames.iter().rev() {
@@ -241,7 +231,10 @@ impl<'opt> VM<'opt> {
             eprintln!("[line {}] in {}", func.chunk.lines[instruction], func.name);
         }
 
-        self.reset_stack();
+        self.stack.clear();
+        self.open_upvalues = None;
+
+        Err(InterpretResult::RuntimeError)
     }
 
     fn define_native(&mut self, name: &str, function: NativeFn) {
@@ -253,7 +246,7 @@ impl<'opt> VM<'opt> {
         self.globals.insert(name.to_string(), func_ref);
     }
 
-    fn call_value(&mut self, callee: Value, arg_count: usize) -> bool {
+    fn call_value(&mut self, callee: Value, arg_count: usize) -> Result<(), InterpretResult> {
         if let Value::ObjReference(mut ptr) = callee {
             match &self.heap.deref(ptr) {
                 Obj::String(_)
@@ -270,7 +263,7 @@ impl<'opt> VM<'opt> {
                     let result = (native.f)(self.stack.top_n(arg_count));
                     self.stack.pop_n(arg_count + 1);
                     self.stack.push(result);
-                    return true;
+                    return Ok(());
                 }
                 Obj::Class(_) => {
                     let instance = self.new_instance(&mut ptr);
@@ -282,10 +275,9 @@ impl<'opt> VM<'opt> {
                     if let Some(closure) = self.heap.as_class(ptr).methods.get("init").copied() {
                         return self.call(closure, arg_count);
                     } else if arg_count != 0 {
-                        self.runtime_error(&format!("Expected 0 arguments but got {}.", arg_count));
-                        return false;
+                        self.runtime_error(&format!("Expected 0 arguments but got {}.", arg_count))?
                     }
-                    return true;
+                    return Ok(());
                 }
                 Obj::BoundMethod(b) => {
                     let bound_ptr = b.closure;
@@ -297,22 +289,22 @@ impl<'opt> VM<'opt> {
                 }
             };
         }
-        self.runtime_error("Can only call functions and classes.");
-        false
+        self.runtime_error("Can only call functions and classes.")
     }
 
-    fn invoke_from_class(&mut self, class: Ptr, name: &str, arg_count: usize) -> bool {
-        let method = match self.heap.as_class(class).methods.get(name) {
-            Some(ptr) => *ptr,
-            None => {
-                self.runtime_error(&format!("Undefined property '{}'.", name));
-                return false;
-            }
-        };
-        self.call(method, arg_count)
+    fn invoke_from_class(
+        &mut self,
+        class: Ptr,
+        name: &str,
+        arg_count: usize,
+    ) -> Result<(), InterpretResult> {
+        match self.heap.as_class(class).methods.get(name) {
+            Some(&ptr) => self.call(ptr, arg_count),
+            None => self.runtime_error(&format!("Undefined property '{}'.", name)),
+        }
     }
 
-    fn invoke(&mut self, name: &str, arg_count: usize) -> bool {
+    fn invoke(&mut self, name: &str, arg_count: usize) -> Result<(), InterpretResult> {
         let receiver = *self
             .stack
             .peek(arg_count)
@@ -321,8 +313,7 @@ impl<'opt> VM<'opt> {
         let (class, field) = match self.heap.deref(receiver).as_instance() {
             Some(i) => (i.class, i.fields.get(name).copied()),
             None => {
-                self.runtime_error("Only instances have methods.");
-                return false;
+                return self.runtime_error("Only instances have methods.");
             }
         };
 
@@ -334,12 +325,11 @@ impl<'opt> VM<'opt> {
         self.invoke_from_class(class, name, arg_count)
     }
 
-    fn bind_method(&mut self, class: Ptr, name: &str) -> bool {
+    fn bind_method(&mut self, class: Ptr, name: &str) -> Result<(), InterpretResult> {
         let method = match self.heap.as_class(class).methods.get(name) {
             Some(ptr) => *ptr,
             None => {
-                self.runtime_error(&format!("Undefined property '{}'.", name));
-                return false;
+                return self.runtime_error(&format!("Undefined property '{}'.", name));
             }
         };
 
@@ -353,7 +343,7 @@ impl<'opt> VM<'opt> {
         );
         self.stack.pop();
         self.stack.push(Value::ObjReference(bound));
-        true
+        Ok(())
     }
 
     /// Captures the given stack slot as a local upvalue. Inserts the new
@@ -416,27 +406,25 @@ impl<'opt> VM<'opt> {
         self.stack.pop();
     }
 
-    fn call(&mut self, closure_ptr: Ptr, arg_count: usize) -> bool {
+    fn call(&mut self, closure_ptr: Ptr, arg_count: usize) -> Result<(), InterpretResult> {
         let closure = self.heap.as_closure(closure_ptr);
         let arity = self.heap.as_function(closure.function).arity;
         if arg_count != arity {
-            self.runtime_error(&format!(
+            return self.runtime_error(&format!(
                 "Expected {} arguments but got {}.",
                 arity, arg_count
             ));
-            return false;
         }
 
         if self.frames.len() == MAX_FRAMES {
-            self.runtime_error("Stack overflow.");
-            return false;
+            return self.runtime_error("Stack overflow.");
         }
 
         self.frames.push(CallFrame::new(
             closure_ptr,
             self.stack.from_top_slot(arg_count),
         ));
-        true
+        Ok(())
     }
 
     fn should_run_garbage_collection(&self) -> bool {
@@ -613,10 +601,7 @@ impl<'opt> VM<'opt> {
                 }
                 OpCode::Negate => match self.stack.pop() {
                     Value::Double(d) => self.stack.push(Value::Double(-d)),
-                    _ => {
-                        self.runtime_error("Operand must be a number.");
-                        return Err(InterpretResult::RuntimeError);
-                    }
+                    _ => self.runtime_error("Operand must be a number.")?,
                 },
                 OpCode::Add => {
                     match (self.stack.peek(0), self.stack.peek(1)) {
@@ -643,8 +628,7 @@ impl<'opt> VM<'opt> {
                         }
                         _ => {}
                     };
-                    self.runtime_error("Operands must be two numbers or two strings.");
-                    return Err(InterpretResult::RuntimeError);
+                    self.runtime_error("Operands must be two numbers or two strings.")?;
                 }
                 OpCode::Subtract => self.binary_op(|a, b| a - b, Value::Double)?,
                 OpCode::Multiply => self.binary_op(|a, b| a * b, Value::Double)?,
@@ -679,22 +663,20 @@ impl<'opt> VM<'opt> {
                         self.stack.push(*v);
                     } else {
                         let msg = format!("Undefined variable '{}'.", name);
-                        self.runtime_error(&msg);
-                        return Err(InterpretResult::RuntimeError);
+                        self.runtime_error(&msg)?;
                     }
                 }
                 OpCode::SetGlobal(index) => {
                     let name = self.read_string(*index).to_string();
-                    let key = match self.globals.entry(name) {
+                    match self.globals.entry(name) {
                         std::collections::hash_map::Entry::Occupied(mut o) => {
-                            let val = self.stack.peek(0);
-                            o.insert(val);
-                            continue;
+                            o.insert(self.stack.peek(0));
                         }
-                        std::collections::hash_map::Entry::Vacant(e) => e.key().to_string(),
-                    };
-                    self.runtime_error(&format!("Undefined variable '{}'.", key));
-                    return Err(InterpretResult::RuntimeError);
+                        std::collections::hash_map::Entry::Vacant(e) => {
+                            let key = e.key().to_string();
+                            self.runtime_error(&format!("Undefined variable '{}'.", key))?;
+                        }
+                    }
                 }
                 OpCode::SetLocal(slot_offset) => {
                     let slot = self.frame().start_slot.offset(*slot_offset);
@@ -718,9 +700,7 @@ impl<'opt> VM<'opt> {
                     self.frame_mut().ip -= distance_to_loop_start;
                 }
                 OpCode::Call { arg_count } => {
-                    if !self.call_value(self.stack.peek(*arg_count), *arg_count) {
-                        return Err(InterpretResult::RuntimeError);
-                    }
+                    self.call_value(self.stack.peek(*arg_count), *arg_count)?
                 }
                 OpCode::Closure { function, upvalues } => {
                     let function = *self
@@ -785,14 +765,9 @@ impl<'opt> VM<'opt> {
                                 continue;
                             }
                             let class = i.class;
-                            if !self.bind_method(class, &name) {
-                                return Err(InterpretResult::RuntimeError);
-                            }
+                            self.bind_method(class, &name)?
                         }
-                        _ => {
-                            self.runtime_error("Only instances have properties.");
-                            return Err(InterpretResult::RuntimeError);
-                        }
+                        _ => self.runtime_error("Only instances have properties.")?,
                     };
                 }
                 OpCode::SetProperty { name } => {
@@ -810,10 +785,7 @@ impl<'opt> VM<'opt> {
                             self.stack.pop(); // Instance.
                             self.stack.push(value);
                         }
-                        _ => {
-                            self.runtime_error("Only instances have fields.");
-                            return Err(InterpretResult::RuntimeError);
-                        }
+                        _ => self.runtime_error("Only instances have fields.")?,
                     }
                 }
                 OpCode::GetSuper { method } => {
@@ -823,9 +795,7 @@ impl<'opt> VM<'opt> {
                         .pop()
                         .as_obj_reference()
                         .expect("top of stack should have been a class reference");
-                    if !self.bind_method(superclass, &name) {
-                        return Err(InterpretResult::RuntimeError);
-                    }
+                    self.bind_method(superclass, &name)?
                 }
                 OpCode::Method { name } => {
                     self.define_method(
@@ -841,9 +811,7 @@ impl<'opt> VM<'opt> {
                 } => {
                     let arg_count = *arg_count;
                     let method = self.read_string(*method_name).to_string();
-                    if !self.invoke(&method, arg_count) {
-                        return Err(InterpretResult::RuntimeError);
-                    }
+                    self.invoke(&method, arg_count)?
                 }
                 OpCode::Inherit => {
                     match self.stack.peek(1) {
@@ -862,10 +830,7 @@ impl<'opt> VM<'opt> {
                                 .extend(superclass_methods.into_iter());
                             self.stack.pop(); // Subclass.
                         }
-                        _ => {
-                            self.runtime_error("Superclass must be a class.");
-                            return Err(InterpretResult::RuntimeError);
-                        }
+                        _ => self.runtime_error("Superclass must be a class.")?,
                     }
                 }
                 OpCode::SuperInvoke { method, arg_count } => {
@@ -876,9 +841,7 @@ impl<'opt> VM<'opt> {
                         .pop()
                         .as_obj_reference()
                         .expect("stack top should have been a superclass reference");
-                    if !self.invoke_from_class(superclass, &method, arg_count) {
-                        return Err(InterpretResult::RuntimeError);
-                    }
+                    self.invoke_from_class(superclass, &method, arg_count)?
                 }
             }
         }
@@ -892,11 +855,9 @@ impl<'opt> VM<'opt> {
                 let closure = self.new_closure(function, Vec::new());
                 self.stack.pop();
                 self.stack.push(Value::ObjReference(closure));
-                self.call(closure, 0);
+                self.call(closure, 0)?;
             }
-            None => {
-                return Err(InterpretResult::CompileError);
-            }
+            None => Err(InterpretResult::CompileError)?,
         };
 
         if self.opt.compile_only {
