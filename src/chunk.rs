@@ -1,4 +1,4 @@
-use crate::compiler::Upvalue;
+use crate::compiler::CompiledUpValue;
 use crate::heap::{Heap, Ptr};
 use crate::obj::UpValueIndex;
 use crate::print::Print;
@@ -49,7 +49,7 @@ pub enum OpCode {
     },
     Closure {
         function: ConstantIndex,
-        upvalues: Vec<Upvalue>,
+        upvalues: Vec<CompiledUpValue>,
     },
     CloseUpvalue,
     GetUpvalue(UpValueIndex),
@@ -186,8 +186,8 @@ impl Chunk {
                         .iter()
                         .map(|upvalue| {
                             let (ty, index) = match upvalue {
-                                Upvalue::Local { index } => ("local", index.0),
-                                Upvalue::Nonlocal { index } => ("upvalue", index.0),
+                                CompiledUpValue::Local { index } => ("local", index.0),
+                                CompiledUpValue::Nonlocal { index } => ("upvalue", index.0),
                             };
                             format!("        |   {} {}", ty, index)
                         })

@@ -31,7 +31,7 @@ struct FunctionState<'source> {
     locals: Vec<Local<'source>>,
     scope_depth: usize,
 
-    upvalues: Vec<Upvalue>,
+    upvalues: Vec<CompiledUpValue>,
 }
 
 impl<'source> FunctionState<'source> {
@@ -169,7 +169,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.current_chunk_mut().write_chunk(opcode, line);
     }
 
-    fn end_compiler(&mut self) -> Option<(Function, Vec<Upvalue>)> {
+    fn end_compiler(&mut self) -> Option<(Function, Vec<CompiledUpValue>)> {
         self.emit_return();
 
         if self.opt.print_code && !self.had_error {
@@ -780,7 +780,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         None
     }
 
-    fn add_upvalue(&mut self, func_state_index: usize, upvalue: Upvalue) -> UpValueIndex {
+    fn add_upvalue(&mut self, func_state_index: usize, upvalue: CompiledUpValue) -> UpValueIndex {
         if let Some(index) = self.functions[func_state_index]
             .upvalues
             .iter()
@@ -807,11 +807,13 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         let enclosing = state_index - 1;
         if let Some(local) = self.resolve_local(enclosing, name) {
             self.functions[enclosing].local_at_mut(local).is_captured = true;
-            return Some(self.add_upvalue(state_index, Upvalue::Local { index: local }));
+            return Some(self.add_upvalue(state_index, CompiledUpValue::Local { index: local }));
         }
 
         if let Some(upvalue) = self.resolve_upvalue(enclosing, name) {
-            return Some(self.add_upvalue(state_index, Upvalue::Nonlocal { index: upvalue }));
+            return Some(
+                self.add_upvalue(state_index, CompiledUpValue::Nonlocal { index: upvalue }),
+            );
         }
 
         None
@@ -1043,7 +1045,7 @@ pub enum FunctionType {
 }
 
 #[derive(Clone, Eq, PartialEq)]
-pub enum Upvalue {
+pub enum CompiledUpValue {
     Local { index: StackSlotOffset },
     Nonlocal { index: UpValueIndex },
 }

@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use itertools::Itertools;
 
 use crate::chunk::{ConstantIndex, OpCode};
-use crate::compiler::Compiler;
+use crate::compiler::{CompiledUpValue, Compiler};
 use crate::heap::{Heap, Ptr};
 use crate::obj::{
     BoundMethod, Class, Closed, Closure, Function, Instance, LoxString, NativeFn, Obj, Open,
@@ -730,10 +730,10 @@ impl<'opt> VM<'opt> {
                     let upvalues = upvalues
                         .iter()
                         .map(|uv| match uv {
-                            crate::compiler::Upvalue::Local { index } => {
+                            CompiledUpValue::Local { index } => {
                                 self.capture_upvalue(self.frame().start_slot.offset(*index))
                             }
-                            crate::compiler::Upvalue::Nonlocal { index } => self
+                            CompiledUpValue::Nonlocal { index } => self
                                 .heap
                                 .as_closure(self.frame().closure)
                                 .upvalue_at(*index),
