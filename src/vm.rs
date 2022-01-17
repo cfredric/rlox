@@ -114,9 +114,8 @@ impl<'opt> VM<'opt> {
     }
 
     fn allocate_string(&mut self, s: String) -> Ptr {
-        let ptr = self.allocate_object::<()>(Obj::String(LoxString::new(&s)), None);
-        self.strings
-            .insert(self.heap.as_string(ptr).string.to_string(), ptr);
+        let ptr = self.allocate_object::<()>(Obj::String(LoxString::new(s.clone())), None);
+        self.strings.insert(s, ptr);
         ptr
     }
 
@@ -208,11 +207,9 @@ impl<'opt> VM<'opt> {
     }
 
     fn concatenate(&mut self, s: &str, t: &str) -> Value {
-        let mut conc = String::new();
-        conc.push_str(s);
-        conc.push_str(t);
-        Value::ObjReference(self.take_string(conc))
+        Value::ObjReference(self.take_string(format!("{}{}", s, t)))
     }
+
     fn binary_op<R>(
         &mut self,
         op: fn(f64, f64) -> R,

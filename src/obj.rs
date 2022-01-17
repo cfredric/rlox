@@ -134,10 +134,10 @@ pub struct LoxString {
 }
 
 impl LoxString {
-    pub fn new(s: &str) -> Self {
+    pub fn new(s: String) -> Self {
         Self {
             header: Header::new(true),
-            string: s.to_string(),
+            string: s,
         }
     }
 }
