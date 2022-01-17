@@ -727,19 +727,22 @@ impl<'opt> VM<'opt> {
                         .read_constant(*function)
                         .as_obj_reference()
                         .expect("constant should have been a function reference");
-                    let upvalues = upvalues
-                        .iter()
-                        .map(|uv| match uv {
-                            CompiledUpValue::Local { index } => {
-                                self.capture_upvalue(self.frame().start_slot.offset(*index))
-                            }
-                            CompiledUpValue::Nonlocal { index } => self
-                                .heap
-                                .as_closure(self.frame().closure)
-                                .upvalue_at(*index),
-                        })
-                        .collect();
-                    let closure = self.new_closure(function, upvalues);
+                    let uvs = {
+                        let mut uvs = vec![];
+                        for uv in upvalues {
+                            uvs.push(match uv {
+                                CompiledUpValue::Local { index } => {
+                                    self.capture_upvalue(self.frame().start_slot.offset(*index))
+                                }
+                                CompiledUpValue::Nonlocal { index } => self
+                                    .heap
+                                    .as_closure(self.frame().closure)
+                                    .upvalue_at(*index),
+                            });
+                        }
+                        uvs
+                    };
+                    let closure = self.new_closure(function, uvs);
                     self.stack.push(Value::ObjReference(closure));
                 }
                 OpCode::GetUpvalue(slot) => {
