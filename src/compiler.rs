@@ -178,9 +178,10 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         }
         if self.had_error {
             self.functions.pop();
-            return None;
+            None
+        } else {
+            self.functions.pop().map(|f| (f.function, f.upvalues))
         }
-        self.functions.pop().map(|f| (f.function, f.upvalues))
     }
 
     fn synchronize(&mut self) {
@@ -769,15 +770,16 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             .rev()
             .find(|(_, local)| local.name.lexeme == name)
         {
-            if local.depth.is_none() {
-                self.error("Can't read local variable in its own initializer.");
-                return Some(StackSlotOffset::error());
-            }
-
-            return Some(StackSlotOffset::new(i));
+            Some(match local.depth {
+                Some(_) => StackSlotOffset::new(i),
+                None => {
+                    self.error("Can't read local variable in its own initializer.");
+                    StackSlotOffset::error()
+                }
+            })
+        } else {
+            None
         }
-
-        None
     }
 
     fn add_upvalue(&mut self, func_state_index: usize, upvalue: CompiledUpValue) -> UpValueIndex {
@@ -807,16 +809,12 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         let enclosing = state_index - 1;
         if let Some(local) = self.resolve_local(enclosing, name) {
             self.functions[enclosing].local_at_mut(local).is_captured = true;
-            return Some(self.add_upvalue(state_index, CompiledUpValue::Local { index: local }));
+            Some(self.add_upvalue(state_index, CompiledUpValue::Local { index: local }))
+        } else {
+            self.resolve_upvalue(enclosing, name).map(|upvalue| {
+                self.add_upvalue(state_index, CompiledUpValue::Nonlocal { index: upvalue })
+            })
         }
-
-        if let Some(upvalue) = self.resolve_upvalue(enclosing, name) {
-            return Some(
-                self.add_upvalue(state_index, CompiledUpValue::Nonlocal { index: upvalue }),
-            );
-        }
-
-        None
     }
 
     fn emit_return(&mut self) {

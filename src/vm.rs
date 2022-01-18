@@ -55,17 +55,10 @@ fn clock_native(_args: &[Value]) -> Value {
 }
 
 fn sleep_native(args: &[Value]) -> Value {
-    if args.is_empty() {
-        return Value::Nil;
+    if let Some(Value::Double(d)) = args.get(0) {
+        std::thread::sleep(std::time::Duration::from_millis(d.floor() as u64));
     }
-    let duration = match args[0] {
-        Value::Double(d) => d.floor() as u64,
-        _ => {
-            return Value::Nil;
-        }
-    };
 
-    std::thread::sleep(std::time::Duration::from_millis(duration));
     Value::Nil
 }
 
@@ -101,16 +94,18 @@ impl<'opt> VM<'opt> {
 
     pub fn copy_string(&mut self, s: &str) -> Ptr {
         if let Some(v) = self.strings.get(s) {
-            return *v;
+            *v
+        } else {
+            self.allocate_string(s.to_string())
         }
-        self.allocate_string(s.to_string())
     }
 
     pub fn take_string(&mut self, s: String) -> Ptr {
         if let Some(v) = self.strings.get(&s) {
-            return *v;
+            *v
+        } else {
+            self.allocate_string(s)
         }
-        self.allocate_string(s)
     }
 
     fn allocate_string(&mut self, s: String) -> Ptr {
@@ -253,17 +248,13 @@ impl<'opt> VM<'opt> {
                 | Obj::Function(_)
                 | Obj::OpenUpValue(_)
                 | Obj::ClosedUpValue(_)
-                | Obj::Instance(_) => {
-                    // Fall through to error handling.
-                }
-                Obj::Closure(_) => {
-                    return self.call(ptr, arg_count);
-                }
+                | Obj::Instance(_) => self.runtime_error("Can only call functions and classes."),
+                Obj::Closure(_) => self.call(ptr, arg_count),
                 Obj::NativeFn(native) => {
                     let result = (native.f)(self.stack.top_n(arg_count));
                     self.stack.pop_n(arg_count + 1);
                     self.stack.push(result);
-                    return Ok(());
+                    Ok(())
                 }
                 Obj::Class(_) => {
                     let instance = self.new_instance(&mut ptr);
@@ -273,11 +264,12 @@ impl<'opt> VM<'opt> {
                     );
 
                     if let Some(closure) = self.heap.as_class(ptr).methods.get("init").copied() {
-                        return self.call(closure, arg_count);
+                        self.call(closure, arg_count)
                     } else if arg_count != 0 {
-                        self.runtime_error(&format!("Expected 0 arguments but got {}.", arg_count))?
+                        self.runtime_error(&format!("Expected 0 arguments but got {}.", arg_count))
+                    } else {
+                        Ok(())
                     }
-                    return Ok(());
                 }
                 Obj::BoundMethod(b) => {
                     let bound_ptr = b.closure;
@@ -285,11 +277,12 @@ impl<'opt> VM<'opt> {
                         self.stack.from_top_slot(arg_count),
                         Value::ObjReference(b.receiver),
                     );
-                    return self.call(bound_ptr, arg_count);
+                    self.call(bound_ptr, arg_count)
                 }
-            };
+            }
+        } else {
+            self.runtime_error("Can only call functions and classes.")
         }
-        self.runtime_error("Can only call functions and classes.")
     }
 
     fn invoke_from_class(
@@ -320,9 +313,10 @@ impl<'opt> VM<'opt> {
         if let Some(value) = field {
             self.stack
                 .assign(self.stack.from_top_slot(arg_count), value);
-            return self.call_value(value, arg_count);
+            self.call_value(value, arg_count)
+        } else {
+            self.invoke_from_class(class, name, arg_count)
         }
-        self.invoke_from_class(class, name, arg_count)
     }
 
     fn bind_method(&mut self, class: Ptr, name: &str) -> Result<(), InterpretResult> {
@@ -857,7 +851,7 @@ impl<'opt> VM<'opt> {
                 self.stack.push(Value::ObjReference(closure));
                 self.call(closure, 0)?;
             }
-            None => Err(InterpretResult::CompileError)?,
+            None => return Err(InterpretResult::CompileError),
         };
 
         if self.opt.compile_only {
