@@ -603,7 +603,6 @@ impl<'opt> VM<'opt> {
                             self.stack.pop();
                             self.stack.pop();
                             self.stack.push(Value::Double(a + b));
-                            continue;
                         }
                         (Value::ObjReference(i), Value::ObjReference(j)) => {
                             match (&self.heap.deref(i), &self.heap.deref(j)) {
@@ -615,14 +614,14 @@ impl<'opt> VM<'opt> {
                                     self.stack.pop();
                                     self.stack.pop();
                                     self.stack.push(val);
-                                    continue;
                                 }
-                                (_, _) => {}
+                                _ => self.runtime_error(
+                                    "Operands must be two numbers or two strings.",
+                                )?,
                             }
                         }
-                        _ => {}
-                    };
-                    self.runtime_error("Operands must be two numbers or two strings.")?;
+                        _ => self.runtime_error("Operands must be two numbers or two strings.")?,
+                    }
                 }
                 OpCode::Subtract => self.binary_op(|a, b| a - b, Value::Double)?,
                 OpCode::Multiply => self.binary_op(|a, b| a * b, Value::Double)?,
@@ -756,10 +755,10 @@ impl<'opt> VM<'opt> {
                             if let Some(v) = i.fields.get(&name) {
                                 self.stack.pop(); // Instance.
                                 self.stack.push(*v);
-                                continue;
+                            } else {
+                                let class = i.class;
+                                self.bind_method(class, &name)?
                             }
-                            let class = i.class;
-                            self.bind_method(class, &name)?
                         }
                         _ => self.runtime_error("Only instances have properties.")?,
                     };
