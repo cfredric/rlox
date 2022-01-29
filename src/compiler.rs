@@ -11,8 +11,8 @@ use scanner::{Token, TokenType};
 pub(crate) struct Compiler<'opt, 'source, 'vm> {
     opt: &'opt Opt,
     scanner: scanner::Scanner<'source>,
+    next: Token<'source>,
     current: Token<'source>,
-    previous: Token<'source>,
     had_error: bool,
     panic_mode: bool,
 
@@ -75,8 +75,8 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         Self {
             opt,
             scanner: scanner::Scanner::new(source),
+            next: Token::default(),
             current: Token::default(),
-            previous: Token::default(),
             had_error: false,
             panic_mode: false,
             vm,
@@ -100,19 +100,19 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn advance(&mut self) -> Token<'source> {
-        self.previous = self.current;
+        self.current = self.next;
         loop {
-            self.current = self.scanner.next().unwrap();
-            if self.current.ty != TokenType::Error {
-                return self.current;
+            self.next = self.scanner.next().unwrap();
+            if self.next.ty != TokenType::Error {
+                return self.next;
             }
 
-            self.error_at_current(self.current.lexeme);
+            self.error_at_current(self.next.lexeme);
         }
     }
 
     fn consume<'s: 'source>(&mut self, ty: TokenType, message: &'s str) {
-        if self.current.ty == ty {
+        if self.next.ty == ty {
             self.advance();
             return;
         }
@@ -129,7 +129,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn check(&self, ty: TokenType) -> bool {
-        self.current.ty == ty
+        self.next.ty == ty
     }
 
     fn emit_opcodes(&mut self, a: OpCode, b: OpCode) {
@@ -165,7 +165,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn emit_opcode(&mut self, opcode: OpCode) {
-        let line = self.previous.line;
+        let line = self.current.line;
         self.current_chunk_mut().write_chunk(opcode, line);
     }
 
@@ -187,12 +187,12 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     fn synchronize(&mut self) {
         self.panic_mode = false;
 
-        while self.current.ty != TokenType::Eof {
-            if self.previous.ty == TokenType::Semicolon {
+        while self.next.ty != TokenType::Eof {
+            if self.current.ty == TokenType::Semicolon {
                 return;
             }
             use TokenType::*;
-            match self.current.ty {
+            match self.next.ty {
                 Class | Fun | Var | For | If | While | Print | Return => {
                     return;
                 }
@@ -220,8 +220,8 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
     fn class_declaration(&mut self) {
         self.consume(TokenType::Identifier, "Expect class name.");
-        let name = self.previous.lexeme;
-        let name_constant = self.identifier_constant(self.previous.lexeme);
+        let name = self.current.lexeme;
+        let name_constant = self.identifier_constant(self.current.lexeme);
         self.declare_variable();
 
         self.emit_opcode(OpCode::Class {
@@ -240,7 +240,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             self.consume(TokenType::Identifier, "Expect superclass name.");
             self.variable(false);
 
-            if name == self.previous.lexeme {
+            if name == self.current.lexeme {
                 self.error("A class can't inherit from itself.");
             }
 
@@ -418,7 +418,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.functions.push(if ty == FunctionType::Script {
             FunctionState::new(ty)
         } else {
-            FunctionState::with_name(ty, self.previous.lexeme)
+            FunctionState::with_name(ty, self.current.lexeme)
         });
         self.begin_scope();
 
@@ -453,10 +453,10 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
     fn method(&mut self) {
         self.consume(TokenType::Identifier, "Expect method name.");
-        let name = self.identifier_constant(self.previous.lexeme);
+        let name = self.identifier_constant(self.current.lexeme);
 
         let mut ty = FunctionType::Method;
-        if self.previous.lexeme == "init" {
+        if self.current.lexeme == "init" {
             ty = FunctionType::Initializer;
         }
         self.function(ty);
@@ -522,18 +522,18 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn number(&mut self) {
-        let value = self.previous.lexeme.parse::<f64>().unwrap();
+        let value = self.current.lexeme.parse::<f64>().unwrap();
         self.emit_constant(Value::Double(value));
     }
 
     fn string(&mut self) {
-        let len = self.previous.lexeme.len();
-        let lox_string = self.vm.copy_string(&self.previous.lexeme[1..len - 1]);
+        let len = self.current.lexeme.len();
+        let lox_string = self.vm.copy_string(&self.current.lexeme[1..len - 1]);
         self.emit_constant(Value::ObjReference(lox_string));
     }
 
     fn unary(&mut self) {
-        let op_ty = self.previous.ty;
+        let op_ty = self.current.ty;
         self.parse_precedence(Precedence::Unary);
         match op_ty {
             TokenType::Minus => self.emit_opcode(OpCode::Negate),
@@ -543,7 +543,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn binary(&mut self) {
-        let ty = self.previous.ty;
+        let ty = self.current.ty;
         let rule = get_rule(ty);
         self.parse_precedence(rule.precedence.plus_one());
 
@@ -569,7 +569,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
     fn dot(&mut self, can_assign: bool) {
         self.consume(TokenType::Identifier, "Expect property name after '.'.");
-        let name = self.identifier_constant(self.previous.lexeme);
+        let name = self.identifier_constant(self.current.lexeme);
 
         if can_assign && self.matches(TokenType::Equal) {
             self.expression();
@@ -586,7 +586,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn literal(&mut self) {
-        match self.previous.ty {
+        match self.current.ty {
             TokenType::False => self.emit_opcode(OpCode::Bool { value: false }),
             TokenType::Nil => self.emit_opcode(OpCode::Nil),
             TokenType::True => self.emit_opcode(OpCode::Bool { value: true }),
@@ -596,7 +596,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
     fn parse_precedence(&mut self, prec: Precedence) {
         self.advance();
-        let prefix = get_rule(self.previous.ty).prefix;
+        let prefix = get_rule(self.current.ty).prefix;
         let can_assign = prec <= Precedence::Assignment;
         match prefix {
             Some(f) => f(self, ParseFnCtx { can_assign }),
@@ -606,9 +606,9 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             }
         }
 
-        while prec <= get_rule(self.current.ty).precedence {
+        while prec <= get_rule(self.next.ty).precedence {
             self.advance();
-            let infix = get_rule(self.previous.ty).infix;
+            let infix = get_rule(self.current.ty).infix;
             infix.unwrap()(self, ParseFnCtx { can_assign });
         }
 
@@ -623,7 +623,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         if self.current().scope_depth > 0 {
             return ConstantIndex::error();
         }
-        let name = self.previous.lexeme;
+        let name = self.current.lexeme;
         self.identifier_constant(name)
     }
 
@@ -693,7 +693,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         if self.current().scope_depth == 0 {
             return;
         }
-        let name = self.previous;
+        let name = self.current;
         let current = self.current();
         if current
             .locals
@@ -718,7 +718,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn variable(&mut self, can_assign: bool) {
-        self.named_variable(self.previous.lexeme, can_assign)
+        self.named_variable(self.current.lexeme, can_assign)
     }
 
     fn this(&mut self) {
@@ -741,7 +741,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         }
         self.consume(TokenType::Dot, "Expect '.' after 'super'.");
         self.consume(TokenType::Identifier, "Expect superclass method name.");
-        let method = self.identifier_constant(self.previous.lexeme);
+        let method = self.identifier_constant(self.current.lexeme);
 
         self.named_variable("this", false);
         if self.matches(TokenType::LeftParen) {
@@ -872,11 +872,11 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn error_at_current(&mut self, message: &str) {
-        let cur = self.current;
-        self.error_at(&cur, message);
+        let next = self.next;
+        self.error_at(&next, message);
     }
     fn error(&mut self, message: &str) {
-        let prev = self.previous;
+        let prev = self.current;
         self.error_at(&prev, message)
     }
     fn error_at(&mut self, token: &Token, message: &str) {
