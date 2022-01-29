@@ -40,9 +40,9 @@ impl<'source> FunctionState<'source> {
     }
     fn with_name(function_type: FunctionType, name: &str) -> Self {
         let local = if function_type != FunctionType::Function {
-            Local::new(TokenType::This, "this")
+            Local::new("this")
         } else {
-            Local::new(TokenType::Eof, "")
+            Local::new("")
         };
         Self {
             function: Function::new(name),
@@ -695,9 +695,11 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         }
         let name = self.previous;
         let current = self.current();
-        if current.locals.iter().any(|l| {
-            !l.depth.map_or(false, |d| d < current.scope_depth) && name.lexeme == l.name.lexeme
-        }) {
+        if current
+            .locals
+            .iter()
+            .any(|l| !l.depth.map_or(false, |d| d < current.scope_depth) && name.lexeme == l.name)
+        {
             self.error("Already a variable with this name in this scope.");
         }
         self.add_local(name);
@@ -709,7 +711,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             return;
         }
         self.current_mut().locals.push(Local {
-            name,
+            name: name.lexeme,
             depth: None,
             is_captured: false,
         });
@@ -776,7 +778,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             .iter()
             .enumerate()
             .rev()
-            .find(|(_, local)| local.name.lexeme == name)
+            .find(|(_, local)| local.name == name)
         {
             Some(match local.depth {
                 Some(_) => StackSlotOffset::new(i),
@@ -1015,15 +1017,15 @@ impl Rule {
 }
 
 struct Local<'source> {
-    name: Token<'source>,
+    name: &'source str,
     depth: Option<usize>,
     is_captured: bool,
 }
 
 impl<'source> Local<'source> {
-    fn new(ty: TokenType, name: &'static str) -> Self {
+    fn new(name: &'static str) -> Self {
         Self {
-            name: Token::new(ty, name),
+            name,
             depth: Some(0),
             is_captured: false,
         }
