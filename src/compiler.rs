@@ -250,7 +250,10 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
             self.named_variable(name, false);
             self.emit_opcode(OpCode::Inherit);
-            self.current_class_mut().has_superclass = true;
+            self.class_compilers
+                .last_mut()
+                .expect("class stack is nonempty")
+                .has_superclass = true;
         }
 
         self.named_variable(name, false);
@@ -261,7 +264,12 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.consume(TokenType::RightBrace, "Expect '}' after class body.");
         self.emit_opcode(OpCode::Pop);
 
-        if self.current_class().has_superclass {
+        if self
+            .class_compilers
+            .last()
+            .expect("class stack is nonempty")
+            .has_superclass
+        {
             self.end_scope(); // Matched with begin in this function.
         }
         self.class_compilers.pop();
@@ -861,18 +869,6 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             .expect("function stack should not be empty")
     }
 
-    fn current_class(&self) -> &ClassState {
-        self.class_compilers
-            .last()
-            .expect("class stack should not be empty")
-    }
-
-    fn current_class_mut(&mut self) -> &mut ClassState {
-        self.class_compilers
-            .last_mut()
-            .expect("class stack should not be empty")
-    }
-
     fn error_at_current(&mut self, message: &str) {
         let cur = self.current;
         self.error_at(&cur, message);
@@ -1035,7 +1031,7 @@ impl<'source> Local<'source> {
 }
 
 #[derive(Eq, PartialEq)]
-pub enum FunctionType {
+enum FunctionType {
     Function,
     Initializer,
     Method,
