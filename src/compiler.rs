@@ -102,7 +102,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     fn advance(&mut self) -> Token<'source> {
         self.previous = self.current;
         loop {
-            self.current = self.scanner.scan_token();
+            self.current = self.scanner.next().unwrap();
             if self.current.ty != TokenType::Error {
                 return self.current;
             }

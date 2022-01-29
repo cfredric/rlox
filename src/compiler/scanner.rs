@@ -18,56 +18,6 @@ impl<'source> Scanner<'source> {
         }
     }
 
-    pub(super) fn scan_token(&mut self) -> Token<'source> {
-        use TokenType::*;
-        self.skip_whitespace();
-
-        self.source = &self.source[self.current..];
-        self.current = 0;
-
-        if self.is_at_end() {
-            return self.make_token(Eof);
-        }
-
-        match self.advance() {
-            c if is_alphabetic(c) => self.identifier(),
-            c if c.is_digit(10) => self.number(),
-            '(' => self.make_token(LeftParen),
-            ')' => self.make_token(RightParen),
-            '{' => self.make_token(LeftBrace),
-            '}' => self.make_token(RightBrace),
-            ';' => self.make_token(Semicolon),
-            ',' => self.make_token(Comma),
-            '.' => self.make_token(Dot),
-            '-' => self.make_token(Minus),
-            '+' => self.make_token(Plus),
-            '/' => self.make_token(Slash),
-            '*' => self.make_token(Star),
-            '!' => {
-                let t = if self.matches('=') { BangEqual } else { Bang };
-                self.make_token(t)
-            }
-            '=' => {
-                let t = if self.matches('=') { EqualEqual } else { Equal };
-                self.make_token(t)
-            }
-            '<' => {
-                let t = if self.matches('=') { LessEqual } else { Less };
-                self.make_token(t)
-            }
-            '>' => {
-                let t = if self.matches('=') {
-                    GreaterEqual
-                } else {
-                    Greater
-                };
-                self.make_token(t)
-            }
-            '"' => self.string(),
-            _ => self.error_token("Unexpected character."),
-        }
-    }
-
     fn matches(&mut self, expected: char) -> bool {
         if self.is_at_end() || self.source[self.current] as char != expected {
             false
@@ -198,6 +148,60 @@ impl<'source> Scanner<'source> {
             "while" => While,
             _ => Identifier,
         }
+    }
+}
+
+impl<'source> Iterator for Scanner<'source> {
+    type Item = Token<'source>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        use TokenType::*;
+        self.skip_whitespace();
+
+        self.source = &self.source[self.current..];
+        self.current = 0;
+
+        if self.is_at_end() {
+            return Some(self.make_token(Eof));
+        }
+
+        Some(match self.advance() {
+            c if is_alphabetic(c) => self.identifier(),
+            c if c.is_digit(10) => self.number(),
+            '(' => self.make_token(LeftParen),
+            ')' => self.make_token(RightParen),
+            '{' => self.make_token(LeftBrace),
+            '}' => self.make_token(RightBrace),
+            ';' => self.make_token(Semicolon),
+            ',' => self.make_token(Comma),
+            '.' => self.make_token(Dot),
+            '-' => self.make_token(Minus),
+            '+' => self.make_token(Plus),
+            '/' => self.make_token(Slash),
+            '*' => self.make_token(Star),
+            '!' => {
+                let t = if self.matches('=') { BangEqual } else { Bang };
+                self.make_token(t)
+            }
+            '=' => {
+                let t = if self.matches('=') { EqualEqual } else { Equal };
+                self.make_token(t)
+            }
+            '<' => {
+                let t = if self.matches('=') { LessEqual } else { Less };
+                self.make_token(t)
+            }
+            '>' => {
+                let t = if self.matches('=') {
+                    GreaterEqual
+                } else {
+                    Greater
+                };
+                self.make_token(t)
+            }
+            '"' => self.string(),
+            _ => self.error_token("Unexpected character."),
+        })
     }
 }
 
