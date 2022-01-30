@@ -13,7 +13,6 @@ use scanner::{Token, TokenType};
 pub(crate) struct Compiler<'opt, 'source, 'vm> {
     opt: &'opt Opt,
     scanner: Peekable<scanner::Scanner<'source>>,
-    next_: Token<'source>,
     current: Token<'source>,
     had_error: bool,
     panic_mode: bool,
@@ -77,7 +76,6 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         Self {
             opt,
             scanner: scanner::Scanner::new(source).peekable(),
-            next_: Token::default(),
             current: Token::default(),
             had_error: false,
             panic_mode: false,
@@ -89,8 +87,6 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     pub fn compile(mut self) -> Option<Function> {
-        self.advance();
-
         while !self.matches(TokenType::Eof) {
             self.declaration();
         }
@@ -102,14 +98,16 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn next(&mut self) -> Token<'source> {
-        // *self.scanner.peek().unwrap()
-        self.next_
+        *self.scanner.peek().unwrap()
     }
 
     fn advance(&mut self) -> Token<'source> {
         self.current = self.next();
+        if self.current.ty == TokenType::Error {
+            self.error(self.current.lexeme);
+        }
         loop {
-            self.next_ = self.scanner.next().unwrap();
+            self.scanner.next().unwrap();
             if self.next().ty != TokenType::Error {
                 return self.next();
             }
