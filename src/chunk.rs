@@ -7,7 +7,7 @@ use crate::stack::StackSlotOffset;
 use crate::value::Value;
 
 #[derive(Clone)]
-pub enum OpCode {
+pub(crate) enum OpCode {
     Constant {
         index: ConstantIndex,
     },
@@ -78,40 +78,40 @@ pub enum OpCode {
 }
 
 #[derive(Default)]
-pub struct Chunk {
-    pub code: Vec<OpCode>,
+pub(crate) struct Chunk {
+    pub(crate) code: Vec<OpCode>,
     constants: Vec<Value>,
-    pub lines: Vec<usize>,
+    pub(crate) lines: Vec<usize>,
 }
 
 #[derive(Copy, Clone)]
-pub struct ConstantIndex(usize);
+pub(crate) struct ConstantIndex(usize);
 
 impl ConstantIndex {
     fn new(index: usize) -> Self {
         Self(index)
     }
 
-    pub fn error() -> Self {
+    pub(crate) fn error() -> Self {
         Self(999999)
     }
 
-    pub fn special() -> Self {
+    pub(crate) fn special() -> Self {
         Self(0)
     }
 }
 
 impl Chunk {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
-    pub fn write_chunk(&mut self, op: OpCode, line: usize) {
+    pub(crate) fn write_chunk(&mut self, op: OpCode, line: usize) {
         self.code.push(op);
         self.lines.push(line);
     }
 
-    pub fn add_constant(&mut self, value: Value) -> Option<ConstantIndex> {
+    pub(crate) fn add_constant(&mut self, value: Value) -> Option<ConstantIndex> {
         self.constants.push(value);
         if self.constants.len() > 2_usize.pow(8) {
             return None;
@@ -119,15 +119,15 @@ impl Chunk {
         Some(ConstantIndex::new(self.constants.len() - 1))
     }
 
-    pub fn constant_at(&self, index: ConstantIndex) -> Value {
+    pub(crate) fn constant_at(&self, index: ConstantIndex) -> Value {
         self.constants[index.0]
     }
 
-    pub fn constants_iter<'s>(&'s self) -> impl Iterator<Item = &Value> + 's {
+    pub(crate) fn constants_iter<'s>(&'s self) -> impl Iterator<Item = &Value> + 's {
         self.constants.iter()
     }
 
-    pub fn disassemble_chunk(&self, name: &str, heap: &Heap) {
+    pub(crate) fn disassemble_chunk(&self, name: &str, heap: &Heap) {
         println!("== {} ==", name);
 
         for offset in 0..self.code.len() {
@@ -135,7 +135,7 @@ impl Chunk {
         }
     }
 
-    pub fn disassemble_instruction(&self, heap: &Heap, offset: usize) {
+    pub(crate) fn disassemble_instruction(&self, heap: &Heap, offset: usize) {
         print!("{:04} ", offset);
 
         if offset > 0 && self.lines[offset] == self.lines[offset - 1] {

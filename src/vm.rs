@@ -16,15 +16,15 @@ use crate::Opt;
 
 const GC_HEAP_GROWTH_FACTOR: usize = 2;
 
-pub struct VM<'opt> {
+pub(crate) struct VM<'opt> {
     opt: &'opt Opt,
 
     frames: Vec<CallFrame>,
 
-    pub heap: Heap,
+    pub(crate) heap: Heap,
     stack: Stack,
     /// Values are pointers into the heap, to LoxStrings.
-    pub strings: HashMap<String, Ptr>,
+    pub(crate) strings: HashMap<String, Ptr>,
     /// open_upvalues is a pointer into the heap, to the head of the linked list
     /// of upvalue objects.
     open_upvalues: Option<Ptr>,
@@ -38,14 +38,14 @@ pub struct VM<'opt> {
 
 const MAX_FRAMES: usize = 1024;
 
-pub enum InterpretResult {
+pub(crate) enum InterpretResult {
     CompileError,
     RuntimeError,
 }
 
 mod ffi {
     extern "C" {
-        pub fn clock() -> libc::clock_t;
+        pub(crate) fn clock() -> libc::clock_t;
     }
 }
 
@@ -92,7 +92,7 @@ impl<'opt> VM<'opt> {
         vm
     }
 
-    pub fn copy_string(&mut self, s: &str) -> Ptr {
+    pub(crate) fn copy_string(&mut self, s: &str) -> Ptr {
         if let Some(v) = self.strings.get(s) {
             *v
         } else {
@@ -100,7 +100,7 @@ impl<'opt> VM<'opt> {
         }
     }
 
-    pub fn take_string(&mut self, s: String) -> Ptr {
+    pub(crate) fn take_string(&mut self, s: String) -> Ptr {
         if let Some(v) = self.strings.get(&s) {
             *v
         } else {
@@ -114,35 +114,35 @@ impl<'opt> VM<'opt> {
         ptr
     }
 
-    pub fn new_function(&mut self, f: Function) -> Ptr {
+    pub(crate) fn new_function(&mut self, f: Function) -> Ptr {
         self.allocate_object::<()>(Obj::Function(f), None)
     }
 
-    pub fn new_native(&mut self, f: NativeFn) -> Ptr {
+    pub(crate) fn new_native(&mut self, f: NativeFn) -> Ptr {
         self.allocate_object::<()>(Obj::NativeFn(f), None)
     }
 
-    pub fn new_closure(&mut self, func: Ptr, upvalues: Vec<Ptr>) -> Ptr {
+    pub(crate) fn new_closure(&mut self, func: Ptr, upvalues: Vec<Ptr>) -> Ptr {
         self.allocate_object::<()>(Obj::Closure(Closure::new(func, upvalues)), None)
     }
 
-    pub fn new_class(&mut self, name: &str) -> Ptr {
+    pub(crate) fn new_class(&mut self, name: &str) -> Ptr {
         self.allocate_object::<()>(Obj::Class(Class::new(name)), None)
     }
 
-    pub fn new_instance(&mut self, class: &mut Ptr) -> Ptr {
+    pub(crate) fn new_instance(&mut self, class: &mut Ptr) -> Ptr {
         self.allocate_object(Obj::Instance(Instance::new(*class)), Some(class))
     }
 
-    pub fn new_bound_method(&mut self, receiver: Ptr, closure: Ptr) -> Ptr {
+    pub(crate) fn new_bound_method(&mut self, receiver: Ptr, closure: Ptr) -> Ptr {
         self.allocate_object::<()>(Obj::BoundMethod(BoundMethod::new(receiver, closure)), None)
     }
 
-    pub fn new_upvalue(&mut self, open: Open, prev_to_rewrite: &mut Option<Ptr>) -> Ptr {
+    pub(crate) fn new_upvalue(&mut self, open: Open, prev_to_rewrite: &mut Option<Ptr>) -> Ptr {
         self.allocate_object(Obj::OpenUpValue(open), prev_to_rewrite.as_mut())
     }
 
-    pub fn allocate_object<R: Rewrite>(
+    pub(crate) fn allocate_object<R: Rewrite>(
         &mut self,
         mut obj: Obj,
         mut pending_rewrite: Option<R>,
@@ -840,7 +840,7 @@ impl<'opt> VM<'opt> {
         }
     }
 
-    pub fn interpret(&mut self, source: &str) -> Result<(), InterpretResult> {
+    pub(crate) fn interpret(&mut self, source: &str) -> Result<(), InterpretResult> {
         match compile(self.opt, crate::scanner::Scanner::new(source), self) {
             Some(function) => {
                 let function = self.new_function(function);

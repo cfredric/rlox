@@ -8,7 +8,7 @@ use crate::{
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash)]
-pub struct Ptr(usize);
+pub(crate) struct Ptr(usize);
 
 impl Ptr {
     fn new(index: usize) -> Self {
@@ -22,7 +22,7 @@ impl Rewrite for Ptr {
     }
 }
 
-pub struct Heap {
+pub(crate) struct Heap {
     heap: Vec<Obj>,
 
     /// Vector of heap indices, used during GC.
@@ -32,7 +32,7 @@ pub struct Heap {
 }
 
 impl Heap {
-    pub fn new(log_gc: bool) -> Self {
+    pub(crate) fn new(log_gc: bool) -> Self {
         Self {
             heap: Vec::new(),
             gray_stack: Vec::new(),
@@ -40,7 +40,7 @@ impl Heap {
         }
     }
 
-    pub fn mark_value(&mut self, value: Value) {
+    pub(crate) fn mark_value(&mut self, value: Value) {
         if self.log_gc {
             eprintln!("    mark value ({})", value.print(self));
         }
@@ -49,7 +49,7 @@ impl Heap {
         }
     }
 
-    pub fn mark_object(&mut self, ptr: Ptr) {
+    pub(crate) fn mark_object(&mut self, ptr: Ptr) {
         if self.log_gc {
             eprintln!("{:3} mark object {}", ptr.0, self.heap[ptr.0].print(self));
         }
@@ -63,13 +63,13 @@ impl Heap {
         self.gray_stack.push(ptr);
     }
 
-    pub fn trace_references(&mut self) {
+    pub(crate) fn trace_references(&mut self) {
         while let Some(ptr) = self.gray_stack.pop() {
             self.blacken_object(ptr);
         }
     }
 
-    pub fn blacken_object(&mut self, ptr: Ptr) {
+    pub(crate) fn blacken_object(&mut self, ptr: Ptr) {
         if self.log_gc {
             eprintln!("{} blacken {}", ptr.0, self.heap[ptr.0].print(self));
         }
@@ -117,7 +117,7 @@ impl Heap {
         }
     }
 
-    pub fn sweep_and_compact(&mut self) -> (HashMap<Ptr, Ptr>, usize) {
+    pub(crate) fn sweep_and_compact(&mut self) -> (HashMap<Ptr, Ptr>, usize) {
         // Build the mapping from pre-sweep pointers to post-sweep pointers.
         let mapping = self
             .heap
@@ -138,63 +138,63 @@ impl Heap {
         (mapping, before - self.heap.len())
     }
 
-    pub fn deref(&self, ptr: Ptr) -> &Obj {
+    pub(crate) fn deref(&self, ptr: Ptr) -> &Obj {
         &self.heap[ptr.0]
     }
-    pub fn deref_mut(&mut self, ptr: Ptr) -> &mut Obj {
+    pub(crate) fn deref_mut(&mut self, ptr: Ptr) -> &mut Obj {
         &mut self.heap[ptr.0]
     }
 
-    pub fn assign(&mut self, ptr: Ptr, obj: Obj) {
+    pub(crate) fn assign(&mut self, ptr: Ptr, obj: Obj) {
         self.heap[ptr.0] = obj;
     }
 
-    pub fn push(&mut self, obj: Obj) -> Ptr {
+    pub(crate) fn push(&mut self, obj: Obj) -> Ptr {
         self.heap.push(obj);
         Ptr::new(self.heap.len() - 1)
     }
 
-    pub fn as_string(&self, ptr: Ptr) -> &LoxString {
+    pub(crate) fn as_string(&self, ptr: Ptr) -> &LoxString {
         self.heap[ptr.0].as_string().expect("expected a LoxString")
     }
-    pub fn as_function(&self, ptr: Ptr) -> &Function {
+    pub(crate) fn as_function(&self, ptr: Ptr) -> &Function {
         self.heap[ptr.0].as_function().expect("expected a Function")
     }
-    pub fn as_closure(&self, ptr: Ptr) -> &Closure {
+    pub(crate) fn as_closure(&self, ptr: Ptr) -> &Closure {
         self.heap[ptr.0].as_closure().expect("expected a Closure")
     }
-    pub fn as_class(&self, ptr: Ptr) -> &Class {
+    pub(crate) fn as_class(&self, ptr: Ptr) -> &Class {
         self.heap[ptr.0].as_class().expect("expected a Class")
     }
-    pub fn as_class_mut(&mut self, ptr: Ptr) -> &mut Class {
+    pub(crate) fn as_class_mut(&mut self, ptr: Ptr) -> &mut Class {
         self.heap[ptr.0].as_class_mut().expect("expected a Class")
     }
-    pub fn as_instance(&self, ptr: Ptr) -> &Instance {
+    pub(crate) fn as_instance(&self, ptr: Ptr) -> &Instance {
         self.heap[ptr.0]
             .as_instance()
             .expect("expected an Instance")
     }
-    pub fn as_instance_mut(&mut self, ptr: Ptr) -> &mut Instance {
+    pub(crate) fn as_instance_mut(&mut self, ptr: Ptr) -> &mut Instance {
         self.heap[ptr.0]
             .as_instance_mut()
             .expect("expected an Instance")
     }
-    pub fn as_open_up_value(&self, ptr: Ptr) -> &Open {
+    pub(crate) fn as_open_up_value(&self, ptr: Ptr) -> &Open {
         self.heap[ptr.0]
             .as_open_up_value()
             .expect("expected an OpenUpValue")
     }
-    pub fn as_open_up_value_mut(&mut self, ptr: Ptr) -> &mut Open {
+    pub(crate) fn as_open_up_value_mut(&mut self, ptr: Ptr) -> &mut Open {
         self.heap[ptr.0]
             .as_open_up_value_mut()
             .expect("expected an OpenUpValue")
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &Obj> + '_ {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &Obj> + '_ {
         self.heap.iter()
     }
 
-    pub fn open_upvalues(&self) -> impl Iterator<Item = Ptr> + '_ {
+    pub(crate) fn open_upvalues(&self) -> impl Iterator<Item = Ptr> + '_ {
         self.heap
             .iter()
             .enumerate()

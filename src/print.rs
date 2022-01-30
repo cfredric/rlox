@@ -1,5 +1,5 @@
 use crate::heap::Heap;
 
-pub trait Print {
+pub(crate) trait Print {
     fn print(&self, heap: &Heap) -> String;
 }

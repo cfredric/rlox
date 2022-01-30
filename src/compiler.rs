@@ -1065,7 +1065,7 @@ enum FunctionType {
 }
 
 #[derive(Clone, Eq, PartialEq)]
-pub enum CompiledUpValue {
+pub(crate) enum CompiledUpValue {
     Local { index: StackSlotOffset },
     Nonlocal { index: UpValueIndex },
 }

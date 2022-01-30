@@ -3,97 +3,97 @@ use std::collections::HashMap;
 use crate::{heap::Ptr, rewrite::Rewrite, value::Value};
 
 #[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
-pub struct Slot(usize);
+pub(crate) struct Slot(usize);
 
 impl Slot {
-    pub fn new(s: usize) -> Self {
+    pub(crate) fn new(s: usize) -> Self {
         Self(s)
     }
 
-    pub fn offset(&self, offset: StackSlotOffset) -> Self {
+    pub(crate) fn offset(&self, offset: StackSlotOffset) -> Self {
         Slot::new(self.0 + offset.0)
     }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct StackSlotOffset(pub usize);
+pub(crate) struct StackSlotOffset(pub(crate) usize);
 
 impl StackSlotOffset {
-    pub fn new(n: usize) -> Self {
+    pub(crate) fn new(n: usize) -> Self {
         Self(n)
     }
 
-    pub fn error() -> Self {
+    pub(crate) fn error() -> Self {
         Self(99999)
     }
 
-    pub fn special() -> Self {
+    pub(crate) fn special() -> Self {
         Self(0)
     }
 }
 
-pub struct Stack {
+pub(crate) struct Stack {
     stack: Vec<Value>,
 }
 
 impl Stack {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self { stack: Vec::new() }
     }
 
-    pub fn push(&mut self, value: Value) {
+    pub(crate) fn push(&mut self, value: Value) {
         self.stack.push(value);
     }
 
     /// Pops a value from the stack.
-    pub fn pop(&mut self) -> Value {
+    pub(crate) fn pop(&mut self) -> Value {
         self.stack.pop().expect("stack should not have been empty")
     }
 
-    pub fn peek(&self, offset: usize) -> Value {
+    pub(crate) fn peek(&self, offset: usize) -> Value {
         self.stack[self.stack.len() - 1 - offset]
     }
 
-    pub fn top_slot(&self) -> Slot {
+    pub(crate) fn top_slot(&self) -> Slot {
         self.from_top_slot(0)
     }
 
-    pub fn from_top_slot(&self, offset: usize) -> Slot {
+    pub(crate) fn from_top_slot(&self, offset: usize) -> Slot {
         Slot::new(self.stack.len() - offset - 1)
     }
 
-    pub fn top_n(&self, n: usize) -> &[Value] {
+    pub(crate) fn top_n(&self, n: usize) -> &[Value] {
         &self.stack[self.stack.len() - n..]
     }
 
-    pub fn pop_n(&mut self, n: usize) {
+    pub(crate) fn pop_n(&mut self, n: usize) {
         self.stack.truncate(self.stack.len() - n);
     }
 
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.stack.clear();
     }
 
-    pub fn truncate_from(&mut self, slot: Slot) {
+    pub(crate) fn truncate_from(&mut self, slot: Slot) {
         self.stack.truncate(slot.0);
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.stack.is_empty()
     }
 
-    pub fn at(&self, slot: Slot) -> Value {
+    pub(crate) fn at(&self, slot: Slot) -> Value {
         self.stack[slot.0]
     }
 
-    pub fn assign(&mut self, slot: Slot, val: Value) {
+    pub(crate) fn assign(&mut self, slot: Slot, val: Value) {
         self.stack[slot.0] = val;
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &Value> + '_ {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &Value> + '_ {
         self.stack.iter()
     }
-    pub fn iter_from(&self, s: Slot) -> impl Iterator<Item = &Value> + '_ {
+    pub(crate) fn iter_from(&self, s: Slot) -> impl Iterator<Item = &Value> + '_ {
         self.stack.iter().skip(s.0)
     }
 }

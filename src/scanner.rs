@@ -1,4 +1,4 @@
-pub(super) struct Scanner<'source> {
+pub(crate) struct Scanner<'source> {
     source: &'source [u8],
     current: usize,
     line: usize,
@@ -9,7 +9,7 @@ fn is_alphabetic(c: char) -> bool {
 }
 
 impl<'source> Scanner<'source> {
-    pub(super) fn new(source: &'source str) -> Self {
+    pub(crate) fn new(source: &'source str) -> Self {
         Scanner {
             source: source.as_bytes(),
             // Starts at 0. The next byte to be consumed.
@@ -206,21 +206,21 @@ impl<'source> Iterator for Scanner<'source> {
 }
 
 #[derive(Clone, Copy)]
-pub(super) struct Token<'a> {
-    pub ty: TokenType,
-    pub lexeme: &'a str,
-    pub line: usize,
+pub(crate) struct Token<'a> {
+    pub(crate) ty: TokenType,
+    pub(crate) lexeme: &'a str,
+    pub(crate) line: usize,
 }
 
 impl<'source> Token<'source> {
-    pub(super) fn new(ty: TokenType, lexeme: &'static str) -> Self {
+    pub(crate) fn new(ty: TokenType, lexeme: &'static str) -> Self {
         Self {
             ty,
             lexeme,
             line: 0,
         }
     }
-    pub fn eof() -> Self {
+    pub(crate) fn eof() -> Self {
         Self {
             ty: TokenType::Eof,
             lexeme: "",
@@ -230,7 +230,7 @@ impl<'source> Token<'source> {
 }
 
 #[derive(PartialEq, Copy, Clone)]
-pub(super) enum TokenType {
+pub(crate) enum TokenType {
     LeftParen,
     RightParen,
     LeftBrace,

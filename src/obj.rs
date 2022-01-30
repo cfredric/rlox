@@ -11,7 +11,7 @@ use crate::{
     value::Value,
 };
 
-pub struct Header {
+pub(crate) struct Header {
     is_marked: bool,
     is_gc_able: bool,
 }
@@ -30,7 +30,7 @@ impl Header {
         }
     }
 
-    pub fn is_marked(&self) -> bool {
+    pub(crate) fn is_marked(&self) -> bool {
         self.is_marked || !self.is_gc_able
     }
 
@@ -40,7 +40,7 @@ impl Header {
 }
 
 #[derive(EnumAsInner)]
-pub enum Obj {
+pub(crate) enum Obj {
     String(LoxString),
     Function(Function),
     Closure(Closure),
@@ -81,15 +81,15 @@ impl Obj {
         }
     }
 
-    pub fn set_gc_exempt(&mut self) {
+    pub(crate) fn set_gc_exempt(&mut self) {
         self.header_mut().set_gc_able(false);
     }
 
-    pub fn mark(&mut self, marked: bool) {
+    pub(crate) fn mark(&mut self, marked: bool) {
         self.header_mut().mark(marked);
     }
 
-    pub fn is_marked(&self) -> bool {
+    pub(crate) fn is_marked(&self) -> bool {
         self.header().is_marked()
     }
 }
@@ -128,13 +128,13 @@ impl Rewrite for Obj {
     }
 }
 
-pub struct LoxString {
-    pub header: Header,
-    pub string: String,
+pub(crate) struct LoxString {
+    pub(crate) header: Header,
+    pub(crate) string: String,
 }
 
 impl LoxString {
-    pub fn new(s: String) -> Self {
+    pub(crate) fn new(s: String) -> Self {
         Self {
             header: Header::new(true),
             string: s,
@@ -145,15 +145,15 @@ impl Rewrite for LoxString {
     fn rewrite(&mut self, _mapping: &HashMap<Ptr, Ptr>) {}
 }
 
-pub struct Function {
+pub(crate) struct Function {
     header: Header,
-    pub arity: usize,
-    pub chunk: Chunk,
-    pub name: String,
+    pub(crate) arity: usize,
+    pub(crate) chunk: Chunk,
+    pub(crate) name: String,
 }
 
 impl Function {
-    pub fn new(name: &str) -> Self {
+    pub(crate) fn new(name: &str) -> Self {
         Self {
             header: Header::new(true),
             arity: 0,
@@ -171,13 +171,13 @@ impl Rewrite for Function {
 
 type Native = fn(args: &[Value]) -> Value;
 
-pub struct NativeFn {
+pub(crate) struct NativeFn {
     header: Header,
-    pub f: Native,
+    pub(crate) f: Native,
 }
 
 impl NativeFn {
-    pub fn new(f: Native) -> Self {
+    pub(crate) fn new(f: Native) -> Self {
         Self {
             header: Header::new(false),
             f,
@@ -189,14 +189,14 @@ impl Rewrite for NativeFn {
     fn rewrite(&mut self, _mapping: &HashMap<Ptr, Ptr>) {}
 }
 
-pub struct Closure {
+pub(crate) struct Closure {
     header: Header,
-    pub function: Ptr,
+    pub(crate) function: Ptr,
     upvalues: Vec<Ptr>,
 }
 
 impl Closure {
-    pub fn new(function: Ptr, upvalues: Vec<Ptr>) -> Self {
+    pub(crate) fn new(function: Ptr, upvalues: Vec<Ptr>) -> Self {
         Self {
             header: Header::new(true),
             function,
@@ -204,17 +204,17 @@ impl Closure {
         }
     }
 
-    pub fn upvalue_at(&self, index: UpValueIndex) -> Ptr {
+    pub(crate) fn upvalue_at(&self, index: UpValueIndex) -> Ptr {
         self.upvalues[index.0]
     }
 
-    pub fn upvalues<'s>(&'s self) -> impl Iterator<Item = &Ptr> + 's {
+    pub(crate) fn upvalues<'s>(&'s self) -> impl Iterator<Item = &Ptr> + 's {
         self.upvalues.iter()
     }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct UpValueIndex(pub usize);
+pub(crate) struct UpValueIndex(pub(crate) usize);
 
 impl Rewrite for Closure {
     fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
@@ -223,15 +223,15 @@ impl Rewrite for Closure {
     }
 }
 
-pub struct Class {
+pub(crate) struct Class {
     header: Header,
     name: String,
     /// Each method value is a pointer into the heap, pointing to a Closure.
-    pub methods: HashMap<String, Ptr>,
+    pub(crate) methods: HashMap<String, Ptr>,
 }
 
 impl Class {
-    pub fn new(name: &str) -> Self {
+    pub(crate) fn new(name: &str) -> Self {
         Self {
             header: Header::new(true),
             name: name.to_string(),
@@ -246,14 +246,14 @@ impl Rewrite for Class {
     }
 }
 
-pub struct Instance {
+pub(crate) struct Instance {
     header: Header,
-    pub class: Ptr,
-    pub fields: HashMap<String, Value>,
+    pub(crate) class: Ptr,
+    pub(crate) fields: HashMap<String, Value>,
 }
 
 impl Instance {
-    pub fn new(class: Ptr) -> Self {
+    pub(crate) fn new(class: Ptr) -> Self {
         Self {
             header: Header::new(true),
             class,
@@ -269,14 +269,14 @@ impl Rewrite for Instance {
     }
 }
 
-pub struct BoundMethod {
+pub(crate) struct BoundMethod {
     header: Header,
-    pub receiver: Ptr,
-    pub closure: Ptr,
+    pub(crate) receiver: Ptr,
+    pub(crate) closure: Ptr,
 }
 
 impl BoundMethod {
-    pub fn new(receiver: Ptr, closure: Ptr) -> Self {
+    pub(crate) fn new(receiver: Ptr, closure: Ptr) -> Self {
         Self {
             header: Header::new(true),
             receiver,
@@ -292,16 +292,16 @@ impl Rewrite for BoundMethod {
     }
 }
 
-pub struct Open {
+pub(crate) struct Open {
     header: Header,
     /// The stack slot that holds the associated value.
-    pub slot: Slot,
+    pub(crate) slot: Slot,
     /// Heap pointer to the next open upvalue.
-    pub next: Option<Ptr>,
+    pub(crate) next: Option<Ptr>,
 }
 
 impl Open {
-    pub fn new(slot: Slot, next: Option<Ptr>) -> Self {
+    pub(crate) fn new(slot: Slot, next: Option<Ptr>) -> Self {
         Self {
             header: Header::new(true),
             slot,
@@ -315,13 +315,13 @@ impl Rewrite for Open {
     }
 }
 
-pub struct Closed {
+pub(crate) struct Closed {
     header: Header,
-    pub value: Value,
+    pub(crate) value: Value,
 }
 
 impl Closed {
-    pub fn new(value: Value) -> Self {
+    pub(crate) fn new(value: Value) -> Self {
         Self {
             header: Header::new(true),
             value,

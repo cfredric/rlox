@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::heap::Ptr;
 
-pub trait Rewrite {
+pub(crate) trait Rewrite {
     fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>);
 }
 

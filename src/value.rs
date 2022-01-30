@@ -9,7 +9,7 @@ use crate::{
 };
 
 #[derive(Copy, Clone, EnumAsInner)]
-pub enum Value {
+pub(crate) enum Value {
     Nil,
     Bool(bool),
     Double(f64),
@@ -19,7 +19,7 @@ pub enum Value {
 const ERROR_MARGIN: f64 = 0.00000000001;
 
 impl Value {
-    pub fn is_falsey(&self) -> bool {
+    pub(crate) fn is_falsey(&self) -> bool {
         match self {
             Value::Nil => true,
             Value::Bool(b) => !b,
@@ -27,7 +27,7 @@ impl Value {
         }
     }
 
-    pub fn equal(a: Value, b: Value) -> bool {
+    pub(crate) fn equal(a: Value, b: Value) -> bool {
         use Value::*;
         match (a, b) {
             (Nil, Nil) => true,
