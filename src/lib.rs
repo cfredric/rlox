@@ -9,6 +9,7 @@ mod heap;
 mod obj;
 mod print;
 mod rewrite;
+mod scanner;
 mod stack;
 mod value;
 mod vm;

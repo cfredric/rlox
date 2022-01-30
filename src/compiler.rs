@@ -1,14 +1,12 @@
-mod scanner;
-
 use std::iter::Peekable;
 
 use crate::chunk::{Chunk, ConstantIndex, OpCode};
 use crate::obj::{Function, UpValueIndex};
+use crate::scanner::{self, Token, TokenType};
 use crate::stack::StackSlotOffset;
 use crate::value::Value;
 use crate::vm::VM;
 use crate::Opt;
-use scanner::{Token, TokenType};
 
 pub(crate) struct Compiler<'opt, 'source, 'vm> {
     opt: &'opt Opt,
