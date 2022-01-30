@@ -103,19 +103,22 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
     /// Sets the current token to the next valid token from the scanner. If the
     /// scanner emits an error, enters panic mode and emits that error.
-    fn advance(&mut self) -> Token<'source> {
-        self.current_token = self.next_token();
-        if self.current_token.ty == TokenType::Error {
-            self.error(self.current_token.lexeme);
-        }
+    fn advance(&mut self) {
+        // Advance the current token until we find a valid one.
         loop {
-            self.scanner.next().unwrap();
-            let next = self.next_token();
-            if next.ty != TokenType::Error {
-                return next;
+            self.current_token = self.scanner.next().unwrap();
+            if self.current_token.ty == TokenType::Error {
+                self.error(self.current_token.lexeme);
+            } else {
+                break;
             }
+        }
 
+        // Now advance the "next" token until we find a valid one.
+        while self.next_token().ty == TokenType::Error {
+            let next = self.next_token();
             self.error_at_next(next.lexeme);
+            self.scanner.next();
         }
     }
 
