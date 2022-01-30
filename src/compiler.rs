@@ -264,7 +264,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         });
         self.define_variable(name_constant);
 
-        if self.class_compilers.len() > 255 {
+        if self.class_compilers.len() > 25 {
             self.error("Too many nested classes.");
             return;
         }
