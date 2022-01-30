@@ -816,14 +816,12 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             .map(|(i, _)| i)
         {
             UpValueIndex(index)
+        } else if self.functions[func_state_index].upvalues.len() >= 256 {
+            self.error("Too many closure variables in function.");
+            UpValueIndex(99999)
         } else {
-            if self.functions[func_state_index].upvalues.len() >= 256 {
-                self.error("Too many closure variables in function.");
-                UpValueIndex(99999)
-            } else {
-                self.functions[func_state_index].upvalues.push(upvalue);
-                UpValueIndex(self.functions[func_state_index].upvalues.len() - 1)
-            }
+            self.functions[func_state_index].upvalues.push(upvalue);
+            UpValueIndex(self.functions[func_state_index].upvalues.len() - 1)
         }
     }
 
