@@ -2,13 +2,14 @@ use std::iter::Peekable;
 
 use crate::chunk::{Chunk, ConstantIndex, OpCode};
 use crate::obj::{Function, UpValueIndex};
-use crate::scanner::{Token, TokenType};
+use crate::scanner::{ScanError, Token, TokenType};
 use crate::stack::StackSlotOffset;
 use crate::value::Value;
 use crate::vm::VM;
 use crate::Opt;
 
-struct Compiler<'opt, 'source, 'vm, I: Iterator<Item = Token<'source>>> {
+struct Compiler<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError<'source>>>>
+{
     opt: &'opt Opt,
     scanner: Peekable<I>,
     current_token: Token<'source>,
@@ -69,7 +70,12 @@ impl ClassState {
     }
 }
 
-pub(crate) fn compile<'opt, 'source, 'vm, I: Iterator<Item = Token<'source>>>(
+pub(crate) fn compile<
+    'opt,
+    'source,
+    'vm,
+    I: Iterator<Item = Result<Token<'source>, ScanError<'source>>>,
+>(
     opt: &'opt Opt,
     scanner: I,
     vm: &'vm mut VM<'opt>,
@@ -77,7 +83,9 @@ pub(crate) fn compile<'opt, 'source, 'vm, I: Iterator<Item = Token<'source>>>(
     Compiler::new(opt, scanner, vm).compile()
 }
 
-impl<'opt, 'source, 'vm, I: Iterator<Item = Token<'source>>> Compiler<'opt, 'source, 'vm, I> {
+impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError<'source>>>>
+    Compiler<'opt, 'source, 'vm, I>
+{
     fn new(opt: &'opt Opt, scanner: I, vm: &'vm mut VM<'opt>) -> Self {
         Self {
             opt,
@@ -93,6 +101,8 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Token<'source>>> Compiler<'opt, 'sou
     }
 
     fn compile(mut self) -> Option<Function> {
+        self.skip_invalid_next_tokens();
+
         while !self.maybe_consume(TokenType::Eof) {
             self.declaration();
         }
@@ -104,7 +114,10 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Token<'source>>> Compiler<'opt, 'sou
     }
 
     fn next_token(&mut self) -> Token<'source> {
-        *self.scanner.peek().unwrap()
+        self.scanner
+            .peek()
+            .expect("no None values from this iterator")
+            .expect("all Err values have been skipped")
     }
 
     /// Sets the current token to the next valid token from the scanner. If the
@@ -112,18 +125,23 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Token<'source>>> Compiler<'opt, 'sou
     fn advance(&mut self) {
         // Advance the current token until we find a valid one.
         loop {
-            self.current_token = self.scanner.next().unwrap();
-            if self.current_token.ty == TokenType::Error {
-                self.error(self.current_token.lexeme);
-            } else {
-                break;
+            match self.scanner.next().expect("no None values") {
+                Ok(token) => {
+                    self.current_token = token;
+                    break;
+                }
+                Err(err) => self.error_at(None, err.message, err.line),
             }
         }
 
         // Now advance the "next" token until we find a valid one.
-        while self.next_token().ty == TokenType::Error {
-            let next = self.next_token();
-            self.error_at_next(next.lexeme);
+        self.skip_invalid_next_tokens();
+    }
+
+    fn skip_invalid_next_tokens(&mut self) {
+        while let Err(err) = self.scanner.peek().expect("no None values") {
+            let err = *err;
+            self.error_at(None, err.message, err.line);
             self.scanner.next();
         }
     }
@@ -893,23 +911,25 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Token<'source>>> Compiler<'opt, 'sou
 
     fn error_at_next(&mut self, message: &str) {
         let next = self.next_token();
-        self.error_at(&next, message);
+        self.error_at(Some(next), message, next.line);
     }
     fn error(&mut self, message: &str) {
-        let prev = self.current_token;
-        self.error_at(&prev, message)
+        let cur = self.current_token;
+        self.error_at(Some(cur), message, cur.line)
     }
-    fn error_at(&mut self, token: &Token, message: &str) {
+    fn error_at(&mut self, token: Option<Token>, message: &str, line: usize) {
         if self.panic_mode {
             return;
         }
         self.panic_mode = true;
-        let location = match token.ty {
-            TokenType::Eof => " at end".to_string(),
-            TokenType::Error => "".to_string(),
-            _ => format!(" at '{}'", token.lexeme),
+        let location = match token {
+            Some(Token {
+                ty: TokenType::Eof, ..
+            }) => " at end".to_string(),
+            Some(token) => format!(" at '{}'", token.lexeme),
+            None => "".to_string(),
         };
-        eprintln!("[line {}] Error{}: {}", token.line, location, message);
+        eprintln!("[line {}] Error{}: {}", line, location, message);
 
         self.had_error = true;
     }
@@ -919,7 +939,9 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Token<'source>>> Compiler<'opt, 'sou
     }
 }
 
-fn get_rule<'source, I: Iterator<Item = Token<'source>>>(ty: TokenType) -> Rule<'source, I> {
+fn get_rule<'source, I: Iterator<Item = Result<Token<'source>, ScanError<'source>>>>(
+    ty: TokenType,
+) -> Rule<'source, I> {
     match ty {
         TokenType::LeftParen => Rule::new(
             Some(|c, _ctx| c.grouping()),
@@ -972,7 +994,6 @@ fn get_rule<'source, I: Iterator<Item = Token<'source>>>(ty: TokenType) -> Rule<
         TokenType::True => Rule::new(Some(|c, _ctx| c.literal()), None, Precedence::None),
         TokenType::Var => Rule::new(None, None, Precedence::None),
         TokenType::While => Rule::new(None, None, Precedence::None),
-        TokenType::Error => Rule::new(None, None, Precedence::None),
         TokenType::Fun => Rule::new(None, None, Precedence::None),
         TokenType::Eof => Rule::new(None, None, Precedence::None),
     }
@@ -1020,13 +1041,13 @@ type ParseFn<'source, I> = Option<
     for<'compiler, 'opt, 'vm> fn(&'compiler mut Compiler<'opt, 'source, 'vm, I>, ParseFnCtx),
 >;
 
-struct Rule<'source, I: Iterator<Item = Token<'source>>> {
+struct Rule<'source, I: Iterator<Item = Result<Token<'source>, ScanError<'source>>>> {
     prefix: ParseFn<'source, I>,
     infix: ParseFn<'source, I>,
     precedence: Precedence,
 }
 
-impl<'source, I: Iterator<Item = Token<'source>>> Rule<'source, I> {
+impl<'source, I: Iterator<Item = Result<Token<'source>, ScanError<'source>>>> Rule<'source, I> {
     fn new(
         prefix: ParseFn<'source, I>,
         infix: ParseFn<'source, I>,

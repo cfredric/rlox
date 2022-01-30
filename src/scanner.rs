@@ -56,10 +56,9 @@ impl<'source> Scanner<'source> {
         }
     }
 
-    fn error_token<'s: 'source>(&self, message: &'s str) -> Token<'source> {
-        Token {
-            ty: TokenType::Error,
-            lexeme: message,
+    fn error_token<'s: 'source>(&self, message: &'s str) -> ScanError<'s> {
+        ScanError {
+            message,
             line: self.line,
         }
     }
@@ -111,7 +110,7 @@ impl<'source> Scanner<'source> {
         self.make_token(TokenType::Number)
     }
 
-    fn string(&mut self) -> Token<'source> {
+    fn string(&mut self) -> Result<Token<'source>, ScanError<'source>> {
         while !self.is_at_end() && self.peek() != '"' {
             if self.peek() == '\n' {
                 self.line += 1;
@@ -120,11 +119,11 @@ impl<'source> Scanner<'source> {
         }
 
         if self.is_at_end() {
-            return self.error_token("Unterminated string.");
+            return Err(self.error_token("Unterminated string."));
         }
 
         self.advance();
-        self.make_token(TokenType::String)
+        Ok(self.make_token(TokenType::String))
     }
 
     fn identifier_type(&self) -> TokenType {
@@ -152,7 +151,7 @@ impl<'source> Scanner<'source> {
 }
 
 impl<'source> Iterator for Scanner<'source> {
-    type Item = Token<'source>;
+    type Item = Result<Token<'source>, ScanError<'source>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         use TokenType::*;
@@ -162,34 +161,34 @@ impl<'source> Iterator for Scanner<'source> {
         self.current = 0;
 
         if self.is_at_end() {
-            return Some(self.make_token(Eof));
+            return Some(Ok(self.make_token(Eof)));
         }
 
         Some(match self.advance() {
-            c if is_alphabetic(c) => self.identifier(),
-            c if c.is_digit(10) => self.number(),
-            '(' => self.make_token(LeftParen),
-            ')' => self.make_token(RightParen),
-            '{' => self.make_token(LeftBrace),
-            '}' => self.make_token(RightBrace),
-            ';' => self.make_token(Semicolon),
-            ',' => self.make_token(Comma),
-            '.' => self.make_token(Dot),
-            '-' => self.make_token(Minus),
-            '+' => self.make_token(Plus),
-            '/' => self.make_token(Slash),
-            '*' => self.make_token(Star),
+            c if is_alphabetic(c) => Ok(self.identifier()),
+            c if c.is_digit(10) => Ok(self.number()),
+            '(' => Ok(self.make_token(LeftParen)),
+            ')' => Ok(self.make_token(RightParen)),
+            '{' => Ok(self.make_token(LeftBrace)),
+            '}' => Ok(self.make_token(RightBrace)),
+            ';' => Ok(self.make_token(Semicolon)),
+            ',' => Ok(self.make_token(Comma)),
+            '.' => Ok(self.make_token(Dot)),
+            '-' => Ok(self.make_token(Minus)),
+            '+' => Ok(self.make_token(Plus)),
+            '/' => Ok(self.make_token(Slash)),
+            '*' => Ok(self.make_token(Star)),
             '!' => {
                 let t = if self.matches('=') { BangEqual } else { Bang };
-                self.make_token(t)
+                Ok(self.make_token(t))
             }
             '=' => {
                 let t = if self.matches('=') { EqualEqual } else { Equal };
-                self.make_token(t)
+                Ok(self.make_token(t))
             }
             '<' => {
                 let t = if self.matches('=') { LessEqual } else { Less };
-                self.make_token(t)
+                Ok(self.make_token(t))
             }
             '>' => {
                 let t = if self.matches('=') {
@@ -197,10 +196,10 @@ impl<'source> Iterator for Scanner<'source> {
                 } else {
                     Greater
                 };
-                self.make_token(t)
+                Ok(self.make_token(t))
             }
             '"' => self.string(),
-            _ => self.error_token("Unexpected character."),
+            _ => Err(self.error_token("Unexpected character.")),
         })
     }
 }
@@ -273,6 +272,11 @@ pub(crate) enum TokenType {
     Var,
     While,
 
-    Error,
     Eof,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ScanError<'a> {
+    pub(crate) message: &'a str,
+    pub(crate) line: usize,
 }
