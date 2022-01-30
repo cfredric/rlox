@@ -74,7 +74,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Token<'source>>> Compiler<'opt, 'sou
         Self {
             opt,
             scanner: scanner.peekable(),
-            current_token: Token::default(),
+            current_token: Token::eof(),
             had_error: false,
             panic_mode: false,
             vm,

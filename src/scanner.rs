@@ -205,7 +205,7 @@ impl<'source> Iterator for Scanner<'source> {
     }
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub(super) struct Token<'a> {
     pub ty: TokenType,
     pub lexeme: &'a str,
@@ -217,6 +217,13 @@ impl<'source> Token<'source> {
         Self {
             ty,
             lexeme,
+            line: 0,
+        }
+    }
+    pub fn eof() -> Self {
+        Self {
+            ty: TokenType::Eof,
+            lexeme: "",
             line: 0,
         }
     }
@@ -268,10 +275,4 @@ pub(super) enum TokenType {
 
     Error,
     Eof,
-}
-
-impl Default for TokenType {
-    fn default() -> Self {
-        TokenType::Eof
-    }
 }
