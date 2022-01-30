@@ -8,7 +8,7 @@ use crate::value::Value;
 use crate::vm::VM;
 use crate::Opt;
 
-pub(crate) struct Compiler<'opt, 'source, 'vm, I: Iterator<Item = Token<'source>>> {
+struct Compiler<'opt, 'source, 'vm, I: Iterator<Item = Token<'source>>> {
     opt: &'opt Opt,
     scanner: Peekable<I>,
     current_token: Token<'source>,
@@ -69,8 +69,16 @@ impl ClassState {
     }
 }
 
+pub(crate) fn compile<'opt, 'source, 'vm, I: Iterator<Item = Token<'source>>>(
+    opt: &'opt Opt,
+    scanner: I,
+    vm: &'vm mut VM<'opt>,
+) -> Option<Function> {
+    Compiler::new(opt, scanner, vm).compile()
+}
+
 impl<'opt, 'source, 'vm, I: Iterator<Item = Token<'source>>> Compiler<'opt, 'source, 'vm, I> {
-    pub fn new(opt: &'opt Opt, scanner: I, vm: &'vm mut VM<'opt>) -> Self {
+    fn new(opt: &'opt Opt, scanner: I, vm: &'vm mut VM<'opt>) -> Self {
         Self {
             opt,
             scanner: scanner.peekable(),
@@ -84,7 +92,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Token<'source>>> Compiler<'opt, 'sou
         }
     }
 
-    pub fn compile(mut self) -> Option<Function> {
+    fn compile(mut self) -> Option<Function> {
         while !self.maybe_consume(TokenType::Eof) {
             self.declaration();
         }

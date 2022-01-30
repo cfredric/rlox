@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use itertools::Itertools;
 
 use crate::chunk::{ConstantIndex, OpCode};
-use crate::compiler::{CompiledUpValue, Compiler};
+use crate::compiler::{compile, CompiledUpValue};
 use crate::heap::{Heap, Ptr};
 use crate::obj::{
     BoundMethod, Class, Closed, Closure, Function, Instance, LoxString, NativeFn, Obj, Open,
@@ -841,7 +841,7 @@ impl<'opt> VM<'opt> {
     }
 
     pub fn interpret(&mut self, source: &str) -> Result<(), InterpretResult> {
-        match Compiler::new(self.opt, crate::scanner::Scanner::new(source), self).compile() {
+        match compile(self.opt, crate::scanner::Scanner::new(source), self) {
             Some(function) => {
                 let function = self.new_function(function);
                 self.stack.push(Value::ObjReference(function));
