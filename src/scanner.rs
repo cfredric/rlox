@@ -8,6 +8,14 @@ fn is_alphabetic(c: char) -> bool {
     ('a'..='z').contains(&c) || ('A'..='Z').contains(&c) || c == '_'
 }
 
+fn is_numeric(c: char) -> bool {
+    c.is_digit(10)
+}
+
+fn is_alphanumeric(c: char) -> bool {
+    is_alphabetic(c) || is_numeric(c)
+}
+
 impl<'source> Scanner<'source> {
     pub(crate) fn new(source: &'source str) -> Self {
         Scanner {
@@ -18,8 +26,8 @@ impl<'source> Scanner<'source> {
         }
     }
 
-    fn matches(&mut self, expected: char) -> bool {
-        if self.is_at_end() || self.source[self.current] as char != expected {
+    fn maybe_consume(&mut self, expected: char) -> bool {
+        if self.is_at_end() || self.peek() != expected {
             false
         } else {
             self.source = &self.source[self.current + 1..];
@@ -64,10 +72,7 @@ impl<'source> Scanner<'source> {
     }
 
     fn skip_whitespace(&mut self) {
-        loop {
-            if self.is_at_end() {
-                return;
-            }
+        while !self.is_at_end() {
             match self.peek() {
                 ' ' | '\r' | '\t' => {
                     self.advance();
@@ -89,7 +94,7 @@ impl<'source> Scanner<'source> {
     }
 
     fn identifier(&mut self) -> Token<'source> {
-        while !self.is_at_end() && (is_alphabetic(self.peek()) || self.peek().is_digit(10)) {
+        while !self.is_at_end() && is_alphanumeric(self.peek()) {
             self.advance();
         }
 
@@ -97,13 +102,13 @@ impl<'source> Scanner<'source> {
     }
 
     fn number(&mut self) -> Token<'source> {
-        while !self.is_at_end() && self.peek().is_digit(10) {
+        while !self.is_at_end() && is_numeric(self.peek()) {
             self.advance();
         }
 
-        if !self.is_at_end() && self.peek() == '.' && self.peek_next().is_digit(10) {
+        if !self.is_at_end() && self.peek() == '.' && is_numeric(self.peek_next()) {
             self.advance();
-            while !self.is_at_end() && self.peek().is_digit(10) {
+            while !self.is_at_end() && is_numeric(self.peek()) {
                 self.advance();
             }
         }
@@ -166,7 +171,7 @@ impl<'source> Iterator for Scanner<'source> {
 
         Some(match self.advance() {
             c if is_alphabetic(c) => Ok(self.identifier()),
-            c if c.is_digit(10) => Ok(self.number()),
+            c if is_numeric(c) => Ok(self.number()),
             '(' => Ok(self.make_token(LeftParen)),
             ')' => Ok(self.make_token(RightParen)),
             '{' => Ok(self.make_token(LeftBrace)),
@@ -179,19 +184,31 @@ impl<'source> Iterator for Scanner<'source> {
             '/' => Ok(self.make_token(Slash)),
             '*' => Ok(self.make_token(Star)),
             '!' => {
-                let t = if self.matches('=') { BangEqual } else { Bang };
+                let t = if self.maybe_consume('=') {
+                    BangEqual
+                } else {
+                    Bang
+                };
                 Ok(self.make_token(t))
             }
             '=' => {
-                let t = if self.matches('=') { EqualEqual } else { Equal };
+                let t = if self.maybe_consume('=') {
+                    EqualEqual
+                } else {
+                    Equal
+                };
                 Ok(self.make_token(t))
             }
             '<' => {
-                let t = if self.matches('=') { LessEqual } else { Less };
+                let t = if self.maybe_consume('=') {
+                    LessEqual
+                } else {
+                    Less
+                };
                 Ok(self.make_token(t))
             }
             '>' => {
-                let t = if self.matches('=') {
+                let t = if self.maybe_consume('=') {
                     GreaterEqual
                 } else {
                     Greater
