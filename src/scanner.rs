@@ -27,17 +27,13 @@ impl<'source> Scanner<'source> {
     }
 
     fn maybe_consume(&mut self, expected: char) -> bool {
-        if self.is_at_end() || self.peek() != expected {
-            false
-        } else {
+        if self.peek().map_or(false, |c| c == expected) {
             self.source = &self.source[self.current + 1..];
             self.current = 0;
             true
+        } else {
+            false
         }
-    }
-
-    fn is_at_end(&self) -> bool {
-        self.current >= self.source.len()
     }
 
     fn advance(&mut self) -> char {
@@ -45,15 +41,12 @@ impl<'source> Scanner<'source> {
         self.source[self.current - 1] as char
     }
 
-    fn peek(&self) -> char {
-        self.source[self.current] as char
+    fn peek(&self) -> Option<char> {
+        self.source.get(self.current).map(|x| *x as char)
     }
 
-    fn peek_next(&self) -> char {
-        if self.is_at_end() || self.current + 1 == self.source.len() {
-            return '\0';
-        }
-        self.source[self.current + 1] as char
+    fn peek_next(&self) -> Option<char> {
+        self.source.get(self.current + 1).map(|x| *x as char)
     }
 
     fn make_token(&self, ty: TokenType) -> Token<'source> {
@@ -72,8 +65,8 @@ impl<'source> Scanner<'source> {
     }
 
     fn skip_whitespace(&mut self) {
-        while !self.is_at_end() {
-            match self.peek() {
+        while let Some(c) = self.peek() {
+            match c {
                 ' ' | '\r' | '\t' => {
                     self.advance();
                 }
@@ -81,8 +74,8 @@ impl<'source> Scanner<'source> {
                     self.line += 1;
                     self.advance();
                 }
-                '/' if self.peek_next() == '/' => {
-                    while !self.is_at_end() && self.peek() != '\n' {
+                '/' if matches!(self.peek_next(), Some('/')) => {
+                    while self.peek().map_or(false, |c| c != '\n') {
                         self.advance();
                     }
                 }
@@ -94,7 +87,7 @@ impl<'source> Scanner<'source> {
     }
 
     fn identifier(&mut self) -> Token<'source> {
-        while !self.is_at_end() && is_alphanumeric(self.peek()) {
+        while self.peek().map_or(false, is_alphanumeric) {
             self.advance();
         }
 
@@ -102,13 +95,13 @@ impl<'source> Scanner<'source> {
     }
 
     fn number(&mut self) -> Token<'source> {
-        while !self.is_at_end() && is_numeric(self.peek()) {
+        while self.peek().map_or(false, is_numeric) {
             self.advance();
         }
 
-        if !self.is_at_end() && self.peek() == '.' && is_numeric(self.peek_next()) {
+        if self.peek().map_or(false, |c| c == '.') && self.peek_next().map_or(false, is_numeric) {
             self.advance();
-            while !self.is_at_end() && is_numeric(self.peek()) {
+            while self.peek().map_or(false, is_numeric) {
                 self.advance();
             }
         }
@@ -116,19 +109,23 @@ impl<'source> Scanner<'source> {
     }
 
     fn string(&mut self) -> Result<Token<'source>, ScanError> {
-        while !self.is_at_end() && self.peek() != '"' {
-            if self.peek() == '\n' {
-                self.line += 1;
+        loop {
+            match self.peek() {
+                Some('"') => {
+                    self.advance();
+                    return Ok(self.make_token(TokenType::String));
+                }
+                Some(c) => {
+                    if c == '\n' {
+                        self.line += 1;
+                    }
+                    self.advance();
+                }
+                None => {
+                    return Err(self.error("Unterminated string."));
+                }
             }
-            self.advance();
         }
-
-        if self.is_at_end() {
-            return Err(self.error("Unterminated string."));
-        }
-
-        self.advance();
-        Ok(self.make_token(TokenType::String))
     }
 
     fn identifier_type(&self) -> TokenType {
@@ -165,7 +162,7 @@ impl<'source> Iterator for Scanner<'source> {
         self.source = &self.source[self.current..];
         self.current = 0;
 
-        if self.is_at_end() {
+        if self.source.is_empty() {
             return Some(Ok(self.make_token(Eof)));
         }
 
