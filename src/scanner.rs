@@ -36,11 +36,6 @@ impl<'source> Scanner<'source> {
         }
     }
 
-    fn advance(&mut self) -> char {
-        self.current += 1;
-        self.source[self.current - 1] as char
-    }
-
     fn peek(&self) -> Option<char> {
         self.source.get(self.current).map(|x| *x as char)
     }
@@ -68,15 +63,15 @@ impl<'source> Scanner<'source> {
         while let Some(c) = self.peek() {
             match c {
                 ' ' | '\r' | '\t' => {
-                    self.advance();
+                    self.current += 1;
                 }
                 '\n' => {
                     self.line += 1;
-                    self.advance();
+                    self.current += 1;
                 }
                 '/' if matches!(self.peek_next(), Some('/')) => {
                     while self.peek().map_or(false, |c| c != '\n') {
-                        self.advance();
+                        self.current += 1;
                     }
                 }
                 _ => {
@@ -88,7 +83,7 @@ impl<'source> Scanner<'source> {
 
     fn identifier(&mut self) -> Token<'source> {
         while self.peek().map_or(false, is_alphanumeric) {
-            self.advance();
+            self.current += 1;
         }
 
         self.make_token(self.identifier_type())
@@ -96,13 +91,13 @@ impl<'source> Scanner<'source> {
 
     fn number(&mut self) -> Token<'source> {
         while self.peek().map_or(false, is_numeric) {
-            self.advance();
+            self.current += 1;
         }
 
         if self.peek().map_or(false, |c| c == '.') && self.peek_next().map_or(false, is_numeric) {
-            self.advance();
+            self.current += 1;
             while self.peek().map_or(false, is_numeric) {
-                self.advance();
+                self.current += 1;
             }
         }
         self.make_token(TokenType::Number)
@@ -112,14 +107,14 @@ impl<'source> Scanner<'source> {
         loop {
             match self.peek() {
                 Some('"') => {
-                    self.advance();
+                    self.current += 1;
                     return Ok(self.make_token(TokenType::String));
                 }
                 Some(c) => {
                     if c == '\n' {
                         self.line += 1;
                     }
-                    self.advance();
+                    self.current += 1;
                 }
                 None => {
                     return Err(self.error("Unterminated string."));
@@ -162,11 +157,15 @@ impl<'source> Iterator for Scanner<'source> {
         self.source = &self.source[self.current..];
         self.current = 0;
 
-        if self.source.is_empty() {
-            return Some(Ok(self.make_token(Eof)));
-        }
+        let next_char = match self.peek() {
+            Some(c) => c,
+            None => {
+                return Some(Ok(self.make_token(Eof)));
+            }
+        };
+        self.current += 1;
 
-        Some(match self.advance() {
+        Some(match next_char {
             c if is_alphabetic(c) => Ok(self.identifier()),
             c if is_numeric(c) => Ok(self.number()),
             '(' => Ok(self.make_token(LeftParen)),
