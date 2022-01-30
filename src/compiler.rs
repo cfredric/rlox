@@ -13,7 +13,7 @@ use scanner::{Token, TokenType};
 pub(crate) struct Compiler<'opt, 'source, 'vm> {
     opt: &'opt Opt,
     scanner: Peekable<scanner::Scanner<'source>>,
-    current: Token<'source>,
+    current_token: Token<'source>,
     had_error: bool,
     panic_mode: bool,
 
@@ -76,7 +76,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         Self {
             opt,
             scanner: scanner::Scanner::new(source).peekable(),
-            current: Token::default(),
+            current_token: Token::default(),
             had_error: false,
             panic_mode: false,
             vm,
@@ -87,7 +87,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     pub fn compile(mut self) -> Option<Function> {
-        while !self.matches(TokenType::Eof) {
+        while !self.maybe_consume(TokenType::Eof) {
             self.declaration();
         }
 
@@ -97,28 +97,28 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             .filter(|_| !self.had_error)
     }
 
-    fn next(&mut self) -> Token<'source> {
+    fn next_token(&mut self) -> Token<'source> {
         *self.scanner.peek().unwrap()
     }
 
     fn advance(&mut self) -> Token<'source> {
-        self.current = self.next();
-        if self.current.ty == TokenType::Error {
-            self.error(self.current.lexeme);
+        self.current_token = self.next_token();
+        if self.current_token.ty == TokenType::Error {
+            self.error(self.current_token.lexeme);
         }
         loop {
             self.scanner.next().unwrap();
-            if self.next().ty != TokenType::Error {
-                return self.next();
+            let next = self.next_token();
+            if next.ty != TokenType::Error {
+                return next;
             }
 
-            let next = self.next();
             self.error_at_next(next.lexeme);
         }
     }
 
     fn consume<'s: 'source>(&mut self, ty: TokenType, message: &'s str) {
-        if self.next().ty == ty {
+        if self.next_token().ty == ty {
             self.advance();
             return;
         }
@@ -126,16 +126,16 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.error_at_next(message);
     }
 
-    fn matches(&mut self, ty: TokenType) -> bool {
-        if !self.check(ty) {
+    fn maybe_consume(&mut self, ty: TokenType) -> bool {
+        if !self.next_token_is(ty) {
             return false;
         }
         self.advance();
         true
     }
 
-    fn check(&mut self, ty: TokenType) -> bool {
-        self.next().ty == ty
+    fn next_token_is(&mut self, ty: TokenType) -> bool {
+        self.next_token().ty == ty
     }
 
     fn emit_opcodes(&mut self, a: OpCode, b: OpCode) {
@@ -171,7 +171,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn emit_opcode(&mut self, opcode: OpCode) {
-        let line = self.current.line;
+        let line = self.current_token.line;
         self.current_chunk_mut().write_chunk(opcode, line);
     }
 
@@ -180,7 +180,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
         if self.opt.print_code && !self.had_error {
             self.current_chunk()
-                .disassemble_chunk(&self.current().function.name, &self.vm.heap);
+                .disassemble_chunk(&self.current_function().function.name, &self.vm.heap);
         }
         if self.had_error {
             self.functions.pop();
@@ -193,12 +193,12 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     fn synchronize(&mut self) {
         self.panic_mode = false;
 
-        while self.next().ty != TokenType::Eof {
-            if self.current.ty == TokenType::Semicolon {
+        while self.next_token().ty != TokenType::Eof {
+            if self.current_token.ty == TokenType::Semicolon {
                 return;
             }
             use TokenType::*;
-            match self.next().ty {
+            match self.next_token().ty {
                 Class | Fun | Var | For | If | While | Print | Return => {
                     return;
                 }
@@ -209,11 +209,11 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn declaration(&mut self) {
-        if self.matches(TokenType::Class) {
+        if self.maybe_consume(TokenType::Class) {
             self.class_declaration();
-        } else if self.matches(TokenType::Fun) {
+        } else if self.maybe_consume(TokenType::Fun) {
             self.fun_declaration();
-        } else if self.matches(TokenType::Var) {
+        } else if self.maybe_consume(TokenType::Var) {
             self.var_declaration();
         } else {
             self.statement();
@@ -226,8 +226,8 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
     fn class_declaration(&mut self) {
         self.consume(TokenType::Identifier, "Expect class name.");
-        let name = self.current.lexeme;
-        let name_constant = self.identifier_constant(self.current.lexeme);
+        let name = self.current_token.lexeme;
+        let name_constant = self.identifier_constant(self.current_token.lexeme);
         self.declare_variable();
 
         self.emit_opcode(OpCode::Class {
@@ -242,11 +242,11 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
         self.class_compilers.push(ClassState::new());
 
-        if self.matches(TokenType::Less) {
+        if self.maybe_consume(TokenType::Less) {
             self.consume(TokenType::Identifier, "Expect superclass name.");
             self.variable(false);
 
-            if name == self.current.lexeme {
+            if name == self.current_token.lexeme {
                 self.error("A class can't inherit from itself.");
             }
 
@@ -264,7 +264,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
         self.named_variable(name, false);
         self.consume(TokenType::LeftBrace, "Expect '{' before class body.");
-        while !self.check(TokenType::RightBrace) && !self.check(TokenType::Eof) {
+        while !self.next_token_is(TokenType::RightBrace) && !self.next_token_is(TokenType::Eof) {
             self.method();
         }
         self.consume(TokenType::RightBrace, "Expect '}' after class body.");
@@ -291,7 +291,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     fn var_declaration(&mut self) {
         let global = self.parse_variable("Expect variable name.");
 
-        if self.matches(TokenType::Equal) {
+        if self.maybe_consume(TokenType::Equal) {
             self.expression();
         } else {
             self.emit_constant(Value::Nil);
@@ -305,17 +305,17 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn statement(&mut self) {
-        if self.matches(TokenType::Print) {
+        if self.maybe_consume(TokenType::Print) {
             self.print_statement();
-        } else if self.matches(TokenType::For) {
+        } else if self.maybe_consume(TokenType::For) {
             self.for_statement();
-        } else if self.matches(TokenType::If) {
+        } else if self.maybe_consume(TokenType::If) {
             self.if_statement();
-        } else if self.matches(TokenType::Return) {
+        } else if self.maybe_consume(TokenType::Return) {
             self.return_statement();
-        } else if self.matches(TokenType::While) {
+        } else if self.maybe_consume(TokenType::While) {
             self.while_statement();
-        } else if self.matches(TokenType::LeftBrace) {
+        } else if self.maybe_consume(TokenType::LeftBrace) {
             self.begin_scope(); // Matched with end below.
             self.block();
             self.end_scope(); // Matched with begin immediately above.
@@ -327,9 +327,9 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     fn for_statement(&mut self) {
         self.begin_scope(); // Matched with end below.
         self.consume(TokenType::LeftParen, "Expect '(' after 'for'.");
-        if self.matches(TokenType::Semicolon) {
+        if self.maybe_consume(TokenType::Semicolon) {
             // No initializer.
-        } else if self.matches(TokenType::Var) {
+        } else if self.maybe_consume(TokenType::Var) {
             self.var_declaration();
         } else {
             self.expression_statement();
@@ -337,7 +337,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
         let mut loop_start = self.current_chunk().code.len();
         let mut exit_jump = None;
-        if !self.matches(TokenType::Semicolon) {
+        if !self.maybe_consume(TokenType::Semicolon) {
             self.expression();
             self.consume(TokenType::Semicolon, "Expect ';' after loop condition.");
 
@@ -345,7 +345,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             self.emit_opcode(OpCode::Pop);
         }
 
-        if !self.matches(TokenType::RightParen) {
+        if !self.maybe_consume(TokenType::RightParen) {
             let body_jump = self.emit_jump(OpCode::Jump { distance: 0 });
             let increment_start = self.current_chunk().code.len();
             self.expression();
@@ -379,7 +379,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         let else_jump = self.emit_jump(OpCode::Jump { distance: 0 });
         self.patch_jump(then_jump);
         self.emit_opcode(OpCode::Pop);
-        if self.matches(TokenType::Else) {
+        if self.maybe_consume(TokenType::Else) {
             self.statement();
         }
         self.patch_jump(else_jump);
@@ -409,7 +409,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             comp.block_depth -= 1;
         });
         comp.block_depth += 1;
-        while !comp.check(TokenType::RightBrace) && !comp.check(TokenType::Eof) {
+        while !comp.next_token_is(TokenType::RightBrace) && !comp.next_token_is(TokenType::Eof) {
             comp.declaration();
         }
 
@@ -424,21 +424,21 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.functions.push(if ty == FunctionType::Script {
             FunctionState::new(ty)
         } else {
-            FunctionState::with_name(ty, self.current.lexeme)
+            FunctionState::with_name(ty, self.current_token.lexeme)
         });
         self.begin_scope();
 
         self.consume(TokenType::LeftParen, "Expect '(' after function name.");
-        if !self.check(TokenType::RightParen) {
+        if !self.next_token_is(TokenType::RightParen) {
             loop {
-                self.current_mut().function.arity += 1;
-                if self.current().function.arity > 255 {
+                self.current_function_mut().function.arity += 1;
+                if self.current_function().function.arity > 255 {
                     self.error_at_next("Can't have more than 255 parameters.");
                 }
                 let constant = self.parse_variable("Expect parameter name.");
                 self.define_variable(constant);
 
-                if !self.matches(TokenType::Comma) {
+                if !self.maybe_consume(TokenType::Comma) {
                     break;
                 }
             }
@@ -459,10 +459,10 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
     fn method(&mut self) {
         self.consume(TokenType::Identifier, "Expect method name.");
-        let name = self.identifier_constant(self.current.lexeme);
+        let name = self.identifier_constant(self.current_token.lexeme);
 
         let mut ty = FunctionType::Method;
-        if self.current.lexeme == "init" {
+        if self.current_token.lexeme == "init" {
             ty = FunctionType::Initializer;
         }
         self.function(ty);
@@ -471,16 +471,16 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn begin_scope(&mut self) {
-        self.current_mut().scope_depth += 1;
+        self.current_function_mut().scope_depth += 1;
     }
 
     fn end_scope(&mut self) {
-        self.current_mut().scope_depth -= 1;
+        self.current_function_mut().scope_depth -= 1;
 
-        while matches!(self.current().locals.last(), Some(local) if local.depth.map_or(false, |d| d > self.current().scope_depth))
+        while matches!(self.current_function().locals.last(), Some(local) if local.depth.map_or(false, |d| d > self.current_function().scope_depth))
         {
             if self
-                .current()
+                .current_function()
                 .locals
                 .last()
                 .expect("already checked via matches!")
@@ -490,7 +490,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             } else {
                 self.emit_opcode(OpCode::Pop);
             }
-            self.current_mut().locals.pop();
+            self.current_function_mut().locals.pop();
         }
     }
 
@@ -501,13 +501,13 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn return_statement(&mut self) {
-        if self.current().function_type == FunctionType::Script {
+        if self.current_function().function_type == FunctionType::Script {
             self.error("Can't return from top-level code.");
         }
-        if self.matches(TokenType::Semicolon) {
+        if self.maybe_consume(TokenType::Semicolon) {
             self.emit_return();
         } else {
-            if self.current().function_type == FunctionType::Initializer {
+            if self.current_function().function_type == FunctionType::Initializer {
                 self.error("Can't return a value from an initializer.");
             }
             self.expression();
@@ -528,18 +528,18 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn number(&mut self) {
-        let value = self.current.lexeme.parse::<f64>().unwrap();
+        let value = self.current_token.lexeme.parse::<f64>().unwrap();
         self.emit_constant(Value::Double(value));
     }
 
     fn string(&mut self) {
-        let len = self.current.lexeme.len();
-        let lox_string = self.vm.copy_string(&self.current.lexeme[1..len - 1]);
+        let len = self.current_token.lexeme.len();
+        let lox_string = self.vm.copy_string(&self.current_token.lexeme[1..len - 1]);
         self.emit_constant(Value::ObjReference(lox_string));
     }
 
     fn unary(&mut self) {
-        let op_ty = self.current.ty;
+        let op_ty = self.current_token.ty;
         self.parse_precedence(Precedence::Unary);
         match op_ty {
             TokenType::Minus => self.emit_opcode(OpCode::Negate),
@@ -549,7 +549,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn binary(&mut self) {
-        let ty = self.current.ty;
+        let ty = self.current_token.ty;
         let rule = get_rule(ty);
         self.parse_precedence(rule.precedence.plus_one());
 
@@ -575,12 +575,12 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
     fn dot(&mut self, can_assign: bool) {
         self.consume(TokenType::Identifier, "Expect property name after '.'.");
-        let name = self.identifier_constant(self.current.lexeme);
+        let name = self.identifier_constant(self.current_token.lexeme);
 
-        if can_assign && self.matches(TokenType::Equal) {
+        if can_assign && self.maybe_consume(TokenType::Equal) {
             self.expression();
             self.emit_opcode(OpCode::SetProperty { name });
-        } else if self.matches(TokenType::LeftParen) {
+        } else if self.maybe_consume(TokenType::LeftParen) {
             let arg_count = self.argument_list();
             self.emit_opcode(OpCode::Invoke {
                 method_name: name,
@@ -592,7 +592,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn literal(&mut self) {
-        match self.current.ty {
+        match self.current_token.ty {
             TokenType::False => self.emit_opcode(OpCode::Bool { value: false }),
             TokenType::Nil => self.emit_opcode(OpCode::Nil),
             TokenType::True => self.emit_opcode(OpCode::Bool { value: true }),
@@ -602,7 +602,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
     fn parse_precedence(&mut self, prec: Precedence) {
         self.advance();
-        let prefix = get_rule(self.current.ty).prefix;
+        let prefix = get_rule(self.current_token.ty).prefix;
         let can_assign = prec <= Precedence::Assignment;
         match prefix {
             Some(f) => f(self, ParseFnCtx { can_assign }),
@@ -612,13 +612,13 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             }
         }
 
-        while prec <= get_rule(self.next().ty).precedence {
+        while prec <= get_rule(self.next_token().ty).precedence {
             self.advance();
-            let infix = get_rule(self.current.ty).infix;
+            let infix = get_rule(self.current_token.ty).infix;
             infix.unwrap()(self, ParseFnCtx { can_assign });
         }
 
-        if can_assign && self.matches(TokenType::Equal) {
+        if can_assign && self.maybe_consume(TokenType::Equal) {
             self.error("Invalid assignment target.");
         }
     }
@@ -626,10 +626,10 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     fn parse_variable<'e: 'source>(&mut self, error_message: &'e str) -> ConstantIndex {
         self.consume(TokenType::Identifier, error_message);
         self.declare_variable();
-        if self.current().scope_depth > 0 {
+        if self.current_function().scope_depth > 0 {
             return ConstantIndex::error();
         }
-        let name = self.current.lexeme;
+        let name = self.current_token.lexeme;
         self.identifier_constant(name)
     }
 
@@ -639,7 +639,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn define_variable(&mut self, global: ConstantIndex) {
-        if self.current().scope_depth > 0 {
+        if self.current_function().scope_depth > 0 {
             self.mark_initialized();
             return;
         }
@@ -648,7 +648,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
     fn argument_list(&mut self) -> usize {
         let mut arg_count = 0;
-        if !self.check(TokenType::RightParen) {
+        if !self.next_token_is(TokenType::RightParen) {
             loop {
                 self.expression();
                 if arg_count == 255 {
@@ -656,7 +656,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
                 }
                 arg_count += 1;
 
-                if !self.matches(TokenType::Comma) {
+                if !self.maybe_consume(TokenType::Comma) {
                     break;
                 }
             }
@@ -685,38 +685,36 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn mark_initialized(&mut self) {
-        if self.current().scope_depth == 0 {
+        if self.current_function().scope_depth == 0 {
             return;
         }
-        self.current_mut()
+        self.current_function_mut()
             .locals
             .last_mut()
             .expect("locals is never empty")
-            .depth = Some(self.current().scope_depth);
+            .depth = Some(self.current_function().scope_depth);
     }
 
     fn declare_variable(&mut self) {
-        if self.current().scope_depth == 0 {
+        if self.current_function().scope_depth == 0 {
             return;
         }
-        let name = self.current;
-        let current = self.current();
-        if current
-            .locals
-            .iter()
-            .any(|l| !l.depth.map_or(false, |d| d < current.scope_depth) && name.lexeme == l.name)
-        {
+        let name = self.current_token;
+        let current_function = self.current_function();
+        if current_function.locals.iter().any(|l| {
+            !l.depth.map_or(false, |d| d < current_function.scope_depth) && name.lexeme == l.name
+        }) {
             self.error("Already a variable with this name in this scope.");
         }
         self.add_local(name);
     }
 
     fn add_local(&mut self, name: Token<'source>) {
-        if self.current().locals.len() >= 256 {
+        if self.current_function().locals.len() >= 256 {
             self.error("Too many local variables in function.");
             return;
         }
-        self.current_mut().locals.push(Local {
+        self.current_function_mut().locals.push(Local {
             name: name.lexeme,
             depth: None,
             is_captured: false,
@@ -724,7 +722,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn variable(&mut self, can_assign: bool) {
-        self.named_variable(self.current.lexeme, can_assign)
+        self.named_variable(self.current_token.lexeme, can_assign)
     }
 
     fn this(&mut self) {
@@ -747,10 +745,10 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         }
         self.consume(TokenType::Dot, "Expect '.' after 'super'.");
         self.consume(TokenType::Identifier, "Expect superclass method name.");
-        let method = self.identifier_constant(self.current.lexeme);
+        let method = self.identifier_constant(self.current_token.lexeme);
 
         self.named_variable("this", false);
-        if self.matches(TokenType::LeftParen) {
+        if self.maybe_consume(TokenType::LeftParen) {
             let arg_count = self.argument_list();
             self.named_variable("super", false);
             self.emit_opcode(OpCode::SuperInvoke { method, arg_count });
@@ -770,7 +768,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             let arg = self.identifier_constant(name);
             (OpCode::GetGlobal(arg), OpCode::SetGlobal(arg))
         };
-        if can_assign && self.matches(TokenType::Equal) {
+        if can_assign && self.maybe_consume(TokenType::Equal) {
             self.expression();
             self.emit_opcode(set_op);
         } else {
@@ -834,7 +832,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn emit_return(&mut self) {
-        if self.current().function_type == FunctionType::Initializer {
+        if self.current_function().function_type == FunctionType::Initializer {
             self.emit_opcode(OpCode::GetLocal(StackSlotOffset::special()));
         } else {
             self.emit_opcode(OpCode::Nil);
@@ -858,31 +856,31 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn current_chunk_mut(&mut self) -> &mut Chunk {
-        &mut self.current_mut().function.chunk
+        &mut self.current_function_mut().function.chunk
     }
 
     fn current_chunk(&self) -> &Chunk {
-        &self.current().function.chunk
+        &self.current_function().function.chunk
     }
 
-    fn current(&self) -> &FunctionState<'source> {
+    fn current_function(&self) -> &FunctionState<'source> {
         self.functions
             .last()
             .expect("function stack should not be empty")
     }
 
-    fn current_mut(&mut self) -> &mut FunctionState<'source> {
+    fn current_function_mut(&mut self) -> &mut FunctionState<'source> {
         self.functions
             .last_mut()
             .expect("function stack should not be empty")
     }
 
     fn error_at_next(&mut self, message: &str) {
-        let next = self.next();
+        let next = self.next_token();
         self.error_at(&next, message);
     }
     fn error(&mut self, message: &str) {
-        let prev = self.current;
+        let prev = self.current_token;
         self.error_at(&prev, message)
     }
     fn error_at(&mut self, token: &Token, message: &str) {
