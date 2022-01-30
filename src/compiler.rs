@@ -128,21 +128,21 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     fn consume<'s: 'source>(&mut self, ty: TokenType, message: &'s str) {
         if self.next_token().ty == ty {
             self.advance();
-            return;
+        } else {
+            self.error_at_next(message);
         }
-
-        self.error_at_next(message);
     }
 
     /// Potentially consumes a token with the given type, setting that token as
     /// the current token. If the next token does not have the expected type,
     /// does nothing.
     fn maybe_consume(&mut self, ty: TokenType) -> bool {
-        if !self.next_token_is(ty) {
-            return false;
+        if self.next_token_is(ty) {
+            self.advance();
+            true
+        } else {
+            false
         }
-        self.advance();
-        true
     }
 
     fn next_token_is(&mut self, ty: TokenType) -> bool {
@@ -638,10 +638,11 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.consume(TokenType::Identifier, error_message);
         self.declare_variable();
         if self.current_function().scope_depth > 0 {
-            return ConstantIndex::error();
+            ConstantIndex::error()
+        } else {
+            let name = self.current_token.lexeme;
+            self.identifier_constant(name)
         }
-        let name = self.current_token.lexeme;
-        self.identifier_constant(name)
     }
 
     fn identifier_constant(&mut self, name: &str) -> ConstantIndex {
@@ -652,9 +653,9 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     fn define_variable(&mut self, global: ConstantIndex) {
         if self.current_function().scope_depth > 0 {
             self.mark_initialized();
-            return;
+        } else {
+            self.emit_opcode(OpCode::DefineGlobal(global))
         }
-        self.emit_opcode(OpCode::DefineGlobal(global))
     }
 
     fn argument_list(&mut self) -> usize {
@@ -696,14 +697,13 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 
     fn mark_initialized(&mut self) {
-        if self.current_function().scope_depth == 0 {
-            return;
+        if self.current_function().scope_depth != 0 {
+            self.current_function_mut()
+                .locals
+                .last_mut()
+                .expect("locals is never empty")
+                .depth = Some(self.current_function().scope_depth);
         }
-        self.current_function_mut()
-            .locals
-            .last_mut()
-            .expect("locals is never empty")
-            .depth = Some(self.current_function().scope_depth);
     }
 
     fn declare_variable(&mut self) {
@@ -723,13 +723,13 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     fn add_local(&mut self, name: Token<'source>) {
         if self.current_function().locals.len() >= 256 {
             self.error("Too many local variables in function.");
-            return;
+        } else {
+            self.current_function_mut().locals.push(Local {
+                name: name.lexeme,
+                depth: None,
+                is_captured: false,
+            });
         }
-        self.current_function_mut().locals.push(Local {
-            name: name.lexeme,
-            depth: None,
-            is_captured: false,
-        });
     }
 
     fn variable(&mut self, can_assign: bool) {
@@ -815,15 +815,16 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             .find(|(_, uv)| upvalue == **uv)
             .map(|(i, _)| i)
         {
-            return UpValueIndex(index);
+            UpValueIndex(index)
+        } else {
+            if self.functions[func_state_index].upvalues.len() >= 256 {
+                self.error("Too many closure variables in function.");
+                UpValueIndex(99999)
+            } else {
+                self.functions[func_state_index].upvalues.push(upvalue);
+                UpValueIndex(self.functions[func_state_index].upvalues.len() - 1)
+            }
         }
-
-        if self.functions[func_state_index].upvalues.len() >= 256 {
-            self.error("Too many closure variables in function.");
-            return UpValueIndex(99999);
-        }
-        self.functions[func_state_index].upvalues.push(upvalue);
-        UpValueIndex(self.functions[func_state_index].upvalues.len() - 1)
     }
 
     fn resolve_upvalue(&mut self, state_index: usize, name: &str) -> Option<UpValueIndex> {
