@@ -8,6 +8,14 @@ use crate::value::Value;
 use crate::vm::VM;
 use crate::Opt;
 
+const MAX_NESTED_CLASSES: usize = 10;
+const MAX_NESTED_BLOCKS: usize = 10;
+const MAX_NESTED_FUNCTIONS: usize = 10;
+const MAX_ARITY: usize = 255;
+const MAX_LOCALS: usize = 256;
+const MAX_UPVALUES: usize = 256;
+const MAX_JUMP_SIZE: usize = 2_usize.pow(16) - 1;
+
 struct Compiler<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>> {
     opt: &'opt Opt,
     scanner: Peekable<I>,
@@ -179,7 +187,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
 
     fn patch_jump(&mut self, jump_index: usize) {
         let distance = self.current_chunk().code.len() - jump_index - 1;
-        if distance >= 2_usize.pow(16) {
+        if distance > MAX_JUMP_SIZE {
             self.error("Too much code to jump over.");
         }
         self.current_chunk_mut().code[jump_index] = match self.current_chunk().code[jump_index] {
@@ -191,7 +199,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
 
     fn emit_loop(&mut self, loop_start: usize) {
         let distance_to_loop_start = self.current_chunk().code.len() - loop_start + 1;
-        if distance_to_loop_start >= 2_usize.pow(16) {
+        if distance_to_loop_start > MAX_JUMP_SIZE {
             self.error("Loop body too large.");
         }
         self.emit_opcode(OpCode::Loop {
@@ -264,7 +272,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         });
         self.define_variable(name_constant);
 
-        if self.class_compilers.len() > 25 {
+        if self.class_compilers.len() > MAX_NESTED_CLASSES {
             self.error("Too many nested classes.");
             return;
         }
@@ -430,7 +438,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     }
 
     fn block(&mut self) {
-        if self.block_depth > 256 {
+        if self.block_depth > MAX_NESTED_BLOCKS {
             self.error("Too many nested blocks.");
             return;
         }
@@ -446,7 +454,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     }
 
     fn function(&mut self, ty: FunctionType) {
-        if self.functions.len() > 255 {
+        if self.functions.len() > MAX_NESTED_FUNCTIONS {
             self.error("Too many nested functions.");
             return;
         }
@@ -461,7 +469,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         if !self.next_token_is(TokenType::RightParen) {
             loop {
                 self.current_function_mut().function.arity += 1;
-                if self.current_function().function.arity > 255 {
+                if self.current_function().function.arity > MAX_ARITY {
                     self.error_at_next("Can't have more than 255 parameters.");
                 }
                 let constant = self.parse_variable("Expect parameter name.");
@@ -681,10 +689,10 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         if !self.next_token_is(TokenType::RightParen) {
             loop {
                 self.expression();
-                if arg_count == 255 {
+                arg_count += 1;
+                if arg_count > MAX_ARITY {
                     self.error("Can't have more than 255 arguments.");
                 }
-                arg_count += 1;
 
                 if !self.maybe_consume(TokenType::Comma) {
                     break;
@@ -739,7 +747,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     }
 
     fn add_local(&mut self, name: Token<'source>) {
-        if self.current_function().locals.len() >= 256 {
+        if self.current_function().locals.len() >= MAX_LOCALS {
             self.error("Too many local variables in function.");
         } else {
             self.current_function_mut().locals.push(Local {
@@ -834,7 +842,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
             .map(|(i, _)| i)
         {
             UpValueIndex(index)
-        } else if self.functions[func_state_index].upvalues.len() >= 256 {
+        } else if self.functions[func_state_index].upvalues.len() >= MAX_UPVALUES {
             self.error("Too many closure variables in function.");
             UpValueIndex(99999)
         } else {
