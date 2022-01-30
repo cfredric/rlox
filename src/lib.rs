@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use structopt::StructOpt;
 
 mod chunk;
-mod common;
 mod compiler;
 mod heap;
 mod obj;
