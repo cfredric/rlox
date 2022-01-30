@@ -2,15 +2,15 @@ use std::iter::Peekable;
 
 use crate::chunk::{Chunk, ConstantIndex, OpCode};
 use crate::obj::{Function, UpValueIndex};
-use crate::scanner::{self, Token, TokenType};
+use crate::scanner::{Token, TokenType};
 use crate::stack::StackSlotOffset;
 use crate::value::Value;
 use crate::vm::VM;
 use crate::Opt;
 
-pub(crate) struct Compiler<'opt, 'source, 'vm> {
+pub(crate) struct Compiler<'opt, 'source, 'vm, I: Iterator<Item = Token<'source>>> {
     opt: &'opt Opt,
-    scanner: Peekable<scanner::Scanner<'source>>,
+    scanner: Peekable<I>,
     current_token: Token<'source>,
     had_error: bool,
     panic_mode: bool,
@@ -69,11 +69,11 @@ impl ClassState {
     }
 }
 
-impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
-    pub fn new(opt: &'opt Opt, source: &'source str, vm: &'vm mut VM<'opt>) -> Self {
+impl<'opt, 'source, 'vm, I: Iterator<Item = Token<'source>>> Compiler<'opt, 'source, 'vm, I> {
+    pub fn new(opt: &'opt Opt, scanner: I, vm: &'vm mut VM<'opt>) -> Self {
         Self {
             opt,
-            scanner: scanner::Scanner::new(source).peekable(),
+            scanner: scanner.peekable(),
             current_token: Token::default(),
             had_error: false,
             panic_mode: false,
@@ -559,7 +559,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
 
     fn binary(&mut self) {
         let ty = self.current_token.ty;
-        let rule = get_rule(ty);
+        let rule = get_rule::<'source, I>(ty);
         self.parse_precedence(rule.precedence.plus_one());
 
         match ty {
@@ -621,9 +621,9 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             }
         }
 
-        while prec <= get_rule(self.next_token().ty).precedence {
+        while prec <= get_rule::<'source, I>(self.next_token().ty).precedence {
             self.advance();
-            let infix = get_rule(self.current_token.ty).infix;
+            let infix = get_rule::<'source, I>(self.current_token.ty).infix;
             infix.unwrap()(self, ParseFnCtx { can_assign });
         }
 
@@ -897,8 +897,8 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         }
         self.panic_mode = true;
         let location = match token.ty {
-            scanner::TokenType::Eof => " at end".to_string(),
-            scanner::TokenType::Error => "".to_string(),
+            TokenType::Eof => " at end".to_string(),
+            TokenType::Error => "".to_string(),
             _ => format!(" at '{}'", token.lexeme),
         };
         eprintln!("[line {}] Error{}: {}", token.line, location, message);
@@ -911,7 +911,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     }
 }
 
-fn get_rule(ty: TokenType) -> Rule {
+fn get_rule<'source, I: Iterator<Item = Token<'source>>>(ty: TokenType) -> Rule<'source, I> {
     match ty {
         TokenType::LeftParen => Rule::new(
             Some(|c, _ctx| c.grouping()),
@@ -1008,18 +1008,22 @@ struct ParseFnCtx {
     can_assign: bool,
 }
 
-type ParseFn = Option<
-    for<'compiler, 'opt, 'source, 'vm> fn(&'compiler mut Compiler<'opt, 'source, 'vm>, ParseFnCtx),
+type ParseFn<'source, I> = Option<
+    for<'compiler, 'opt, 'vm> fn(&'compiler mut Compiler<'opt, 'source, 'vm, I>, ParseFnCtx),
 >;
 
-struct Rule {
-    prefix: ParseFn,
-    infix: ParseFn,
+struct Rule<'source, I: Iterator<Item = Token<'source>>> {
+    prefix: ParseFn<'source, I>,
+    infix: ParseFn<'source, I>,
     precedence: Precedence,
 }
 
-impl Rule {
-    fn new(prefix: ParseFn, infix: ParseFn, precedence: Precedence) -> Self {
+impl<'source, I: Iterator<Item = Token<'source>>> Rule<'source, I> {
+    fn new(
+        prefix: ParseFn<'source, I>,
+        infix: ParseFn<'source, I>,
+        precedence: Precedence,
+    ) -> Self {
         Self {
             prefix,
             infix,

@@ -841,7 +841,7 @@ impl<'opt> VM<'opt> {
     }
 
     pub fn interpret(&mut self, source: &str) -> Result<(), InterpretResult> {
-        match Compiler::new(self.opt, source, self).compile() {
+        match Compiler::new(self.opt, crate::scanner::Scanner::new(source), self).compile() {
             Some(function) => {
                 let function = self.new_function(function);
                 self.stack.push(Value::ObjReference(function));
