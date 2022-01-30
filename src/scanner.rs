@@ -56,7 +56,7 @@ impl<'source> Scanner<'source> {
         }
     }
 
-    fn error_token<'s: 'source>(&self, message: &'s str) -> ScanError<'s> {
+    fn error(&self, message: &'static str) -> ScanError {
         ScanError {
             message,
             line: self.line,
@@ -110,7 +110,7 @@ impl<'source> Scanner<'source> {
         self.make_token(TokenType::Number)
     }
 
-    fn string(&mut self) -> Result<Token<'source>, ScanError<'source>> {
+    fn string(&mut self) -> Result<Token<'source>, ScanError> {
         while !self.is_at_end() && self.peek() != '"' {
             if self.peek() == '\n' {
                 self.line += 1;
@@ -119,7 +119,7 @@ impl<'source> Scanner<'source> {
         }
 
         if self.is_at_end() {
-            return Err(self.error_token("Unterminated string."));
+            return Err(self.error("Unterminated string."));
         }
 
         self.advance();
@@ -151,7 +151,7 @@ impl<'source> Scanner<'source> {
 }
 
 impl<'source> Iterator for Scanner<'source> {
-    type Item = Result<Token<'source>, ScanError<'source>>;
+    type Item = Result<Token<'source>, ScanError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         use TokenType::*;
@@ -199,7 +199,7 @@ impl<'source> Iterator for Scanner<'source> {
                 Ok(self.make_token(t))
             }
             '"' => self.string(),
-            _ => Err(self.error_token("Unexpected character.")),
+            _ => Err(self.error("Unexpected character.")),
         })
     }
 }
@@ -276,7 +276,7 @@ pub(crate) enum TokenType {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct ScanError<'a> {
-    pub(crate) message: &'a str,
+pub(crate) struct ScanError {
+    pub(crate) message: &'static str,
     pub(crate) line: usize,
 }

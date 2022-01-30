@@ -8,8 +8,7 @@ use crate::value::Value;
 use crate::vm::VM;
 use crate::Opt;
 
-struct Compiler<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError<'source>>>>
-{
+struct Compiler<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>> {
     opt: &'opt Opt,
     scanner: Peekable<I>,
     current_token: Token<'source>,
@@ -70,12 +69,7 @@ impl ClassState {
     }
 }
 
-pub(crate) fn compile<
-    'opt,
-    'source,
-    'vm,
-    I: Iterator<Item = Result<Token<'source>, ScanError<'source>>>,
->(
+pub(crate) fn compile<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>(
     opt: &'opt Opt,
     scanner: I,
     vm: &'vm mut VM<'opt>,
@@ -83,7 +77,7 @@ pub(crate) fn compile<
     Compiler::new(opt, scanner, vm).compile()
 }
 
-impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError<'source>>>>
+impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     Compiler<'opt, 'source, 'vm, I>
 {
     fn new(opt: &'opt Opt, scanner: I, vm: &'vm mut VM<'opt>) -> Self {
@@ -939,7 +933,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError<'so
     }
 }
 
-fn get_rule<'source, I: Iterator<Item = Result<Token<'source>, ScanError<'source>>>>(
+fn get_rule<'source, I: Iterator<Item = Result<Token<'source>, ScanError>>>(
     ty: TokenType,
 ) -> Rule<'source, I> {
     match ty {
@@ -1026,13 +1020,13 @@ type ParseFn<'source, I> = Option<
     for<'compiler, 'opt, 'vm> fn(&'compiler mut Compiler<'opt, 'source, 'vm, I>, ParseFnCtx),
 >;
 
-struct Rule<'source, I: Iterator<Item = Result<Token<'source>, ScanError<'source>>>> {
+struct Rule<'source, I: Iterator<Item = Result<Token<'source>, ScanError>>> {
     prefix: ParseFn<'source, I>,
     infix: ParseFn<'source, I>,
     precedence: Precedence,
 }
 
-impl<'source, I: Iterator<Item = Result<Token<'source>, ScanError<'source>>>> Rule<'source, I> {
+impl<'source, I: Iterator<Item = Result<Token<'source>, ScanError>>> Rule<'source, I> {
     fn new(
         prefix: ParseFn<'source, I>,
         infix: ParseFn<'source, I>,
