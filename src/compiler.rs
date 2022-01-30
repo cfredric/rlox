@@ -101,6 +101,8 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         *self.scanner.peek().unwrap()
     }
 
+    /// Sets the current token to the next valid token from the scanner. If the
+    /// scanner emits an error, enters panic mode and emits that error.
     fn advance(&mut self) -> Token<'source> {
         self.current_token = self.next_token();
         if self.current_token.ty == TokenType::Error {
@@ -117,6 +119,9 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         }
     }
 
+    /// Consumes a token with the given type, setting that token as the current
+    /// token. If the next token does not have the expected type, enters panic
+    /// mode.
     fn consume<'s: 'source>(&mut self, ty: TokenType, message: &'s str) {
         if self.next_token().ty == ty {
             self.advance();
@@ -126,6 +131,9 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         self.error_at_next(message);
     }
 
+    /// Potentially consumes a token with the given type, setting that token as
+    /// the current token. If the next token does not have the expected type,
+    /// does nothing.
     fn maybe_consume(&mut self, ty: TokenType) -> bool {
         if !self.next_token_is(ty) {
             return false;
