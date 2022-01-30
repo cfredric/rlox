@@ -1,5 +1,7 @@
 mod scanner;
 
+use std::iter::Peekable;
+
 use crate::chunk::{Chunk, ConstantIndex, OpCode};
 use crate::obj::{Function, UpValueIndex};
 use crate::stack::StackSlotOffset;
@@ -10,8 +12,8 @@ use scanner::{Token, TokenType};
 
 pub(crate) struct Compiler<'opt, 'source, 'vm> {
     opt: &'opt Opt,
-    scanner: scanner::Scanner<'source>,
-    next: Token<'source>,
+    scanner: Peekable<scanner::Scanner<'source>>,
+    next_: Token<'source>,
     current: Token<'source>,
     had_error: bool,
     panic_mode: bool,
@@ -74,8 +76,8 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     pub fn new(opt: &'opt Opt, source: &'source str, vm: &'vm mut VM<'opt>) -> Self {
         Self {
             opt,
-            scanner: scanner::Scanner::new(source),
-            next: Token::default(),
+            scanner: scanner::Scanner::new(source).peekable(),
+            next_: Token::default(),
             current: Token::default(),
             had_error: false,
             panic_mode: false,
@@ -99,25 +101,31 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             .filter(|_| !self.had_error)
     }
 
+    fn next(&mut self) -> Token<'source> {
+        // *self.scanner.peek().unwrap()
+        self.next_
+    }
+
     fn advance(&mut self) -> Token<'source> {
-        self.current = self.next;
+        self.current = self.next();
         loop {
-            self.next = self.scanner.next().unwrap();
-            if self.next.ty != TokenType::Error {
-                return self.next;
+            self.next_ = self.scanner.next().unwrap();
+            if self.next().ty != TokenType::Error {
+                return self.next();
             }
 
-            self.error_at_current(self.next.lexeme);
+            let next = self.next();
+            self.error_at_next(next.lexeme);
         }
     }
 
     fn consume<'s: 'source>(&mut self, ty: TokenType, message: &'s str) {
-        if self.next.ty == ty {
+        if self.next().ty == ty {
             self.advance();
             return;
         }
 
-        self.error_at_current(message);
+        self.error_at_next(message);
     }
 
     fn matches(&mut self, ty: TokenType) -> bool {
@@ -128,8 +136,8 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
         true
     }
 
-    fn check(&self, ty: TokenType) -> bool {
-        self.next.ty == ty
+    fn check(&mut self, ty: TokenType) -> bool {
+        self.next().ty == ty
     }
 
     fn emit_opcodes(&mut self, a: OpCode, b: OpCode) {
@@ -187,12 +195,12 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
     fn synchronize(&mut self) {
         self.panic_mode = false;
 
-        while self.next.ty != TokenType::Eof {
+        while self.next().ty != TokenType::Eof {
             if self.current.ty == TokenType::Semicolon {
                 return;
             }
             use TokenType::*;
-            match self.next.ty {
+            match self.next().ty {
                 Class | Fun | Var | For | If | While | Print | Return => {
                     return;
                 }
@@ -427,7 +435,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             loop {
                 self.current_mut().function.arity += 1;
                 if self.current().function.arity > 255 {
-                    self.error_at_current("Can't have more than 255 parameters.");
+                    self.error_at_next("Can't have more than 255 parameters.");
                 }
                 let constant = self.parse_variable("Expect parameter name.");
                 self.define_variable(constant);
@@ -606,7 +614,7 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             }
         }
 
-        while prec <= get_rule(self.next.ty).precedence {
+        while prec <= get_rule(self.next().ty).precedence {
             self.advance();
             let infix = get_rule(self.current.ty).infix;
             infix.unwrap()(self, ParseFnCtx { can_assign });
@@ -871,8 +879,8 @@ impl<'opt, 'source, 'vm> Compiler<'opt, 'source, 'vm> {
             .expect("function stack should not be empty")
     }
 
-    fn error_at_current(&mut self, message: &str) {
-        let next = self.next;
+    fn error_at_next(&mut self, message: &str) {
+        let next = self.next();
         self.error_at(&next, message);
     }
     fn error(&mut self, message: &str) {
