@@ -92,7 +92,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         Self {
             opt,
             scanner: scanner.peekable(),
-            current_token: Token::eof(),
+            current_token: Token::eof(0),
             had_error: false,
             panic_mode: false,
             vm,
@@ -924,16 +924,13 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
             return;
         }
         self.panic_mode = true;
-        let location = match token {
-            Some(Token {
-                ty: TokenType::Eof, ..
-            }) => " at end".to_string(),
-            Some(token) => format!(" at '{}'", token.lexeme),
-            None => "".to_string(),
-        };
-        eprintln!("[line {}] Error{}: {}", line, location, message);
-
         self.had_error = true;
+        eprintln!(
+            "[line {}] Error{}: {}",
+            line,
+            token.map_or_else(|| "".to_string(), |t| t.location()),
+            message
+        );
     }
 
     fn expression(&mut self) {

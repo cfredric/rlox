@@ -160,7 +160,7 @@ impl<'source> Iterator for Scanner<'source> {
         let next_char = match self.peek() {
             Some(c) => c,
             None => {
-                return Some(Ok(self.make_token(Eof)));
+                return Some(Ok(Token::eof(self.line)));
             }
         };
         self.current += 1;
@@ -232,11 +232,18 @@ impl<'source> Token<'source> {
             line: 0,
         }
     }
-    pub(crate) fn eof() -> Self {
+    pub(crate) fn eof(line: usize) -> Self {
         Self {
             ty: TokenType::Eof,
             lexeme: "",
-            line: 0,
+            line,
+        }
+    }
+
+    pub(crate) fn location(&self) -> String {
+        match self.ty {
+            TokenType::Eof => " at end".to_string(),
+            _ => format!(" at '{}'", self.lexeme),
         }
     }
 }
