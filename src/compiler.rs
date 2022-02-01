@@ -1,3 +1,4 @@
+use const_format::formatcp;
 use std::iter::Peekable;
 
 use crate::chunk::{Chunk, ConstantIndex, OpCode};
@@ -15,6 +16,9 @@ const MAX_ARITY: usize = 255;
 const MAX_LOCALS: usize = 256;
 const MAX_UPVALUES: usize = 256;
 const MAX_JUMP_SIZE: usize = 2_usize.pow(16) - 1;
+
+const ARGS_ERROR_STR: &str = formatcp!("Can't have more than {} arguments.", MAX_ARITY);
+const PARAMS_ERROR_STR: &str = formatcp!("Can't have more than {} parameters.", MAX_ARITY);
 
 struct Compiler<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>> {
     opt: &'opt Opt,
@@ -470,7 +474,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
             loop {
                 self.current_function_mut().function.arity += 1;
                 if self.current_function().function.arity > MAX_ARITY {
-                    self.error_at_next("Can't have more than 255 parameters.");
+                    self.error_at_next(PARAMS_ERROR_STR);
                 }
                 let constant = self.parse_variable("Expect parameter name.");
                 self.define_variable(constant);
@@ -691,7 +695,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
                 self.expression();
                 arg_count += 1;
                 if arg_count > MAX_ARITY {
-                    self.error("Can't have more than 255 arguments.");
+                    self.error(ARGS_ERROR_STR);
                 }
 
                 if !self.maybe_consume(TokenType::Comma) {

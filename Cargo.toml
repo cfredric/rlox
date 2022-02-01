@@ -6,6 +6,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+const_format = "0.2.22"
 enum-as-inner = "0.3.3"
 itertools = "0.10.3"
 libc = "0.2.109"
