@@ -145,6 +145,15 @@ impl<'source> Scanner<'source> {
             _ => Identifier,
         }
     }
+
+    fn compound_equal_token(&mut self, with: TokenType, without: TokenType) -> Token<'source> {
+        let t = if self.maybe_consume('=') {
+            with
+        } else {
+            without
+        };
+        self.make_token(t)
+    }
 }
 
 impl<'source> Iterator for Scanner<'source> {
@@ -179,38 +188,10 @@ impl<'source> Iterator for Scanner<'source> {
             '+' => Ok(self.make_token(Plus)),
             '/' => Ok(self.make_token(Slash)),
             '*' => Ok(self.make_token(Star)),
-            '!' => {
-                let t = if self.maybe_consume('=') {
-                    BangEqual
-                } else {
-                    Bang
-                };
-                Ok(self.make_token(t))
-            }
-            '=' => {
-                let t = if self.maybe_consume('=') {
-                    EqualEqual
-                } else {
-                    Equal
-                };
-                Ok(self.make_token(t))
-            }
-            '<' => {
-                let t = if self.maybe_consume('=') {
-                    LessEqual
-                } else {
-                    Less
-                };
-                Ok(self.make_token(t))
-            }
-            '>' => {
-                let t = if self.maybe_consume('=') {
-                    GreaterEqual
-                } else {
-                    Greater
-                };
-                Ok(self.make_token(t))
-            }
+            '!' => Ok(self.compound_equal_token(BangEqual, Bang)),
+            '=' => Ok(self.compound_equal_token(EqualEqual, Equal)),
+            '<' => Ok(self.compound_equal_token(LessEqual, Less)),
+            '>' => Ok(self.compound_equal_token(GreaterEqual, Greater)),
             '"' => self.string(),
             _ => Err(self.error("Unexpected character.")),
         })
