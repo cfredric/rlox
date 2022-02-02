@@ -592,7 +592,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     fn binary(&mut self) {
         let ty = self.current_token.ty;
         let rule = get_rule::<'source, I>(ty);
-        self.parse_precedence(rule.precedence.plus_one());
+        self.parse_precedence(rule.precedence.unwrap().plus_one());
 
         match ty {
             TokenType::BangEqual => self.emit_opcodes(OpCode::Equal, OpCode::Not),
@@ -653,7 +653,10 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
             }
         }
 
-        while prec <= get_rule::<'source, I>(self.next_token().ty).precedence {
+        while get_rule::<'source, I>(self.next_token().ty)
+            .precedence
+            .map_or(false, |p| prec <= p)
+        {
             self.advance();
             let infix = get_rule::<'source, I>(self.current_token.ty).infix;
             infix.unwrap()(self, ParseFnCtx { can_assign });
@@ -949,47 +952,64 @@ fn get_rule<'source, I: Iterator<Item = Result<Token<'source>, ScanError>>>(
         TokenType::LeftParen => Rule::new(
             Some(|c, _ctx| c.grouping()),
             Some(|c, _ctx| c.call()),
-            Precedence::Call,
+            Some(Precedence::Call),
         ),
-        TokenType::Dot => Rule::new(None, Some(|c, ctx| c.dot(ctx.can_assign)), Precedence::Call),
+        TokenType::Dot => Rule::new(
+            None,
+            Some(|c, ctx| c.dot(ctx.can_assign)),
+            Some(Precedence::Call),
+        ),
         TokenType::Minus => Rule::new(
             Some(|c, _ctx| c.unary()),
             Some(|c, _ctx| c.binary()),
-            Precedence::Term,
+            Some(Precedence::Term),
         ),
-        TokenType::Plus => Rule::new(None, Some(|c, _ctx| c.binary()), Precedence::Term),
-        TokenType::Slash => Rule::new(None, Some(|c, _ctx| c.binary()), Precedence::Factor),
-        TokenType::Star => Rule::new(None, Some(|c, _ctx| c.binary()), Precedence::Factor),
-        TokenType::Bang => Rule::new(Some(|c, _ctx| c.unary()), None, Precedence::None),
-        TokenType::BangEqual => Rule::new(None, Some(|c, _ctx| c.binary()), Precedence::Equality),
-        TokenType::EqualEqual => Rule::new(None, Some(|c, _ctx| c.binary()), Precedence::Equality),
-        TokenType::Greater => Rule::new(None, Some(|c, _ctx| c.binary()), Precedence::Comparison),
-        TokenType::GreaterEqual => {
-            Rule::new(None, Some(|c, _ctx| c.binary()), Precedence::Comparison)
+        TokenType::Plus => Rule::new(None, Some(|c, _ctx| c.binary()), Some(Precedence::Term)),
+        TokenType::Slash => Rule::new(None, Some(|c, _ctx| c.binary()), Some(Precedence::Factor)),
+        TokenType::Star => Rule::new(None, Some(|c, _ctx| c.binary()), Some(Precedence::Factor)),
+        TokenType::Bang => Rule::new(Some(|c, _ctx| c.unary()), None, None),
+        TokenType::BangEqual => {
+            Rule::new(None, Some(|c, _ctx| c.binary()), Some(Precedence::Equality))
         }
-        TokenType::Less => Rule::new(None, Some(|c, _ctx| c.binary()), Precedence::Comparison),
-        TokenType::LessEqual => Rule::new(None, Some(|c, _ctx| c.binary()), Precedence::Comparison),
-        TokenType::Identifier => Rule::new(
-            Some(|c, ctx| c.variable(ctx.can_assign)),
+        TokenType::EqualEqual => {
+            Rule::new(None, Some(|c, _ctx| c.binary()), Some(Precedence::Equality))
+        }
+        TokenType::Greater => Rule::new(
             None,
-            Precedence::None,
+            Some(|c, _ctx| c.binary()),
+            Some(Precedence::Comparison),
         ),
-        TokenType::String => Rule::new(Some(|c, _ctx| c.string()), None, Precedence::None),
-        TokenType::Number => Rule::new(Some(|c, _ctx| c.number()), None, Precedence::None),
-        TokenType::And => Rule::new(None, Some(|c, _ctx| c.and()), Precedence::And),
-        TokenType::False => Rule::new(Some(|c, _ctx| c.literal()), None, Precedence::None),
-        TokenType::Nil => Rule::new(Some(|c, _ctx| c.literal()), None, Precedence::None),
-        TokenType::Or => Rule::new(None, Some(|c, _ctx| c.or()), Precedence::Or),
-        TokenType::Super => Rule::new(Some(|c, _ctx| c.super_()), None, Precedence::None),
-        TokenType::This => Rule::new(Some(|c, _ctx| c.this()), None, Precedence::None),
-        TokenType::True => Rule::new(Some(|c, _ctx| c.literal()), None, Precedence::None),
-        _ => Rule::new(None, None, Precedence::None),
+        TokenType::GreaterEqual => Rule::new(
+            None,
+            Some(|c, _ctx| c.binary()),
+            Some(Precedence::Comparison),
+        ),
+        TokenType::Less => Rule::new(
+            None,
+            Some(|c, _ctx| c.binary()),
+            Some(Precedence::Comparison),
+        ),
+        TokenType::LessEqual => Rule::new(
+            None,
+            Some(|c, _ctx| c.binary()),
+            Some(Precedence::Comparison),
+        ),
+        TokenType::Identifier => Rule::new(Some(|c, ctx| c.variable(ctx.can_assign)), None, None),
+        TokenType::String => Rule::new(Some(|c, _ctx| c.string()), None, None),
+        TokenType::Number => Rule::new(Some(|c, _ctx| c.number()), None, None),
+        TokenType::And => Rule::new(None, Some(|c, _ctx| c.and()), Some(Precedence::And)),
+        TokenType::False => Rule::new(Some(|c, _ctx| c.literal()), None, None),
+        TokenType::Nil => Rule::new(Some(|c, _ctx| c.literal()), None, None),
+        TokenType::Or => Rule::new(None, Some(|c, _ctx| c.or()), Some(Precedence::Or)),
+        TokenType::Super => Rule::new(Some(|c, _ctx| c.super_()), None, None),
+        TokenType::This => Rule::new(Some(|c, _ctx| c.this()), None, None),
+        TokenType::True => Rule::new(Some(|c, _ctx| c.literal()), None, None),
+        _ => Rule::new(None, None, None),
     }
 }
 
 #[derive(PartialOrd, Ord, Eq, PartialEq)]
 enum Precedence {
-    None,
     Assignment,
     Or,
     And,
@@ -1006,7 +1026,6 @@ impl Precedence {
     fn plus_one(&self) -> Self {
         use Precedence::*;
         match self {
-            None => Assignment,
             Assignment => Or,
             Or => And,
             And => Equality,
@@ -1032,14 +1051,14 @@ type ParseFn<'source, I> = Option<
 struct Rule<'source, I: Iterator<Item = Result<Token<'source>, ScanError>>> {
     prefix: ParseFn<'source, I>,
     infix: ParseFn<'source, I>,
-    precedence: Precedence,
+    precedence: Option<Precedence>,
 }
 
 impl<'source, I: Iterator<Item = Result<Token<'source>, ScanError>>> Rule<'source, I> {
     fn new(
         prefix: ParseFn<'source, I>,
         infix: ParseFn<'source, I>,
-        precedence: Precedence,
+        precedence: Option<Precedence>,
     ) -> Self {
         Self {
             prefix,
