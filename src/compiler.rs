@@ -1044,20 +1044,19 @@ struct ParseFnCtx {
     can_assign: bool,
 }
 
-type ParseFn<'source, I> = Option<
-    for<'compiler, 'opt, 'vm> fn(&'compiler mut Compiler<'opt, 'source, 'vm, I>, ParseFnCtx),
->;
+type ParseFn<'source, I> =
+    for<'compiler, 'opt, 'vm> fn(&'compiler mut Compiler<'opt, 'source, 'vm, I>, ParseFnCtx);
 
 struct Rule<'source, I: Iterator<Item = Result<Token<'source>, ScanError>>> {
-    prefix: ParseFn<'source, I>,
-    infix: ParseFn<'source, I>,
+    prefix: Option<ParseFn<'source, I>>,
+    infix: Option<ParseFn<'source, I>>,
     precedence: Option<Precedence>,
 }
 
 impl<'source, I: Iterator<Item = Result<Token<'source>, ScanError>>> Rule<'source, I> {
     fn new(
-        prefix: ParseFn<'source, I>,
-        infix: ParseFn<'source, I>,
+        prefix: Option<ParseFn<'source, I>>,
+        infix: Option<ParseFn<'source, I>>,
         precedence: Option<Precedence>,
     ) -> Self {
         Self {
