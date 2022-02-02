@@ -592,7 +592,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     fn binary(&mut self) {
         let ty = self.current_token.ty;
         let rule = get_rule::<'source, I>(ty);
-        self.parse_precedence(rule.precedence.unwrap().plus_one());
+        self.parse_precedence(rule.infix.unwrap().precedence.plus_one());
 
         match ty {
             TokenType::BangEqual => self.emit_opcodes(OpCode::Equal, OpCode::Not),
@@ -654,12 +654,12 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         }
 
         while get_rule::<'source, I>(self.next_token().ty)
-            .precedence
-            .map_or(false, |p| prec <= p)
+            .infix
+            .map_or(false, |i| prec <= i.precedence)
         {
             self.advance();
             let infix = get_rule::<'source, I>(self.current_token.ty).infix;
-            infix.unwrap()(self, ParseFnCtx { can_assign });
+            (infix.unwrap().parse)(self, ParseFnCtx { can_assign });
         }
 
         if can_assign && self.maybe_consume(TokenType::Equal) {
@@ -951,60 +951,70 @@ fn get_rule<'source, I: Iterator<Item = Result<Token<'source>, ScanError>>>(
     match ty {
         TokenType::LeftParen => Rule::new(
             Some(|c, _ctx| c.grouping()),
-            Some(|c, _ctx| c.call()),
-            Some(Precedence::Call),
+            Some(InfixRule::new(|c, _ctx| c.call(), Precedence::Call)),
         ),
         TokenType::Dot => Rule::new(
             None,
-            Some(|c, ctx| c.dot(ctx.can_assign)),
-            Some(Precedence::Call),
+            Some(InfixRule::new(
+                |c, ctx| c.dot(ctx.can_assign),
+                Precedence::Call,
+            )),
         ),
         TokenType::Minus => Rule::new(
             Some(|c, _ctx| c.unary()),
-            Some(|c, _ctx| c.binary()),
-            Some(Precedence::Term),
+            Some(InfixRule::new(|c, _ctx| c.binary(), Precedence::Term)),
         ),
-        TokenType::Plus => Rule::new(None, Some(|c, _ctx| c.binary()), Some(Precedence::Term)),
-        TokenType::Slash => Rule::new(None, Some(|c, _ctx| c.binary()), Some(Precedence::Factor)),
-        TokenType::Star => Rule::new(None, Some(|c, _ctx| c.binary()), Some(Precedence::Factor)),
-        TokenType::Bang => Rule::new(Some(|c, _ctx| c.unary()), None, None),
-        TokenType::BangEqual => {
-            Rule::new(None, Some(|c, _ctx| c.binary()), Some(Precedence::Equality))
-        }
-        TokenType::EqualEqual => {
-            Rule::new(None, Some(|c, _ctx| c.binary()), Some(Precedence::Equality))
-        }
+        TokenType::Plus => Rule::new(
+            None,
+            Some(InfixRule::new(|c, _ctx| c.binary(), Precedence::Term)),
+        ),
+        TokenType::Slash => Rule::new(
+            None,
+            Some(InfixRule::new(|c, _ctx| c.binary(), Precedence::Factor)),
+        ),
+        TokenType::Star => Rule::new(
+            None,
+            Some(InfixRule::new(|c, _ctx| c.binary(), Precedence::Factor)),
+        ),
+        TokenType::Bang => Rule::new(Some(|c, _ctx| c.unary()), None),
+        TokenType::BangEqual => Rule::new(
+            None,
+            Some(InfixRule::new(|c, _ctx| c.binary(), Precedence::Equality)),
+        ),
+        TokenType::EqualEqual => Rule::new(
+            None,
+            Some(InfixRule::new(|c, _ctx| c.binary(), Precedence::Equality)),
+        ),
         TokenType::Greater => Rule::new(
             None,
-            Some(|c, _ctx| c.binary()),
-            Some(Precedence::Comparison),
+            Some(InfixRule::new(|c, _ctx| c.binary(), Precedence::Comparison)),
         ),
         TokenType::GreaterEqual => Rule::new(
             None,
-            Some(|c, _ctx| c.binary()),
-            Some(Precedence::Comparison),
+            Some(InfixRule::new(|c, _ctx| c.binary(), Precedence::Comparison)),
         ),
         TokenType::Less => Rule::new(
             None,
-            Some(|c, _ctx| c.binary()),
-            Some(Precedence::Comparison),
+            Some(InfixRule::new(|c, _ctx| c.binary(), Precedence::Comparison)),
         ),
         TokenType::LessEqual => Rule::new(
             None,
-            Some(|c, _ctx| c.binary()),
-            Some(Precedence::Comparison),
+            Some(InfixRule::new(|c, _ctx| c.binary(), Precedence::Comparison)),
         ),
-        TokenType::Identifier => Rule::new(Some(|c, ctx| c.variable(ctx.can_assign)), None, None),
-        TokenType::String => Rule::new(Some(|c, _ctx| c.string()), None, None),
-        TokenType::Number => Rule::new(Some(|c, _ctx| c.number()), None, None),
-        TokenType::And => Rule::new(None, Some(|c, _ctx| c.and()), Some(Precedence::And)),
-        TokenType::False => Rule::new(Some(|c, _ctx| c.literal()), None, None),
-        TokenType::Nil => Rule::new(Some(|c, _ctx| c.literal()), None, None),
-        TokenType::Or => Rule::new(None, Some(|c, _ctx| c.or()), Some(Precedence::Or)),
-        TokenType::Super => Rule::new(Some(|c, _ctx| c.super_()), None, None),
-        TokenType::This => Rule::new(Some(|c, _ctx| c.this()), None, None),
-        TokenType::True => Rule::new(Some(|c, _ctx| c.literal()), None, None),
-        _ => Rule::new(None, None, None),
+        TokenType::Identifier => Rule::new(Some(|c, ctx| c.variable(ctx.can_assign)), None),
+        TokenType::String => Rule::new(Some(|c, _ctx| c.string()), None),
+        TokenType::Number => Rule::new(Some(|c, _ctx| c.number()), None),
+        TokenType::And => Rule::new(
+            None,
+            Some(InfixRule::new(|c, _ctx| c.and(), Precedence::And)),
+        ),
+        TokenType::False => Rule::new(Some(|c, _ctx| c.literal()), None),
+        TokenType::Nil => Rule::new(Some(|c, _ctx| c.literal()), None),
+        TokenType::Or => Rule::new(None, Some(InfixRule::new(|c, _ctx| c.or(), Precedence::Or))),
+        TokenType::Super => Rule::new(Some(|c, _ctx| c.super_()), None),
+        TokenType::This => Rule::new(Some(|c, _ctx| c.this()), None),
+        TokenType::True => Rule::new(Some(|c, _ctx| c.literal()), None),
+        _ => Rule::new(None, None),
     }
 }
 
@@ -1047,23 +1057,25 @@ struct ParseFnCtx {
 type ParseFn<'source, I> =
     for<'compiler, 'opt, 'vm> fn(&'compiler mut Compiler<'opt, 'source, 'vm, I>, ParseFnCtx);
 
+struct InfixRule<'source, I: Iterator<Item = Result<Token<'source>, ScanError>>> {
+    parse: ParseFn<'source, I>,
+    precedence: Precedence,
+}
+
+impl<'source, I: Iterator<Item = Result<Token<'source>, ScanError>>> InfixRule<'source, I> {
+    fn new(parse: ParseFn<'source, I>, precedence: Precedence) -> Self {
+        Self { parse, precedence }
+    }
+}
+
 struct Rule<'source, I: Iterator<Item = Result<Token<'source>, ScanError>>> {
     prefix: Option<ParseFn<'source, I>>,
-    infix: Option<ParseFn<'source, I>>,
-    precedence: Option<Precedence>,
+    infix: Option<InfixRule<'source, I>>,
 }
 
 impl<'source, I: Iterator<Item = Result<Token<'source>, ScanError>>> Rule<'source, I> {
-    fn new(
-        prefix: Option<ParseFn<'source, I>>,
-        infix: Option<ParseFn<'source, I>>,
-        precedence: Option<Precedence>,
-    ) -> Self {
-        Self {
-            prefix,
-            infix,
-            precedence,
-        }
+    fn new(prefix: Option<ParseFn<'source, I>>, infix: Option<InfixRule<'source, I>>) -> Self {
+        Self { prefix, infix }
     }
 }
 
