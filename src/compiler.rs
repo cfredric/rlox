@@ -652,13 +652,12 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
             }
         }
 
-        while get_rule::<'source, I>(self.next_token().ty)
-            .infix
-            .map_or(false, |i| prec <= i.precedence)
-        {
+        while let Some(infix) = get_rule::<'source, I>(self.next_token().ty).infix {
+            if infix.precedence < prec {
+                break;
+            }
             self.advance();
-            let infix = get_rule::<'source, I>(self.current_token.ty).infix;
-            (infix.unwrap().parse)(self, ParseFnCtx { can_assign });
+            (infix.parse)(self, ParseFnCtx { can_assign });
         }
 
         if can_assign && self.maybe_consume(TokenType::Equal) {
