@@ -589,10 +589,9 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         }
     }
 
-    fn binary(&mut self) {
+    fn binary(&mut self, precedence: Precedence) {
         let ty = self.current_token.ty;
-        let rule = get_rule::<'source, I>(ty);
-        self.parse_precedence(rule.infix.unwrap().precedence.plus_one());
+        self.parse_precedence(precedence.plus_one());
 
         match ty {
             TokenType::BangEqual => self.emit_opcodes(OpCode::Equal, OpCode::Not),
@@ -962,44 +961,74 @@ fn get_rule<'source, I: Iterator<Item = Result<Token<'source>, ScanError>>>(
         ),
         TokenType::Minus => Rule::new(
             Some(|c, _ctx| c.unary()),
-            Some(InfixRule::new(|c, _ctx| c.binary(), Precedence::Term)),
+            Some(InfixRule::new(
+                |c, _ctx| c.binary(Precedence::Term),
+                Precedence::Term,
+            )),
         ),
         TokenType::Plus => Rule::new(
             None,
-            Some(InfixRule::new(|c, _ctx| c.binary(), Precedence::Term)),
+            Some(InfixRule::new(
+                |c, _ctx| c.binary(Precedence::Term),
+                Precedence::Term,
+            )),
         ),
         TokenType::Slash => Rule::new(
             None,
-            Some(InfixRule::new(|c, _ctx| c.binary(), Precedence::Factor)),
+            Some(InfixRule::new(
+                |c, _ctx| c.binary(Precedence::Factor),
+                Precedence::Factor,
+            )),
         ),
         TokenType::Star => Rule::new(
             None,
-            Some(InfixRule::new(|c, _ctx| c.binary(), Precedence::Factor)),
+            Some(InfixRule::new(
+                |c, _ctx| c.binary(Precedence::Factor),
+                Precedence::Factor,
+            )),
         ),
         TokenType::Bang => Rule::new(Some(|c, _ctx| c.unary()), None),
         TokenType::BangEqual => Rule::new(
             None,
-            Some(InfixRule::new(|c, _ctx| c.binary(), Precedence::Equality)),
+            Some(InfixRule::new(
+                |c, _ctx| c.binary(Precedence::Equality),
+                Precedence::Equality,
+            )),
         ),
         TokenType::EqualEqual => Rule::new(
             None,
-            Some(InfixRule::new(|c, _ctx| c.binary(), Precedence::Equality)),
+            Some(InfixRule::new(
+                |c, _ctx| c.binary(Precedence::Equality),
+                Precedence::Equality,
+            )),
         ),
         TokenType::Greater => Rule::new(
             None,
-            Some(InfixRule::new(|c, _ctx| c.binary(), Precedence::Comparison)),
+            Some(InfixRule::new(
+                |c, _ctx| c.binary(Precedence::Comparison),
+                Precedence::Comparison,
+            )),
         ),
         TokenType::GreaterEqual => Rule::new(
             None,
-            Some(InfixRule::new(|c, _ctx| c.binary(), Precedence::Comparison)),
+            Some(InfixRule::new(
+                |c, _ctx| c.binary(Precedence::Comparison),
+                Precedence::Comparison,
+            )),
         ),
         TokenType::Less => Rule::new(
             None,
-            Some(InfixRule::new(|c, _ctx| c.binary(), Precedence::Comparison)),
+            Some(InfixRule::new(
+                |c, _ctx| c.binary(Precedence::Comparison),
+                Precedence::Comparison,
+            )),
         ),
         TokenType::LessEqual => Rule::new(
             None,
-            Some(InfixRule::new(|c, _ctx| c.binary(), Precedence::Comparison)),
+            Some(InfixRule::new(
+                |c, _ctx| c.binary(Precedence::Comparison),
+                Precedence::Comparison,
+            )),
         ),
         TokenType::Identifier => Rule::new(Some(|c, ctx| c.variable(ctx.can_assign)), None),
         TokenType::String => Rule::new(Some(|c, _ctx| c.string()), None),
