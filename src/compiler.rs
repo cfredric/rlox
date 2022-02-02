@@ -642,10 +642,10 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
 
     fn parse_precedence(&mut self, prec: Precedence) {
         self.advance();
-        let prefix = get_rule(self.current_token.ty).prefix;
         let can_assign = prec <= Precedence::Assignment;
-        match prefix {
-            Some(f) => f(self, ParseFnCtx { can_assign }),
+        let ctx = ParseFnCtx { can_assign };
+        match get_rule(self.current_token.ty).prefix {
+            Some(f) => f(self, ctx),
             None => {
                 self.error("Expect expression.");
                 return;
@@ -657,7 +657,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
                 break;
             }
             self.advance();
-            (infix.parse)(self, ParseFnCtx { can_assign });
+            (infix.parse)(self, ctx);
         }
 
         if can_assign && self.maybe_consume(TokenType::Equal) {
@@ -1078,6 +1078,7 @@ impl Precedence {
     }
 }
 
+#[derive(Clone, Copy)]
 struct ParseFnCtx {
     can_assign: bool,
 }
