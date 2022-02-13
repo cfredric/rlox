@@ -1132,7 +1132,7 @@ enum FunctionType {
     Script,
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum CompiledUpValue {
     Local { index: StackSlotOffset },
     Nonlocal { index: UpValueIndex },

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{heap::Ptr, rewrite::Rewrite, value::Value};
 
-#[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub(crate) struct Slot(usize);
 
 impl Slot {
@@ -15,7 +15,7 @@ impl Slot {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct StackSlotOffset(pub(crate) usize);
 
 impl StackSlotOffset {

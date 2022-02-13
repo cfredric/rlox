@@ -11,6 +11,7 @@ use crate::{
     value::Value,
 };
 
+#[derive(Debug)]
 pub(crate) struct Header {
     is_marked: bool,
     is_gc_able: bool,
@@ -39,7 +40,7 @@ impl Header {
     }
 }
 
-#[derive(EnumAsInner)]
+#[derive(Debug, EnumAsInner)]
 pub(crate) enum Obj {
     String(LoxString),
     Function(Function),
@@ -128,6 +129,7 @@ impl Rewrite for Obj {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct LoxString {
     pub(crate) header: Header,
     pub(crate) string: String,
@@ -145,6 +147,7 @@ impl Rewrite for LoxString {
     fn rewrite(&mut self, _mapping: &HashMap<Ptr, Ptr>) {}
 }
 
+#[derive(Debug)]
 pub(crate) struct Function {
     header: Header,
     pub(crate) arity: usize,
@@ -185,10 +188,19 @@ impl NativeFn {
     }
 }
 
+impl std::fmt::Debug for NativeFn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NativeFn")
+            .field("header", &self.header)
+            .finish()
+    }
+}
+
 impl Rewrite for NativeFn {
     fn rewrite(&mut self, _mapping: &HashMap<Ptr, Ptr>) {}
 }
 
+#[derive(Debug)]
 pub(crate) struct Closure {
     header: Header,
     pub(crate) function: Ptr,
@@ -213,7 +225,7 @@ impl Closure {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct UpValueIndex(pub(crate) usize);
 
 impl Rewrite for Closure {
@@ -223,6 +235,7 @@ impl Rewrite for Closure {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct Class {
     header: Header,
     name: String,
@@ -246,6 +259,7 @@ impl Rewrite for Class {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct Instance {
     header: Header,
     pub(crate) class: Ptr,
@@ -269,6 +283,7 @@ impl Rewrite for Instance {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct BoundMethod {
     header: Header,
     pub(crate) receiver: Ptr,
@@ -292,6 +307,7 @@ impl Rewrite for BoundMethod {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct Open {
     header: Header,
     /// The stack slot that holds the associated value.
@@ -315,6 +331,7 @@ impl Rewrite for Open {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct Closed {
     header: Header,
     pub(crate) value: Value,

@@ -7,7 +7,7 @@ use crate::{
     value::Value,
 };
 
-#[derive(Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub(crate) struct Ptr(usize);
 
 impl Ptr {
@@ -199,6 +199,10 @@ impl Heap {
             .iter()
             .enumerate()
             .filter_map(|(i, o)| o.as_open_up_value().map(|_| Ptr::new(i)))
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.heap.len()
     }
 }
 

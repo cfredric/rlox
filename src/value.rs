@@ -8,7 +8,7 @@ use crate::{
     rewrite::Rewrite,
 };
 
-#[derive(Copy, Clone, EnumAsInner)]
+#[derive(Copy, Clone, Debug, EnumAsInner)]
 pub(crate) enum Value {
     Nil,
     Bool(bool),

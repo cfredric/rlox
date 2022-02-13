@@ -6,7 +6,7 @@ use crate::rewrite::Rewrite;
 use crate::stack::StackSlotOffset;
 use crate::value::Value;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum OpCode {
     Constant {
         index: ConstantIndex,
@@ -84,7 +84,13 @@ pub(crate) struct Chunk {
     pub(crate) lines: Vec<usize>,
 }
 
-#[derive(Copy, Clone)]
+impl std::fmt::Debug for Chunk {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Chunk").finish()
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
 pub(crate) struct ConstantIndex(usize);
 
 impl ConstantIndex {

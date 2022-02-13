@@ -857,6 +857,8 @@ impl<'opt> VM<'opt> {
             return Ok(());
         }
 
+        debug_assert!(self.heap.len() > 0);
+
         self.is_executing = true;
         let result = self.run();
         self.is_executing = false;
