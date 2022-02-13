@@ -1,4 +1,4 @@
-use std::io::{self, BufRead, Write};
+use std::io::{self, Write};
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -56,23 +56,32 @@ pub fn run_file(opt: &Opt, source: String) -> Result<(), i32> {
 }
 
 pub fn repl(opt: &Opt) -> io::Result<()> {
-    let mut buffer = String::new();
-    let stdin = std::io::stdin();
-    let mut handle = stdin.lock();
-
     let mut vm = vm::VM::new(opt);
 
-    loop {
-        print!("> ");
-        std::io::stdout().flush()?;
-        handle.read_line(&mut buffer)?;
+    let mut rl = rustyline::Editor::<()>::with_config(
+        rustyline::Config::builder()
+            .edit_mode(rustyline::EditMode::Vi)
+            .build(),
+    );
 
-        if buffer.is_empty() {
-            return Ok(());
+    loop {
+        let readline = rl.readline("> ");
+        match readline {
+            Ok(line) => {
+                rl.add_history_entry(&line);
+                let _ = vm.interpret(&line);
+            }
+            Err(rustyline::error::ReadlineError::Eof) => {
+                std::io::stdout().flush()?;
+                break;
+            }
+            Err(rustyline::error::ReadlineError::Interrupted) => {}
+            Err(e) => {
+                dbg!(e);
+            }
         }
-        if buffer != "\n" {
-            let _ = vm.interpret(&buffer);
-        }
-        buffer.clear();
+        std::io::stdout().flush()?;
     }
+
+    Ok(())
 }
