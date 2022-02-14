@@ -3,7 +3,7 @@ use std::iter::Peekable;
 
 use crate::chunk::{Chunk, ConstantIndex, OpCode};
 use crate::obj::{Function, UpValueIndex};
-use crate::scanner::{ScanError, Token, TokenType};
+use crate::scanner::{ScanError, Token, TokenPayload, TokenType};
 use crate::stack::StackSlotOffset;
 use crate::value::Value;
 use crate::vm::{Mode, VM};
@@ -683,9 +683,14 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     fn parse_precedence(&mut self, prec: Precedence) {
         self.advance();
         let can_assign = prec <= Precedence::Assignment;
-        let ctx = ParseFnCtx { can_assign };
         match get_rule(self.current_token.ty).prefix {
-            Some(f) => f(self, ctx),
+            Some(f) => f(
+                self,
+                ParseFnCtx {
+                    can_assign,
+                    payload: self.current_token.ty.payload(),
+                },
+            ),
             None => {
                 self.error("Expect expression.");
                 return;
@@ -697,7 +702,13 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
                 break;
             }
             self.advance();
-            (infix.parse)(self, ctx);
+            (infix.parse)(
+                self,
+                ParseFnCtx {
+                    can_assign,
+                    payload: self.current_token.ty.payload(),
+                },
+            );
         }
 
         if can_assign && self.maybe_consume(TokenType::Equal) {
@@ -1075,20 +1086,24 @@ fn get_rule<'source, I: Iterator<Item = Result<Token<'source>, ScanError>>>(
                 Precedence::Comparison,
             )),
         ),
-        TokenType::Identifier { name } => {
-            let name = name.to_string();
-            Rule::new(
-                Some(Box::new(move |c, ctx| c.variable(&name, ctx.can_assign))),
-                None,
-            )
-        }
-        TokenType::String { string } => {
-            let string = string.to_string();
-            Rule::new(Some(Box::new(move |c, _ctx| c.string(&string))), None)
-        }
-        TokenType::Number { value } => {
-            Rule::new(Some(Box::new(move |c, _ctx| c.number(value))), None)
-        }
+        TokenType::Identifier { .. } => Rule::new(
+            Some(Box::new(move |c, ctx| {
+                c.variable(&ctx.payload.as_string().unwrap(), ctx.can_assign)
+            })),
+            None,
+        ),
+        TokenType::String { .. } => Rule::new(
+            Some(Box::new(move |c, ctx| {
+                c.string(&ctx.payload.as_string().unwrap())
+            })),
+            None,
+        ),
+        TokenType::Number { .. } => Rule::new(
+            Some(Box::new(move |c, ctx| {
+                c.number(*ctx.payload.as_double().unwrap())
+            })),
+            None,
+        ),
         TokenType::And => Rule::new(
             None,
             Some(InfixRule::new(Box::new(|c, _ctx| c.and()), Precedence::And)),
@@ -1139,8 +1154,9 @@ impl Precedence {
 }
 
 #[derive(Clone, Copy)]
-struct ParseFnCtx {
+struct ParseFnCtx<'source> {
     can_assign: bool,
+    payload: TokenPayload<'source>,
 }
 
 type ParseFn<'source, I> =

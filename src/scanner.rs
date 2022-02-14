@@ -1,3 +1,5 @@
+use enum_as_inner::EnumAsInner;
+
 pub(crate) struct Scanner<'source> {
     source: &'source [u8],
     current: usize,
@@ -323,8 +325,26 @@ pub(crate) enum TokenType<'source> {
     Eof,
 }
 
+impl<'a> TokenType<'a> {
+    pub(crate) fn payload(&self) -> TokenPayload<'a> {
+        match self {
+            TokenType::Identifier { name } => TokenPayload::String(name),
+            TokenType::String { string } => TokenPayload::String(string),
+            TokenType::Number { value } => TokenPayload::Double(*value),
+            _ => TokenPayload::Nothing,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct ScanError {
     pub(crate) message: &'static str,
     pub(crate) line: usize,
+}
+
+#[derive(Clone, Copy, EnumAsInner)]
+pub(crate) enum TokenPayload<'source> {
+    String(&'source str),
+    Double(f64),
+    Nothing,
 }
