@@ -298,11 +298,12 @@ impl<'opt> VM<'opt> {
     }
 
     fn invoke(&mut self, name: &str, arg_count: usize) -> Result<(), InterpretResult> {
-        let receiver = *self
-            .stack
-            .peek(arg_count)
-            .as_obj_reference()
-            .expect("receiver stack slot should have been an object reference");
+        let receiver = match self.stack.peek(arg_count).as_obj_reference() {
+            Some(ptr) => *ptr,
+            None => {
+                return self.runtime_error("Method receivers must be objects.");
+            }
+        };
         let (class, field) = match self.heap.deref(receiver).as_instance() {
             Some(i) => (i.class, i.fields.get(name).copied()),
             None => {
