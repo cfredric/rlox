@@ -72,10 +72,12 @@ pub fn repl(opt: &Opt) -> io::Result<()> {
                 let _ = vm.interpret(&line, vm::Mode::Repl);
             }
             Err(rustyline::error::ReadlineError::Eof) => {
-                std::io::stdout().flush()?;
+                println!("^D");
                 break;
             }
-            Err(rustyline::error::ReadlineError::Interrupted) => {}
+            Err(rustyline::error::ReadlineError::Interrupted) => {
+                println!("^C");
+            }
             Err(e) => {
                 dbg!(e);
             }
