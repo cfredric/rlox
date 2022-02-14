@@ -23,3 +23,9 @@ name = "interpreter"
 path = "fuzz_targets/interpreter.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "repl"
+path = "fuzz_targets/repl.rs"
+test = false
+doc = false

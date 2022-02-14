@@ -583,7 +583,11 @@ impl<'opt> VM<'opt> {
                     self.close_upvalues(self.frame().start_slot);
                     let finished_frame = self.frames.pop().expect("frames cannot be empty");
                     if self.frames.is_empty() {
-                        self.stack.pop();
+                        let top = self.stack.pop();
+                        if !self.stack.is_empty() {
+                            println!("{}", top.print(&self.heap));
+                            self.stack.pop();
+                        }
                         if self.opt.trace_execution {
                             self.print_stack_slice("stack", Slot::new(0));
                         }
@@ -841,8 +845,8 @@ impl<'opt> VM<'opt> {
         }
     }
 
-    pub(crate) fn interpret(&mut self, source: &str) -> Result<(), InterpretResult> {
-        match compile(self.opt, crate::scanner::Scanner::new(source), self) {
+    pub(crate) fn interpret(&mut self, source: &str, mode: Mode) -> Result<(), InterpretResult> {
+        match compile(self.opt, crate::scanner::Scanner::new(source), self, mode) {
             Some(function) => {
                 let function = self.new_function(function);
                 self.stack.push(Value::ObjReference(function));
@@ -865,6 +869,12 @@ impl<'opt> VM<'opt> {
         self.is_executing = false;
         result
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Mode {
+    Repl,
+    Script,
 }
 
 struct CallFrame {

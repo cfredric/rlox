@@ -48,7 +48,7 @@ impl Opt {
 
 pub fn run_file(opt: &Opt, source: String) -> Result<(), i32> {
     vm::VM::new(opt)
-        .interpret(&source)
+        .interpret(&source, vm::Mode::Script)
         .map_err(|err| match err {
             vm::InterpretResult::CompileError => 65,
             vm::InterpretResult::RuntimeError => 70,
@@ -69,7 +69,7 @@ pub fn repl(opt: &Opt) -> io::Result<()> {
         match readline {
             Ok(line) => {
                 rl.add_history_entry(&line);
-                let _ = vm.interpret(&line);
+                let _ = vm.interpret(&line, vm::Mode::Repl);
             }
             Err(rustyline::error::ReadlineError::Eof) => {
                 std::io::stdout().flush()?;
@@ -84,4 +84,11 @@ pub fn repl(opt: &Opt) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+// Exposed only for fuzzing the REPL, since the fuzzer can't create a VM
+// directly, and can't easily plumb input through stdin either.
+pub fn run_as_repl(opt: &Opt, line: &str) {
+    let mut vm = vm::VM::new(opt);
+    let _ = vm.interpret(line, vm::Mode::Repl);
 }

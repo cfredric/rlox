@@ -6,7 +6,7 @@ use crate::obj::{Function, UpValueIndex};
 use crate::scanner::{ScanError, Token, TokenType};
 use crate::stack::StackSlotOffset;
 use crate::value::Value;
-use crate::vm::VM;
+use crate::vm::{Mode, VM};
 use crate::Opt;
 
 const MAX_NESTED_CLASSES: usize = 10;
@@ -28,6 +28,7 @@ struct Compiler<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, Sc
     panic_mode: bool,
 
     vm: &'vm mut VM<'opt>,
+    mode: Mode,
 
     functions: Vec<FunctionState<'source>>,
     class_compilers: Vec<ClassState>,
@@ -85,14 +86,15 @@ pub(crate) fn compile<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'sourc
     opt: &'opt Opt,
     scanner: I,
     vm: &'vm mut VM<'opt>,
+    mode: Mode,
 ) -> Option<Function> {
-    Compiler::new(opt, scanner, vm).compile()
+    Compiler::new(opt, scanner, vm, mode).compile()
 }
 
 impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     Compiler<'opt, 'source, 'vm, I>
 {
-    fn new(opt: &'opt Opt, scanner: I, vm: &'vm mut VM<'opt>) -> Self {
+    fn new(opt: &'opt Opt, scanner: I, vm: &'vm mut VM<'opt>, mode: Mode) -> Self {
         Self {
             opt,
             scanner: scanner.peekable(),
@@ -100,6 +102,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
             had_error: false,
             panic_mode: false,
             vm,
+            mode,
             functions: vec![FunctionState::with_name(FunctionType::Script, "script")],
             class_compilers: Vec::new(),
             block_depth: 0,
@@ -559,8 +562,34 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
 
     fn expression_statement(&mut self) {
         self.expression();
-        self.consume(TokenType::Semicolon, "Expect ';' after expression.");
-        self.emit_opcode(OpCode::Pop);
+        let consumed_semicolon = match self.mode {
+            Mode::Repl => {
+                if self.current_function().function_type == FunctionType::Script {
+                    if self.maybe_consume(TokenType::Semicolon) {
+                        true
+                    } else if self.next_token().ty == TokenType::Eof {
+                        // If we're at the EOF, it's ok to omit the last
+                        // semicolon from the last expression. The VM should
+                        // find that value on the stack and print it.
+                        false
+                    } else {
+                        // If we're not at EOF, then semicolons are still required.
+                        self.error("Expect ';' after expression.");
+                        false // Doesn't matter due to panic mode, but we can still be correct.
+                    }
+                } else {
+                    self.consume(TokenType::Semicolon, "Expect ';' after expression.");
+                    true
+                }
+            }
+            Mode::Script => {
+                self.consume(TokenType::Semicolon, "Expect ';' after expression.");
+                true
+            }
+        };
+        if consumed_semicolon {
+            self.emit_opcode(OpCode::Pop);
+        }
     }
 
     fn grouping(&mut self) {
