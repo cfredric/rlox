@@ -102,7 +102,7 @@ impl<'source> Scanner<'source> {
             }
         }
         self.make_token(TokenType::Number {
-            value: self.current_token().parse::<f64>().unwrap(),
+            value: self.current_token().parse().unwrap(),
         })
     }
 
