@@ -102,11 +102,12 @@ impl<'source> Scanner<'source> {
             }
         }
         self.make_token(TokenType::Number {
-            value: std::str::from_utf8(&self.source[0..self.current])
-                .unwrap()
-                .parse::<f64>()
-                .unwrap(),
+            value: self.current_token().parse::<f64>().unwrap(),
         })
+    }
+
+    fn current_token(&self) -> &'source str {
+        std::str::from_utf8(&self.source[0..self.current]).unwrap()
     }
 
     fn string(&mut self) -> Result<Token<'source>, ScanError> {
@@ -115,7 +116,7 @@ impl<'source> Scanner<'source> {
                 Some('"') => {
                     self.current += 1;
                     return Ok(self.make_token(TokenType::String {
-                        string: std::str::from_utf8(&self.source[0..self.current]).unwrap(),
+                        string: self.current_token(),
                     }));
                 }
                 Some(c) => {
@@ -133,9 +134,7 @@ impl<'source> Scanner<'source> {
 
     fn identifier_type(&self) -> TokenType<'source> {
         use TokenType::*;
-        match std::str::from_utf8(&self.source[0..self.current])
-            .expect("guaranteed ASCII by is_alphanumeric")
-        {
+        match self.current_token() {
             "and" => And,
             "class" => Class,
             "else" => Else,
