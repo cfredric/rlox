@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use crate::{
     obj::{Class, Closure, Function, Instance, LoxString, Obj, Open},
-    print::Print,
     rewrite::Rewrite,
+    to_string::ToString,
     value::Value,
 };
 
@@ -42,7 +42,7 @@ impl Heap {
 
     pub(crate) fn mark_value(&mut self, value: Value) {
         if self.log_gc {
-            eprintln!("    mark value ({})", value.print(self));
+            eprintln!("    mark value ({})", value.to_string(self));
         }
         if let Value::ObjReference(ptr) = value {
             self.mark_object(ptr);
@@ -51,7 +51,11 @@ impl Heap {
 
     pub(crate) fn mark_object(&mut self, ptr: Ptr) {
         if self.log_gc {
-            eprintln!("{:3} mark object {}", ptr.0, self.heap[ptr.0].print(self));
+            eprintln!(
+                "{:3} mark object {}",
+                ptr.0,
+                self.heap[ptr.0].to_string(self)
+            );
         }
 
         if self.heap[ptr.0].is_marked() {
@@ -71,7 +75,7 @@ impl Heap {
 
     pub(crate) fn blacken_object(&mut self, ptr: Ptr) {
         if self.log_gc {
-            eprintln!("{} blacken {}", ptr.0, self.heap[ptr.0].print(self));
+            eprintln!("{} blacken {}", ptr.0, self.heap[ptr.0].to_string(self));
         }
 
         match &self.heap[ptr.0] {

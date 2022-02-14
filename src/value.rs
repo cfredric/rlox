@@ -4,8 +4,8 @@ use enum_as_inner::EnumAsInner;
 
 use crate::{
     heap::{Heap, Ptr},
-    print::Print,
     rewrite::Rewrite,
+    to_string::ToString,
 };
 
 #[derive(Copy, Clone, Debug, EnumAsInner)]
@@ -39,13 +39,13 @@ impl Value {
     }
 }
 
-impl Print for Value {
-    fn print(&self, heap: &Heap) -> String {
+impl ToString for Value {
+    fn to_string(&self, heap: &Heap) -> String {
         match self {
             Value::Double(d) => d.to_string(),
             Value::Nil => "nil".to_string(),
             Value::Bool(b) => b.to_string(),
-            Value::ObjReference(i) => heap.deref(*i).print(heap),
+            Value::ObjReference(i) => heap.deref(*i).to_string(heap),
         }
     }
 }

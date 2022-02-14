@@ -8,9 +8,9 @@ use crate::heap::{Heap, Ptr};
 use crate::obj::{
     BoundMethod, Class, Closed, Closure, Function, Instance, LoxString, NativeFn, Obj, Open,
 };
-use crate::print::Print;
 use crate::rewrite::Rewrite;
 use crate::stack::{Slot, Stack};
+use crate::to_string::ToString;
 use crate::value::Value;
 use crate::Opt;
 
@@ -148,7 +148,7 @@ impl<'opt> VM<'opt> {
         mut pending_rewrite: Option<R>,
     ) -> Ptr {
         if self.opt.log_garbage_collection {
-            eprintln!("allocate for {}", obj.print(&self.heap));
+            eprintln!("allocate for {}", obj.to_string(&self.heap));
         }
 
         self.bytes_allocated += std::mem::size_of::<Obj>();
@@ -547,7 +547,7 @@ impl<'opt> VM<'opt> {
             label,
             self.stack
                 .iter_from(start)
-                .map(|i| format!("[ {} ]", i.print(&self.heap)))
+                .map(|i| format!("[ {} ]", i.to_string(&self.heap)))
                 .collect::<String>()
         );
     }
@@ -585,7 +585,7 @@ impl<'opt> VM<'opt> {
                     if self.frames.is_empty() {
                         let top = self.stack.pop();
                         if !self.stack.is_empty() {
-                            println!("{}", top.print(&self.heap));
+                            println!("{}", top.to_string(&self.heap));
                             self.stack.pop();
                         }
                         if self.opt.trace_execution {
@@ -645,7 +645,7 @@ impl<'opt> VM<'opt> {
                 OpCode::Greater => self.binary_op(|a, b| a > b, Value::Bool)?,
                 OpCode::Less => self.binary_op(|a, b| a < b, Value::Bool)?,
                 OpCode::Print => {
-                    println!("{}", self.stack.pop().print(&self.heap));
+                    println!("{}", self.stack.pop().to_string(&self.heap));
                 }
                 OpCode::Pop => {
                     self.stack.pop();

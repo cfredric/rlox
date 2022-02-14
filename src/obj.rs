@@ -5,9 +5,9 @@ use enum_as_inner::EnumAsInner;
 use crate::{
     chunk::Chunk,
     heap::{Heap, Ptr},
-    print::Print,
     rewrite::Rewrite,
     stack::Slot,
+    to_string::ToString,
     value::Value,
 };
 
@@ -95,20 +95,22 @@ impl Obj {
     }
 }
 
-impl Print for Obj {
-    fn print(&self, heap: &Heap) -> String {
+impl ToString for Obj {
+    fn to_string(&self, heap: &Heap) -> String {
         match self {
             Obj::String(s) => s.string.to_string(),
             Obj::Function(fun) => format!("<fn {}>", fun.name),
             Obj::NativeFn(_) => "<native fn>".to_string(),
-            Obj::Closure(fun) => heap.deref(fun.function).print(heap),
+            Obj::Closure(fun) => heap.deref(fun.function).to_string(heap),
             Obj::OpenUpValue(_) => unreachable!(),
             Obj::ClosedUpValue(_) => unreachable!(),
             Obj::Class(c) => c.name.to_string(),
             Obj::Instance(i) => {
                 format!("{} instance", heap.as_class(i.class).name)
             }
-            Obj::BoundMethod(b) => heap.deref(heap.as_closure(b.closure).function).print(heap),
+            Obj::BoundMethod(b) => heap
+                .deref(heap.as_closure(b.closure).function)
+                .to_string(heap),
         }
     }
 }

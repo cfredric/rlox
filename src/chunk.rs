@@ -1,9 +1,9 @@
 use crate::compiler::CompiledUpValue;
 use crate::heap::{Heap, Ptr};
 use crate::obj::UpValueIndex;
-use crate::print::Print;
 use crate::rewrite::Rewrite;
 use crate::stack::StackSlotOffset;
+use crate::to_string::ToString;
 use crate::value::Value;
 
 #[derive(Clone, Debug)]
@@ -183,7 +183,7 @@ impl Chunk {
             OpCode::Call { arg_count } => byte_instruction("OP_CALL", *arg_count),
             OpCode::Closure { function, upvalues } => {
                 print!("{:16} {} ", "OP_CLOSURE", function.0);
-                print!("{}", self.constant_at(*function).print(heap));
+                print!("{}", self.constant_at(*function).to_string(heap));
                 println!();
 
                 println!(
@@ -224,7 +224,7 @@ impl Chunk {
     }
 
     fn constant_instruction(&self, name: &str, heap: &Heap, index: ConstantIndex) {
-        println!("{:16} {}", name, self.constant_at(index).print(heap));
+        println!("{:16} {}", name, self.constant_at(index).to_string(heap));
     }
 }
 

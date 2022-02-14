@@ -6,10 +6,10 @@ mod chunk;
 mod compiler;
 mod heap;
 mod obj;
-mod print;
 mod rewrite;
 mod scanner;
 mod stack;
+mod to_string;
 mod value;
 mod vm;
 
