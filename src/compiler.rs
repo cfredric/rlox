@@ -269,10 +269,9 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     }
 
     fn class_declaration(&mut self) {
-        self.consume(TokenType::Identifier, "Expect class name.");
-        let name = self.current_token.lexeme;
-        let name_constant = self.identifier_constant(self.current_token.lexeme);
-        self.declare_variable();
+        let name = self.consume_identifier("Expect class name.");
+        let name_constant = self.identifier_constant(name);
+        self.declare_variable(name);
 
         self.emit_opcode(OpCode::Class {
             name: name_constant,
@@ -287,15 +286,15 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         self.class_compilers.push(ClassState::new());
 
         if self.maybe_consume(TokenType::Less) {
-            self.consume(TokenType::Identifier, "Expect superclass name.");
-            self.variable(false);
+            let superclass_name = self.consume_identifier("Expect superclass name.");
+            self.variable(superclass_name, false);
 
-            if name == self.current_token.lexeme {
+            if name == superclass_name {
                 self.error("A class can't inherit from itself.");
             }
 
             self.begin_scope(); // Matched with end below.
-            self.add_local(Token::new(TokenType::Super, "super"));
+            self.add_local("super");
             self.define_variable(ConstantIndex::special());
 
             self.named_variable(name, false);
@@ -326,14 +325,14 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     }
 
     fn fun_declaration(&mut self) {
-        let global = self.parse_variable("Expect function name.");
+        let (global, name) = self.parse_variable("Expect function name.");
         self.mark_initialized();
-        self.function(FunctionType::Function);
+        self.function(FunctionType::Function, name);
         self.define_variable(global);
     }
 
     fn var_declaration(&mut self) {
-        let global = self.parse_variable("Expect variable name.");
+        let (global, _) = self.parse_variable("Expect variable name.");
 
         if self.maybe_consume(TokenType::Equal) {
             self.expression();
@@ -460,7 +459,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         comp.consume(TokenType::RightBrace, "Expect '}' after block.");
     }
 
-    fn function(&mut self, ty: FunctionType) {
+    fn function(&mut self, ty: FunctionType, function_name: &'source str) {
         if self.functions.len() > MAX_NESTED_FUNCTIONS {
             self.error("Too many nested functions.");
             return;
@@ -468,7 +467,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         self.functions.push(if ty == FunctionType::Script {
             FunctionState::new(ty)
         } else {
-            FunctionState::with_name(ty, self.current_token.lexeme)
+            FunctionState::with_name(ty, function_name)
         });
         self.begin_scope();
 
@@ -479,7 +478,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
                 if self.current_function().function.arity > MAX_ARITY {
                     self.error_at_next(PARAMS_ERROR_STR);
                 }
-                let constant = self.parse_variable("Expect parameter name.");
+                let (constant, _) = self.parse_variable("Expect parameter name.");
                 self.define_variable(constant);
 
                 if !self.maybe_consume(TokenType::Comma) {
@@ -501,15 +500,28 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         }
     }
 
+    fn consume_identifier<'e: 'source>(&mut self, error_message: &'e str) -> &'source str {
+        match self.next_token().ty {
+            TokenType::Identifier { name } => {
+                self.advance();
+                name
+            }
+            _ => {
+                self.error_at_next(error_message);
+                ""
+            }
+        }
+    }
+
     fn method(&mut self) {
-        self.consume(TokenType::Identifier, "Expect method name.");
-        let name = self.identifier_constant(self.current_token.lexeme);
+        let method_name = self.consume_identifier("Expect method name.");
+        let name = self.identifier_constant(method_name);
 
         let mut ty = FunctionType::Method;
-        if self.current_token.lexeme == "init" {
+        if method_name == "init" {
             ty = FunctionType::Initializer;
         }
-        self.function(ty);
+        self.function(ty, method_name);
 
         self.emit_opcode(OpCode::Method { name });
     }
@@ -597,14 +609,13 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         self.consume(TokenType::RightParen, "Expect ')' after expression.");
     }
 
-    fn number(&mut self) {
-        let value = self.current_token.lexeme.parse::<f64>().unwrap();
+    fn number(&mut self, value: f64) {
         self.emit_constant(Value::Double(value));
     }
 
-    fn string(&mut self) {
-        let len = self.current_token.lexeme.len();
-        let lox_string = self.vm.copy_string(&self.current_token.lexeme[1..len - 1]);
+    fn string(&mut self, string: &str) {
+        let len = string.len();
+        let lox_string = self.vm.copy_string(&string[1..len - 1]);
         self.emit_constant(Value::ObjReference(lox_string));
     }
 
@@ -643,8 +654,8 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     }
 
     fn dot(&mut self, can_assign: bool) {
-        self.consume(TokenType::Identifier, "Expect property name after '.'.");
-        let name = self.identifier_constant(self.current_token.lexeme);
+        let name = self.consume_identifier("Expect property name after '.'.");
+        let name = self.identifier_constant(name);
 
         if can_assign && self.maybe_consume(TokenType::Equal) {
             self.expression();
@@ -694,14 +705,16 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         }
     }
 
-    fn parse_variable<'e: 'source>(&mut self, error_message: &'e str) -> ConstantIndex {
-        self.consume(TokenType::Identifier, error_message);
-        self.declare_variable();
+    fn parse_variable<'e: 'source>(
+        &mut self,
+        error_message: &'e str,
+    ) -> (ConstantIndex, &'source str) {
+        let name = self.consume_identifier(error_message);
+        self.declare_variable(name);
         if self.current_function().scope_depth > 0 {
-            ConstantIndex::error()
+            (ConstantIndex::error(), "")
         } else {
-            let name = self.current_token.lexeme;
-            self.identifier_constant(name)
+            (self.identifier_constant(name), name)
         }
     }
 
@@ -766,39 +779,40 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         }
     }
 
-    fn declare_variable(&mut self) {
+    fn declare_variable(&mut self, name: &'source str) {
         if self.current_function().scope_depth == 0 {
             return;
         }
-        let name = self.current_token;
         let current_function = self.current_function();
-        if current_function.locals.iter().any(|l| {
-            !l.depth.map_or(false, |d| d < current_function.scope_depth) && name.lexeme == l.name
-        }) {
+        if current_function
+            .locals
+            .iter()
+            .any(|l| !l.depth.map_or(false, |d| d < current_function.scope_depth) && name == l.name)
+        {
             self.error("Already a variable with this name in this scope.");
         }
         self.add_local(name);
     }
 
-    fn add_local(&mut self, name: Token<'source>) {
+    fn add_local(&mut self, name: &'source str) {
         if self.current_function().locals.len() >= MAX_LOCALS {
             self.error("Too many local variables in function.");
         } else {
             self.current_function_mut().locals.push(Local {
-                name: name.lexeme,
+                name,
                 depth: None,
                 is_captured: false,
             });
         }
     }
 
-    fn variable(&mut self, can_assign: bool) {
-        self.named_variable(self.current_token.lexeme, can_assign)
+    fn variable(&mut self, name: &str, can_assign: bool) {
+        self.named_variable(name, can_assign)
     }
 
     fn this(&mut self) {
         if self.class_compilers.last().is_some() {
-            self.variable(false);
+            self.variable("this", false);
         } else {
             self.error("Can't use 'this' outside of a class.");
         }
@@ -815,8 +829,8 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
             }
         }
         self.consume(TokenType::Dot, "Expect '.' after 'super'.");
-        self.consume(TokenType::Identifier, "Expect superclass method name.");
-        let method = self.identifier_constant(self.current_token.lexeme);
+        let method = self.consume_identifier("Expect superclass method name.");
+        let method = self.identifier_constant(method);
 
         self.named_variable("this", false);
         if self.maybe_consume(TokenType::LeftParen) {
@@ -973,104 +987,121 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
 }
 
 fn get_rule<'source, I: Iterator<Item = Result<Token<'source>, ScanError>>>(
-    ty: TokenType,
+    ty: TokenType<'source>,
 ) -> Rule<'source, I> {
     match ty {
         TokenType::LeftParen => Rule::new(
-            Some(|c, _ctx| c.grouping()),
-            Some(InfixRule::new(|c, _ctx| c.call(), Precedence::Call)),
+            Some(Box::new(|c, _ctx| c.grouping())),
+            Some(InfixRule::new(
+                Box::new(|c, _ctx| c.call()),
+                Precedence::Call,
+            )),
         ),
         TokenType::Dot => Rule::new(
             None,
             Some(InfixRule::new(
-                |c, ctx| c.dot(ctx.can_assign),
+                Box::new(|c, ctx| c.dot(ctx.can_assign)),
                 Precedence::Call,
             )),
         ),
         TokenType::Minus => Rule::new(
-            Some(|c, _ctx| c.unary()),
+            Some(Box::new(|c, _ctx| c.unary())),
             Some(InfixRule::new(
-                |c, _ctx| c.binary(Precedence::Term),
+                Box::new(|c, _ctx| c.binary(Precedence::Term)),
                 Precedence::Term,
             )),
         ),
         TokenType::Plus => Rule::new(
             None,
             Some(InfixRule::new(
-                |c, _ctx| c.binary(Precedence::Term),
+                Box::new(|c, _ctx| c.binary(Precedence::Term)),
                 Precedence::Term,
             )),
         ),
         TokenType::Slash => Rule::new(
             None,
             Some(InfixRule::new(
-                |c, _ctx| c.binary(Precedence::Factor),
+                Box::new(|c, _ctx| c.binary(Precedence::Factor)),
                 Precedence::Factor,
             )),
         ),
         TokenType::Star => Rule::new(
             None,
             Some(InfixRule::new(
-                |c, _ctx| c.binary(Precedence::Factor),
+                Box::new(|c, _ctx| c.binary(Precedence::Factor)),
                 Precedence::Factor,
             )),
         ),
-        TokenType::Bang => Rule::new(Some(|c, _ctx| c.unary()), None),
+        TokenType::Bang => Rule::new(Some(Box::new(|c, _ctx| c.unary())), None),
         TokenType::BangEqual => Rule::new(
             None,
             Some(InfixRule::new(
-                |c, _ctx| c.binary(Precedence::Equality),
+                Box::new(|c, _ctx| c.binary(Precedence::Equality)),
                 Precedence::Equality,
             )),
         ),
         TokenType::EqualEqual => Rule::new(
             None,
             Some(InfixRule::new(
-                |c, _ctx| c.binary(Precedence::Equality),
+                Box::new(|c, _ctx| c.binary(Precedence::Equality)),
                 Precedence::Equality,
             )),
         ),
         TokenType::Greater => Rule::new(
             None,
             Some(InfixRule::new(
-                |c, _ctx| c.binary(Precedence::Comparison),
+                Box::new(|c, _ctx| c.binary(Precedence::Comparison)),
                 Precedence::Comparison,
             )),
         ),
         TokenType::GreaterEqual => Rule::new(
             None,
             Some(InfixRule::new(
-                |c, _ctx| c.binary(Precedence::Comparison),
+                Box::new(|c, _ctx| c.binary(Precedence::Comparison)),
                 Precedence::Comparison,
             )),
         ),
         TokenType::Less => Rule::new(
             None,
             Some(InfixRule::new(
-                |c, _ctx| c.binary(Precedence::Comparison),
+                Box::new(|c, _ctx| c.binary(Precedence::Comparison)),
                 Precedence::Comparison,
             )),
         ),
         TokenType::LessEqual => Rule::new(
             None,
             Some(InfixRule::new(
-                |c, _ctx| c.binary(Precedence::Comparison),
+                Box::new(|c, _ctx| c.binary(Precedence::Comparison)),
                 Precedence::Comparison,
             )),
         ),
-        TokenType::Identifier => Rule::new(Some(|c, ctx| c.variable(ctx.can_assign)), None),
-        TokenType::String => Rule::new(Some(|c, _ctx| c.string()), None),
-        TokenType::Number => Rule::new(Some(|c, _ctx| c.number()), None),
+        TokenType::Identifier { name } => {
+            let name = name.to_string();
+            Rule::new(
+                Some(Box::new(move |c, ctx| c.variable(&name, ctx.can_assign))),
+                None,
+            )
+        }
+        TokenType::String { string } => {
+            let string = string.to_string();
+            Rule::new(Some(Box::new(move |c, _ctx| c.string(&string))), None)
+        }
+        TokenType::Number { value } => {
+            Rule::new(Some(Box::new(move |c, _ctx| c.number(value))), None)
+        }
         TokenType::And => Rule::new(
             None,
-            Some(InfixRule::new(|c, _ctx| c.and(), Precedence::And)),
+            Some(InfixRule::new(Box::new(|c, _ctx| c.and()), Precedence::And)),
         ),
-        TokenType::False => Rule::new(Some(|c, _ctx| c.literal()), None),
-        TokenType::Nil => Rule::new(Some(|c, _ctx| c.literal()), None),
-        TokenType::Or => Rule::new(None, Some(InfixRule::new(|c, _ctx| c.or(), Precedence::Or))),
-        TokenType::Super => Rule::new(Some(|c, _ctx| c.super_()), None),
-        TokenType::This => Rule::new(Some(|c, _ctx| c.this()), None),
-        TokenType::True => Rule::new(Some(|c, _ctx| c.literal()), None),
+        TokenType::False => Rule::new(Some(Box::new(|c, _ctx| c.literal())), None),
+        TokenType::Nil => Rule::new(Some(Box::new(|c, _ctx| c.literal())), None),
+        TokenType::Or => Rule::new(
+            None,
+            Some(InfixRule::new(Box::new(|c, _ctx| c.or()), Precedence::Or)),
+        ),
+        TokenType::Super => Rule::new(Some(Box::new(|c, _ctx| c.super_())), None),
+        TokenType::This => Rule::new(Some(Box::new(|c, _ctx| c.this())), None),
+        TokenType::True => Rule::new(Some(Box::new(|c, _ctx| c.literal())), None),
         _ => Rule::new(None, None),
     }
 }
@@ -1113,26 +1144,26 @@ struct ParseFnCtx {
 }
 
 type ParseFn<'source, I> =
-    for<'compiler, 'opt, 'vm> fn(&'compiler mut Compiler<'opt, 'source, 'vm, I>, ParseFnCtx);
+    dyn for<'compiler, 'opt, 'vm> Fn(&'compiler mut Compiler<'opt, 'source, 'vm, I>, ParseFnCtx);
 
 struct InfixRule<'source, I: Iterator<Item = Result<Token<'source>, ScanError>>> {
-    parse: ParseFn<'source, I>,
+    parse: Box<ParseFn<'source, I>>,
     precedence: Precedence,
 }
 
 impl<'source, I: Iterator<Item = Result<Token<'source>, ScanError>>> InfixRule<'source, I> {
-    fn new(parse: ParseFn<'source, I>, precedence: Precedence) -> Self {
+    fn new(parse: Box<ParseFn<'source, I>>, precedence: Precedence) -> Self {
         Self { parse, precedence }
     }
 }
 
 struct Rule<'source, I: Iterator<Item = Result<Token<'source>, ScanError>>> {
-    prefix: Option<ParseFn<'source, I>>,
+    prefix: Option<Box<ParseFn<'source, I>>>,
     infix: Option<InfixRule<'source, I>>,
 }
 
 impl<'source, I: Iterator<Item = Result<Token<'source>, ScanError>>> Rule<'source, I> {
-    fn new(prefix: Option<ParseFn<'source, I>>, infix: Option<InfixRule<'source, I>>) -> Self {
+    fn new(prefix: Option<Box<ParseFn<'source, I>>>, infix: Option<InfixRule<'source, I>>) -> Self {
         Self { prefix, infix }
     }
 }

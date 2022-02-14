@@ -44,10 +44,9 @@ impl<'source> Scanner<'source> {
         self.source.get(self.current + 1).map(|x| *x as char)
     }
 
-    fn make_token(&self, ty: TokenType) -> Token<'source> {
+    fn make_token(&self, ty: TokenType<'source>) -> Token<'source> {
         Token {
             ty,
-            lexeme: std::str::from_utf8(&self.source[0..self.current]).unwrap(),
             line: self.line,
         }
     }
@@ -100,7 +99,12 @@ impl<'source> Scanner<'source> {
                 self.current += 1;
             }
         }
-        self.make_token(TokenType::Number)
+        self.make_token(TokenType::Number {
+            value: std::str::from_utf8(&self.source[0..self.current])
+                .unwrap()
+                .parse::<f64>()
+                .unwrap(),
+        })
     }
 
     fn string(&mut self) -> Result<Token<'source>, ScanError> {
@@ -108,7 +112,9 @@ impl<'source> Scanner<'source> {
             match self.peek() {
                 Some('"') => {
                     self.current += 1;
-                    return Ok(self.make_token(TokenType::String));
+                    return Ok(self.make_token(TokenType::String {
+                        string: std::str::from_utf8(&self.source[0..self.current]).unwrap(),
+                    }));
                 }
                 Some(c) => {
                     if c == '\n' {
@@ -123,9 +129,11 @@ impl<'source> Scanner<'source> {
         }
     }
 
-    fn identifier_type(&self) -> TokenType {
+    fn identifier_type(&self) -> TokenType<'source> {
         use TokenType::*;
-        match std::str::from_utf8(&self.source[0..self.current]).unwrap() {
+        match std::str::from_utf8(&self.source[0..self.current])
+            .expect("guaranteed ASCII by is_alphanumeric")
+        {
             "and" => And,
             "class" => Class,
             "else" => Else,
@@ -142,11 +150,15 @@ impl<'source> Scanner<'source> {
             "true" => True,
             "var" => Var,
             "while" => While,
-            _ => Identifier,
+            name => Identifier { name },
         }
     }
 
-    fn compound_equal_token(&mut self, with: TokenType, without: TokenType) -> Token<'source> {
+    fn compound_equal_token(
+        &mut self,
+        with: TokenType<'source>,
+        without: TokenType<'source>,
+    ) -> Token<'source> {
         let t = if self.maybe_consume('=') {
             with
         } else {
@@ -200,23 +212,14 @@ impl<'source> Iterator for Scanner<'source> {
 
 #[derive(Clone, Copy)]
 pub(crate) struct Token<'a> {
-    pub(crate) ty: TokenType,
-    pub(crate) lexeme: &'a str,
+    pub(crate) ty: TokenType<'a>,
     pub(crate) line: usize,
 }
 
 impl<'source> Token<'source> {
-    pub(crate) fn new(ty: TokenType, lexeme: &'static str) -> Self {
-        Self {
-            ty,
-            lexeme,
-            line: 0,
-        }
-    }
     pub(crate) fn eof(line: usize) -> Self {
         Self {
             ty: TokenType::Eof,
-            lexeme: "",
             line,
         }
     }
@@ -224,13 +227,57 @@ impl<'source> Token<'source> {
     pub(crate) fn location(&self) -> String {
         match self.ty {
             TokenType::Eof => " at end".to_string(),
-            _ => format!(" at '{}'", self.lexeme),
+            _ => format!(" at '{}'", self.to_string()),
+        }
+    }
+
+    fn to_string(&self) -> String {
+        match self.ty {
+            TokenType::LeftParen => "(".to_string(),
+            TokenType::RightParen => ")".to_string(),
+            TokenType::LeftBrace => "{".to_string(),
+            TokenType::RightBrace => "}".to_string(),
+            TokenType::Comma => ",".to_string(),
+            TokenType::Dot => ".".to_string(),
+            TokenType::Minus => "-".to_string(),
+            TokenType::Plus => "+".to_string(),
+            TokenType::Semicolon => ";".to_string(),
+            TokenType::Slash => "/".to_string(),
+            TokenType::Star => "*".to_string(),
+            TokenType::Bang => "!".to_string(),
+            TokenType::BangEqual => "!=".to_string(),
+            TokenType::Equal => "=".to_string(),
+            TokenType::EqualEqual => "==".to_string(),
+            TokenType::Greater => ">".to_string(),
+            TokenType::GreaterEqual => ">=".to_string(),
+            TokenType::Less => "<".to_string(),
+            TokenType::LessEqual => "<=".to_string(),
+            TokenType::Identifier { name } => name.to_string(),
+            TokenType::String { string } => string.to_string(),
+            TokenType::Number { value } => format!("{}", value),
+            TokenType::And => "and".to_string(),
+            TokenType::Class => "class".to_string(),
+            TokenType::Else => "else".to_string(),
+            TokenType::False => "false".to_string(),
+            TokenType::For => "for".to_string(),
+            TokenType::Fun => "fun".to_string(),
+            TokenType::If => "if".to_string(),
+            TokenType::Nil => "nil".to_string(),
+            TokenType::Or => "or".to_string(),
+            TokenType::Print => "print".to_string(),
+            TokenType::Return => "return".to_string(),
+            TokenType::Super => "super".to_string(),
+            TokenType::This => "this".to_string(),
+            TokenType::True => "true".to_string(),
+            TokenType::Var => "var".to_string(),
+            TokenType::While => "while".to_string(),
+            TokenType::Eof => "EOF".to_string(),
         }
     }
 }
 
 #[derive(PartialEq, Copy, Clone)]
-pub(crate) enum TokenType {
+pub(crate) enum TokenType<'source> {
     LeftParen,
     RightParen,
     LeftBrace,
@@ -252,9 +299,9 @@ pub(crate) enum TokenType {
     Less,
     LessEqual,
 
-    Identifier,
-    String,
-    Number,
+    Identifier { name: &'source str },
+    String { string: &'source str },
+    Number { value: f64 },
 
     And,
     Class,
