@@ -103,6 +103,7 @@ impl<'source> Scanner<'source> {
         }
         self.make_token(TokenType::Number {
             value: self.current_token().parse().unwrap(),
+            lexeme: self.current_token(),
         })
     }
 
@@ -226,64 +227,64 @@ impl<'source> Token<'source> {
     }
 
     pub(crate) fn location(&self) -> String {
-        match self.ty {
-            TokenType::Eof => " at end".to_string(),
-            _ => format!(" at '{}'", self),
-        }
+        format!(" at {}", self.ty)
     }
 }
 
-impl<'source> std::fmt::Display for Token<'source> {
+impl<'source> std::fmt::Display for TokenType<'source> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if *self == TokenType::Eof {
+            return write!(f, "end");
+        }
         write!(
             f,
-            "{}",
-            match self.ty {
-                TokenType::LeftParen => "(".to_string(),
-                TokenType::RightParen => ")".to_string(),
-                TokenType::LeftBrace => "{".to_string(),
-                TokenType::RightBrace => "}".to_string(),
-                TokenType::Comma => ",".to_string(),
-                TokenType::Dot => ".".to_string(),
-                TokenType::Minus => "-".to_string(),
-                TokenType::Plus => "+".to_string(),
-                TokenType::Semicolon => ";".to_string(),
-                TokenType::Slash => "/".to_string(),
-                TokenType::Star => "*".to_string(),
-                TokenType::Bang => "!".to_string(),
-                TokenType::BangEqual => "!=".to_string(),
-                TokenType::Equal => "=".to_string(),
-                TokenType::EqualEqual => "==".to_string(),
-                TokenType::Greater => ">".to_string(),
-                TokenType::GreaterEqual => ">=".to_string(),
-                TokenType::Less => "<".to_string(),
-                TokenType::LessEqual => "<=".to_string(),
-                TokenType::Identifier { name } => name.to_string(),
-                TokenType::String { string } => string.to_string(),
-                TokenType::Number { value } => format!("{}", value),
-                TokenType::And => "and".to_string(),
-                TokenType::Class => "class".to_string(),
-                TokenType::Else => "else".to_string(),
-                TokenType::False => "false".to_string(),
-                TokenType::For => "for".to_string(),
-                TokenType::Fun => "fun".to_string(),
-                TokenType::If => "if".to_string(),
-                TokenType::Nil => "nil".to_string(),
-                TokenType::Or => "or".to_string(),
-                TokenType::Print => "print".to_string(),
-                TokenType::Return => "return".to_string(),
-                TokenType::Super => "super".to_string(),
-                TokenType::This => "this".to_string(),
-                TokenType::True => "true".to_string(),
-                TokenType::Var => "var".to_string(),
-                TokenType::While => "while".to_string(),
-                TokenType::Eof => "EOF".to_string(),
+            "'{}'",
+            match &self {
+                TokenType::LeftParen => "(",
+                TokenType::RightParen => ")",
+                TokenType::LeftBrace => "{",
+                TokenType::RightBrace => "}",
+                TokenType::Comma => ",",
+                TokenType::Dot => ".",
+                TokenType::Minus => "-",
+                TokenType::Plus => "+",
+                TokenType::Semicolon => ";",
+                TokenType::Slash => "/",
+                TokenType::Star => "*",
+                TokenType::Bang => "!",
+                TokenType::BangEqual => "!=",
+                TokenType::Equal => "=",
+                TokenType::EqualEqual => "==",
+                TokenType::Greater => ">",
+                TokenType::GreaterEqual => ">=",
+                TokenType::Less => "<",
+                TokenType::LessEqual => "<=",
+                TokenType::Identifier { name } => name,
+                TokenType::String { string } => string,
+                TokenType::Number { lexeme, .. } => lexeme,
+                TokenType::And => "and",
+                TokenType::Class => "class",
+                TokenType::Else => "else",
+                TokenType::False => "false",
+                TokenType::For => "for",
+                TokenType::Fun => "fun",
+                TokenType::If => "if",
+                TokenType::Nil => "nil",
+                TokenType::Or => "or",
+                TokenType::Print => "print",
+                TokenType::Return => "return",
+                TokenType::Super => "super",
+                TokenType::This => "this",
+                TokenType::True => "true",
+                TokenType::Var => "var",
+                TokenType::While => "while",
+                TokenType::Eof => unreachable!(),
             }
         )
     }
 }
 
-#[derive(PartialEq, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub(crate) enum TokenType<'source> {
     LeftParen,
     RightParen,
@@ -308,7 +309,7 @@ pub(crate) enum TokenType<'source> {
 
     Identifier { name: &'source str },
     String { string: &'source str },
-    Number { value: f64 },
+    Number { value: f64, lexeme: &'source str },
 
     And,
     Class,
@@ -330,12 +331,29 @@ pub(crate) enum TokenType<'source> {
     Eof,
 }
 
+impl<'source> PartialEq for TokenType<'source> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Identifier { name: l_name }, Self::Identifier { name: r_name }) => {
+                l_name == r_name
+            }
+            (Self::String { string: l_string }, Self::String { string: r_string }) => {
+                l_string == r_string
+            }
+            (Self::Number { lexeme: l_lex, .. }, Self::Number { lexeme: r_lex, .. }) => {
+                l_lex == r_lex
+            }
+            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+        }
+    }
+}
+
 impl<'a> TokenType<'a> {
     pub(crate) fn payload(&self) -> TokenPayload<'a> {
         match self {
             TokenType::Identifier { name } => TokenPayload::String(name),
             TokenType::String { string } => TokenPayload::String(string),
-            TokenType::Number { value } => TokenPayload::Double(*value),
+            TokenType::Number { value, lexeme } => TokenPayload::Double(*value, lexeme),
             _ => TokenPayload::Nothing,
         }
     }
@@ -350,6 +368,6 @@ pub(crate) struct ScanError {
 #[derive(Clone, Copy, EnumAsInner)]
 pub(crate) enum TokenPayload<'source> {
     String(&'source str),
-    Double(f64),
+    Double(f64, &'source str),
     Nothing,
 }

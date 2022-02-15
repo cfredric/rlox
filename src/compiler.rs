@@ -1092,7 +1092,7 @@ fn get_rule<'source, I: Iterator<Item = Result<Token<'source>, ScanError>>>(
             None,
         ),
         TokenType::Number { .. } => Rule::new(
-            Some(|c, ctx| c.number(*ctx.payload.as_double().unwrap())),
+            Some(|c, ctx| c.number(*ctx.payload.as_double().unwrap().0)),
             None,
         ),
         TokenType::And => Rule::new(
