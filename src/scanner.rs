@@ -46,13 +46,6 @@ impl<'source> Scanner<'source> {
         self.source.get(self.current + 1).map(|x| *x as char)
     }
 
-    fn make_token(&self, ty: TokenType<'source>) -> Token<'source> {
-        Token {
-            ty,
-            line: self.line,
-        }
-    }
-
     fn error(&self, message: &'static str) -> ScanError {
         ScanError {
             message,
@@ -87,7 +80,7 @@ impl<'source> Scanner<'source> {
             self.current += 1;
         }
 
-        self.make_token(self.identifier_type())
+        Token::new(self.identifier_type(), self.line)
     }
 
     fn number(&mut self) -> Token<'source> {
@@ -101,10 +94,7 @@ impl<'source> Scanner<'source> {
                 self.current += 1;
             }
         }
-        self.make_token(TokenType::Number {
-            value: self.current_token().parse().unwrap(),
-            lexeme: self.current_token(),
-        })
+        Token::new(TokenType::number(self.current_token()), self.line)
     }
 
     fn current_token(&self) -> &'source str {
@@ -112,25 +102,27 @@ impl<'source> Scanner<'source> {
     }
 
     fn string(&mut self) -> Result<Token<'source>, ScanError> {
-        loop {
+        Ok(loop {
             match self.peek() {
                 Some('"') => {
                     self.current += 1;
-                    return Ok(self.make_token(TokenType::String {
-                        string: self.current_token(),
-                    }));
+                    break Token::new(
+                        TokenType::String {
+                            string: self.current_token(),
+                        },
+                        self.line,
+                    );
                 }
-                Some(c) => {
-                    if c == '\n' {
-                        self.line += 1;
-                    }
-                    self.current += 1;
+                Some('\n') => {
+                    self.line += 1;
                 }
+                Some(_) => {}
                 None => {
                     return Err(self.error("Unterminated string."));
                 }
             }
-        }
+            self.current += 1;
+        })
     }
 
     fn identifier_type(&self) -> TokenType<'source> {
@@ -156,17 +148,16 @@ impl<'source> Scanner<'source> {
         }
     }
 
-    fn compound_equal_token(
+    fn compound_eq(
         &mut self,
         with: TokenType<'source>,
         without: TokenType<'source>,
-    ) -> Token<'source> {
-        let t = if self.maybe_consume('=') {
+    ) -> TokenType<'source> {
+        if self.maybe_consume('=') {
             with
         } else {
             without
-        };
-        self.make_token(t)
+        }
     }
 }
 
@@ -188,27 +179,38 @@ impl<'source> Iterator for Scanner<'source> {
         };
         self.current += 1;
 
-        Some(match next_char {
-            c if is_alphabetic(c) => Ok(self.identifier()),
-            c if is_numeric(c) => Ok(self.number()),
-            '(' => Ok(self.make_token(LeftParen)),
-            ')' => Ok(self.make_token(RightParen)),
-            '{' => Ok(self.make_token(LeftBrace)),
-            '}' => Ok(self.make_token(RightBrace)),
-            ';' => Ok(self.make_token(Semicolon)),
-            ',' => Ok(self.make_token(Comma)),
-            '.' => Ok(self.make_token(Dot)),
-            '-' => Ok(self.make_token(Minus)),
-            '+' => Ok(self.make_token(Plus)),
-            '/' => Ok(self.make_token(Slash)),
-            '*' => Ok(self.make_token(Star)),
-            '!' => Ok(self.compound_equal_token(BangEqual, Bang)),
-            '=' => Ok(self.compound_equal_token(EqualEqual, Equal)),
-            '<' => Ok(self.compound_equal_token(LessEqual, Less)),
-            '>' => Ok(self.compound_equal_token(GreaterEqual, Greater)),
-            '"' => self.string(),
-            _ => Err(self.error("Unexpected character.")),
-        })
+        Some(Ok(Token::new(
+            match next_char {
+                c if is_alphabetic(c) => {
+                    return Some(Ok(self.identifier()));
+                }
+                c if is_numeric(c) => {
+                    return Some(Ok(self.number()));
+                }
+                '"' => {
+                    return Some(self.string());
+                }
+                '(' => LeftParen,
+                ')' => RightParen,
+                '{' => LeftBrace,
+                '}' => RightBrace,
+                ';' => Semicolon,
+                ',' => Comma,
+                '.' => Dot,
+                '-' => Minus,
+                '+' => Plus,
+                '/' => Slash,
+                '*' => Star,
+                '!' => self.compound_eq(BangEqual, Bang),
+                '=' => self.compound_eq(EqualEqual, Equal),
+                '<' => self.compound_eq(LessEqual, Less),
+                '>' => self.compound_eq(GreaterEqual, Greater),
+                _ => {
+                    return Some(Err(self.error("Unexpected character.")));
+                }
+            },
+            self.line,
+        )))
     }
 }
 
@@ -219,6 +221,10 @@ pub(crate) struct Token<'a> {
 }
 
 impl<'source> Token<'source> {
+    fn new(ty: TokenType<'source>, line: usize) -> Self {
+        Token { ty, line }
+    }
+
     pub(crate) fn eof(line: usize) -> Self {
         Self {
             ty: TokenType::Eof,
@@ -349,6 +355,13 @@ impl<'source> PartialEq for TokenType<'source> {
 }
 
 impl<'a> TokenType<'a> {
+    fn number(lexeme: &'a str) -> Self {
+        TokenType::Number {
+            value: lexeme.parse().unwrap(),
+            lexeme,
+        }
+    }
+
     pub(crate) fn payload(&self) -> TokenPayload<'a> {
         match self {
             TokenType::Identifier { name } => TokenPayload::String(name),
