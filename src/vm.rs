@@ -821,7 +821,7 @@ impl<'opt> VM<'opt> {
                                 .stack
                                 .peek(0)
                                 .as_obj_reference()
-                                .expect("stack top should have been a superclass reference");
+                                .expect("stack top should have been a subclass reference");
                             self.heap
                                 .as_class_mut(subclass)
                                 .methods
