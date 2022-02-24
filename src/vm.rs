@@ -1,11 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::chunk::{ConstantIndex, OpCode};
+use crate::chunk::ConstantIndex;
 use crate::compiler::{compile, CompiledUpValue};
 use crate::heap::{Heap, Ptr};
 use crate::obj::{
     BoundMethod, Class, Closed, Closure, Function, Instance, LoxString, NativeFn, Obj, Open,
 };
+use crate::opcode::OpCode;
 use crate::rewrite::Rewrite;
 use crate::stack::{Slot, Stack};
 use crate::to_string::ToString;

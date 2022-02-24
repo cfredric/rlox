@@ -6,6 +6,7 @@ mod chunk;
 mod compiler;
 mod heap;
 mod obj;
+mod opcode;
 mod rewrite;
 mod scanner;
 mod stack;

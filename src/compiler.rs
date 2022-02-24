@@ -1,8 +1,9 @@
 use const_format::formatcp;
 use std::iter::Peekable;
 
-use crate::chunk::{Chunk, ConstantIndex, OpCode};
+use crate::chunk::{Chunk, ConstantIndex};
 use crate::obj::{Function, UpValueIndex};
+use crate::opcode::OpCode;
 use crate::scanner::{ScanError, Token, TokenPayload, TokenType};
 use crate::stack::StackSlotOffset;
 use crate::value::Value;
