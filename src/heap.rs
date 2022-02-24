@@ -22,6 +22,12 @@ impl Rewrite for Ptr {
     }
 }
 
+impl ToString for Ptr {
+    fn to_string(&self, heap: &Heap) -> String {
+        heap.deref(*self).to_string(heap)
+    }
+}
+
 pub(crate) struct Heap {
     heap: Vec<Obj>,
 
