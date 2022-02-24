@@ -393,7 +393,6 @@ dependencies = [
  "itertools",
  "libc",
  "rustyline",
- "scopeguard",
  "structopt",
 ]
 

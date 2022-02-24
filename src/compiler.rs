@@ -448,15 +448,13 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
             self.error("Too many nested blocks.");
             return;
         }
-        let mut comp = scopeguard::guard(self, |comp| {
-            comp.block_depth -= 1;
-        });
-        comp.block_depth += 1;
-        while !comp.next_token_is(TokenType::RightBrace) && !comp.next_token_is(TokenType::Eof) {
-            comp.declaration();
+        self.block_depth += 1;
+        while !self.next_token_is(TokenType::RightBrace) && !self.next_token_is(TokenType::Eof) {
+            self.declaration();
         }
 
-        comp.consume(TokenType::RightBrace, "Expect '}' after block.");
+        self.consume(TokenType::RightBrace, "Expect '}' after block.");
+        self.block_depth -= 1;
     }
 
     fn function(&mut self, ty: FunctionType, function_name: &'source str) {

@@ -1,7 +1,5 @@
 use std::collections::{HashMap, HashSet};
 
-use itertools::Itertools;
-
 use crate::chunk::{ConstantIndex, OpCode};
 use crate::compiler::{compile, CompiledUpValue};
 use crate::heap::{Heap, Ptr};
@@ -530,6 +528,7 @@ impl<'opt> VM<'opt> {
     }
 
     fn check_upvalues(&self) -> bool {
+        use itertools::Itertools;
         let is_sorted_and_unique = self
             .open_upvalues_iter()
             .tuple_windows()
