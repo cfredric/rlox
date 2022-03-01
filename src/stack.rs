@@ -6,12 +6,16 @@ use crate::{heap::Ptr, rewrite::Rewrite, value::Value};
 pub(crate) struct Slot(usize);
 
 impl Slot {
-    pub(crate) fn new(s: usize) -> Self {
+    fn new(s: usize) -> Self {
         Self(s)
     }
 
     pub(crate) fn offset(&self, offset: StackSlotOffset) -> Self {
         Slot::new(self.0 + offset.0)
+    }
+
+    pub(crate) fn bottom() -> Self {
+        Self(0)
     }
 }
 

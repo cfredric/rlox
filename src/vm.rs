@@ -555,7 +555,7 @@ impl<'opt> VM<'opt> {
     fn run(&mut self) -> Result<(), InterpretResult> {
         loop {
             if self.opt.trace_execution {
-                self.print_stack_slice("stack", Slot::new(0));
+                self.print_stack_slice("stack", Slot::bottom());
                 self.print_stack_slice("frame", self.frame().start_slot);
 
                 self.function()
@@ -589,7 +589,7 @@ impl<'opt> VM<'opt> {
                             self.stack.pop();
                         }
                         if self.opt.trace_execution {
-                            self.print_stack_slice("stack", Slot::new(0));
+                            self.print_stack_slice("stack", Slot::bottom());
                         }
                         debug_assert!(self.stack.is_empty());
                         return Ok(());
