@@ -7,11 +7,11 @@ use crate::obj::{
     BoundMethod, Class, Closed, Closure, Function, Instance, LoxString, NativeFn, Obj, Open,
 };
 use crate::opcode::OpCode;
+use crate::opt::Opt;
 use crate::rewrite::Rewrite;
 use crate::stack::{Slot, Stack};
 use crate::to_string::ToString;
 use crate::value::Value;
-use crate::Opt;
 
 const GC_HEAP_GROWTH_FACTOR: usize = 2;
 
