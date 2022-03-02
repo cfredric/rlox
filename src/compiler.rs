@@ -198,11 +198,12 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         if distance > MAX_JUMP_SIZE {
             self.error("Too much code to jump over.");
         }
-        self.current_chunk_mut().code[jump_index] = match self.current_chunk().code[jump_index] {
-            OpCode::JumpIfFalse { .. } => OpCode::JumpIfFalse { distance },
-            OpCode::Jump { .. } => OpCode::Jump { distance },
-            _ => unreachable!("Tried to patch non-jump OpCode"),
-        }
+        self.current_function_mut().function.chunk.code[jump_index] =
+            match self.current_chunk().code[jump_index] {
+                OpCode::JumpIfFalse { .. } => OpCode::JumpIfFalse { distance },
+                OpCode::Jump { .. } => OpCode::Jump { distance },
+                _ => unreachable!("Tried to patch non-jump OpCode"),
+            };
     }
 
     fn emit_loop(&mut self, loop_start: usize) {
@@ -217,7 +218,10 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
 
     fn emit_opcode(&mut self, opcode: OpCode) {
         let line = self.current_token.line;
-        self.current_chunk_mut().write_chunk(opcode, line);
+        self.current_function_mut()
+            .function
+            .chunk
+            .write_chunk(opcode, line);
     }
 
     fn end_compiler(&mut self) -> Option<(Function, Vec<CompiledUpValue>)> {
@@ -934,7 +938,12 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     }
 
     fn make_constant(&mut self, value: Value) -> ConstantIndex {
-        match self.current_chunk_mut().add_constant(value) {
+        match self
+            .current_function_mut()
+            .function
+            .chunk
+            .add_constant(value)
+        {
             None => {
                 self.error("Too many constants in one chunk.");
                 ConstantIndex::error()
@@ -946,10 +955,6 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     fn emit_constant(&mut self, value: Value) {
         let index = self.make_constant(value);
         self.emit_opcode(OpCode::Constant { index });
-    }
-
-    fn current_chunk_mut(&mut self) -> &mut Chunk {
-        &mut self.current_function_mut().function.chunk
     }
 
     fn current_chunk(&self) -> &Chunk {
