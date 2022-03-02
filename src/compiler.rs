@@ -198,16 +198,19 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     }
 
     fn patch_jump(&mut self, jump_index: usize) {
-        let distance = self.current_function().chunk_len() - jump_index - 1;
-        if distance > MAX_JUMP_SIZE {
+        let jump_distance = self.current_function().chunk_len() - jump_index - 1;
+        if jump_distance > MAX_JUMP_SIZE {
             self.error("Too much code to jump over.");
         }
-        self.current_function_mut().function.chunk.code[jump_index] =
-            match self.current_function().function.chunk.code[jump_index] {
-                OpCode::JumpIfFalse { .. } => OpCode::JumpIfFalse { distance },
-                OpCode::Jump { .. } => OpCode::Jump { distance },
-                _ => unreachable!("Tried to patch non-jump OpCode"),
-            };
+        match &mut self.current_function_mut().function.chunk.code[jump_index] {
+            OpCode::JumpIfFalse { distance } => {
+                *distance = jump_distance;
+            }
+            OpCode::Jump { distance } => {
+                *distance = jump_distance;
+            }
+            _ => unreachable!("Tried to patch non-jump OpCode"),
+        }
     }
 
     fn emit_loop(&mut self, loop_start: usize) {
