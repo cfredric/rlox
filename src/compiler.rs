@@ -240,12 +240,10 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
                 .chunk
                 .disassemble_chunk(&self.current_function().function.name, &self.vm.heap);
         }
-        if self.had_error {
-            self.functions.pop();
-            None
-        } else {
-            self.functions.pop().map(|f| (f.function, f.upvalues))
-        }
+        self.functions
+            .pop()
+            .map(|f| (f.function, f.upvalues))
+            .filter(|_| !self.had_error)
     }
 
     fn synchronize(&mut self) {
