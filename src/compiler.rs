@@ -1,7 +1,7 @@
 use const_format::formatcp;
 use std::iter::Peekable;
 
-use crate::chunk::{Chunk, ConstantIndex};
+use crate::chunk::ConstantIndex;
 use crate::obj::{Function, UpValueIndex};
 use crate::opcode::OpCode;
 use crate::scanner::{ScanError, Token, TokenPayload, TokenType};
@@ -68,6 +68,10 @@ impl<'source> FunctionState<'source> {
 
     fn local_at_mut(&mut self, offset: StackSlotOffset) -> &mut Local<'source> {
         &mut self.locals[offset.0]
+    }
+
+    fn chunk_len(&self) -> usize {
+        self.function.chunk.code.len()
     }
 }
 
@@ -190,16 +194,16 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
 
     fn emit_jump(&mut self, opcode: OpCode) -> usize {
         self.emit_opcode(opcode);
-        self.current_chunk().code.len() - 1
+        self.current_function().chunk_len() - 1
     }
 
     fn patch_jump(&mut self, jump_index: usize) {
-        let distance = self.current_chunk().code.len() - jump_index - 1;
+        let distance = self.current_function().chunk_len() - jump_index - 1;
         if distance > MAX_JUMP_SIZE {
             self.error("Too much code to jump over.");
         }
         self.current_function_mut().function.chunk.code[jump_index] =
-            match self.current_chunk().code[jump_index] {
+            match self.current_function().function.chunk.code[jump_index] {
                 OpCode::JumpIfFalse { .. } => OpCode::JumpIfFalse { distance },
                 OpCode::Jump { .. } => OpCode::Jump { distance },
                 _ => unreachable!("Tried to patch non-jump OpCode"),
@@ -207,7 +211,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     }
 
     fn emit_loop(&mut self, loop_start: usize) {
-        let distance_to_loop_start = self.current_chunk().code.len() - loop_start + 1;
+        let distance_to_loop_start = self.current_function().chunk_len() - loop_start + 1;
         if distance_to_loop_start > MAX_JUMP_SIZE {
             self.error("Loop body too large.");
         }
@@ -228,7 +232,9 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         self.emit_return();
 
         if self.opt.print_code && !self.had_error {
-            self.current_chunk()
+            self.current_function()
+                .function
+                .chunk
                 .disassemble_chunk(&self.current_function().function.name, &self.vm.heap);
         }
         if self.had_error {
@@ -383,7 +389,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
             self.expression_statement();
         }
 
-        let mut loop_start = self.current_chunk().code.len();
+        let mut loop_start = self.current_function().chunk_len();
         let mut exit_jump = None;
         if !self.maybe_consume(TokenType::Semicolon) {
             self.expression();
@@ -395,7 +401,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
 
         if !self.maybe_consume(TokenType::RightParen) {
             let body_jump = self.emit_jump(OpCode::Jump { distance: 0 });
-            let increment_start = self.current_chunk().code.len();
+            let increment_start = self.current_function().chunk_len();
             self.expression();
             self.emit_opcode(OpCode::Pop);
             self.consume(TokenType::RightParen, "Expect ')' after for clauses.");
@@ -434,7 +440,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     }
 
     fn while_statement(&mut self) {
-        let loop_start = self.current_chunk().code.len();
+        let loop_start = self.current_function().chunk_len();
         self.consume(TokenType::LeftParen, "Expect '(' after 'while'.");
         self.expression();
         self.consume(TokenType::RightParen, "Expect ')' after condition.");
@@ -955,10 +961,6 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     fn emit_constant(&mut self, value: Value) {
         let index = self.make_constant(value);
         self.emit_opcode(OpCode::Constant { index });
-    }
-
-    fn current_chunk(&self) -> &Chunk {
-        &self.current_function().function.chunk
     }
 
     fn current_function(&self) -> &FunctionState<'source> {
