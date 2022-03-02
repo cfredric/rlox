@@ -1,7 +1,7 @@
 use const_format::formatcp;
 use std::iter::Peekable;
 
-use crate::chunk::ConstantIndex;
+use crate::chunk::{ConstantIndex, OpCodeIndex};
 use crate::obj::{Function, UpValueIndex};
 use crate::opcode::OpCode;
 use crate::scanner::{ScanError, Token, TokenPayload, TokenType};
@@ -192,17 +192,21 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         self.emit_opcode(b);
     }
 
-    fn emit_jump(&mut self, opcode: OpCode) -> usize {
-        self.emit_opcode(opcode);
-        self.current_function().chunk_len() - 1
-    }
-
-    fn patch_jump(&mut self, jump_index: usize) {
-        let jump_distance = self.current_function().chunk_len() - jump_index - 1;
+    fn patch_jump(&mut self, jump_index: OpCodeIndex) {
+        let jump_distance = self
+            .current_function()
+            .function
+            .chunk
+            .distance_from(jump_index);
         if jump_distance > MAX_JUMP_SIZE {
             self.error("Too much code to jump over.");
         }
-        match &mut self.current_function_mut().function.chunk.code[jump_index] {
+        match &mut self
+            .current_function_mut()
+            .function
+            .chunk
+            .opcode_at_mut(jump_index)
+        {
             OpCode::JumpIfFalse { distance } => {
                 *distance = jump_distance;
             }
@@ -223,12 +227,12 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         });
     }
 
-    fn emit_opcode(&mut self, opcode: OpCode) {
+    fn emit_opcode(&mut self, opcode: OpCode) -> OpCodeIndex {
         let line = self.current_token.line;
         self.current_function_mut()
             .function
             .chunk
-            .write_chunk(opcode, line);
+            .write_chunk(opcode, line)
     }
 
     fn end_compiler(&mut self) -> Option<(Function, Vec<CompiledUpValue>)> {
@@ -396,12 +400,12 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
             self.expression();
             self.consume(TokenType::Semicolon, "Expect ';' after loop condition.");
 
-            exit_jump = Some(self.emit_jump(OpCode::JumpIfFalse { distance: 0 }));
+            exit_jump = Some(self.emit_opcode(OpCode::JumpIfFalse { distance: 0 }));
             self.emit_opcode(OpCode::Pop);
         }
 
         if !self.maybe_consume(TokenType::RightParen) {
-            let body_jump = self.emit_jump(OpCode::Jump { distance: 0 });
+            let body_jump = self.emit_opcode(OpCode::Jump { distance: 0 });
             let increment_start = self.current_function().chunk_len();
             self.expression();
             self.emit_opcode(OpCode::Pop);
@@ -428,10 +432,10 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         self.expression();
         self.consume(TokenType::RightParen, "Expect ')' after condition.");
 
-        let then_jump = self.emit_jump(OpCode::JumpIfFalse { distance: 0 });
+        let then_jump = self.emit_opcode(OpCode::JumpIfFalse { distance: 0 });
         self.emit_opcode(OpCode::Pop);
         self.statement();
-        let else_jump = self.emit_jump(OpCode::Jump { distance: 0 });
+        let else_jump = self.emit_opcode(OpCode::Jump { distance: 0 });
         self.patch_jump(then_jump);
         self.emit_opcode(OpCode::Pop);
         if self.maybe_consume(TokenType::Else) {
@@ -446,7 +450,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         self.expression();
         self.consume(TokenType::RightParen, "Expect ')' after condition.");
 
-        let exit_jump = self.emit_jump(OpCode::JumpIfFalse { distance: 0 });
+        let exit_jump = self.emit_opcode(OpCode::JumpIfFalse { distance: 0 });
         self.emit_opcode(OpCode::Pop);
         self.statement();
         self.emit_loop(loop_start);
@@ -631,11 +635,14 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     fn unary(&mut self) {
         let op_ty = self.current_token.ty;
         self.parse_precedence(Precedence::Unary);
-        match op_ty {
-            TokenType::Minus => self.emit_opcode(OpCode::Negate),
-            TokenType::Bang => self.emit_opcode(OpCode::Not),
-            _ => self.error("Unexpected unary operand."),
-        }
+        self.emit_opcode(match op_ty {
+            TokenType::Minus => OpCode::Negate,
+            TokenType::Bang => OpCode::Not,
+            _ => {
+                self.error("Unexpected unary operand.");
+                return;
+            }
+        });
     }
 
     fn binary(&mut self, precedence: Precedence) {
@@ -644,15 +651,29 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
 
         match ty {
             TokenType::BangEqual => self.emit_opcodes(OpCode::Equal, OpCode::Not),
-            TokenType::EqualEqual => self.emit_opcode(OpCode::Equal),
-            TokenType::Greater => self.emit_opcode(OpCode::Greater),
+            TokenType::EqualEqual => {
+                self.emit_opcode(OpCode::Equal);
+            }
+            TokenType::Greater => {
+                self.emit_opcode(OpCode::Greater);
+            }
             TokenType::GreaterEqual => self.emit_opcodes(OpCode::Less, OpCode::Not),
-            TokenType::Less => self.emit_opcode(OpCode::Less),
+            TokenType::Less => {
+                self.emit_opcode(OpCode::Less);
+            }
             TokenType::LessEqual => self.emit_opcodes(OpCode::Greater, OpCode::Not),
-            TokenType::Plus => self.emit_opcode(OpCode::Add),
-            TokenType::Minus => self.emit_opcode(OpCode::Subtract),
-            TokenType::Star => self.emit_opcode(OpCode::Multiply),
-            TokenType::Slash => self.emit_opcode(OpCode::Divide),
+            TokenType::Plus => {
+                self.emit_opcode(OpCode::Add);
+            }
+            TokenType::Minus => {
+                self.emit_opcode(OpCode::Subtract);
+            }
+            TokenType::Star => {
+                self.emit_opcode(OpCode::Multiply);
+            }
+            TokenType::Slash => {
+                self.emit_opcode(OpCode::Divide);
+            }
             _ => {}
         }
     }
@@ -681,12 +702,12 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     }
 
     fn literal(&mut self) {
-        match self.current_token.ty {
-            TokenType::False => self.emit_opcode(OpCode::Bool { value: false }),
-            TokenType::Nil => self.emit_opcode(OpCode::Nil),
-            TokenType::True => self.emit_opcode(OpCode::Bool { value: true }),
+        self.emit_opcode(match self.current_token.ty {
+            TokenType::False => OpCode::Bool { value: false },
+            TokenType::Nil => OpCode::Nil,
+            TokenType::True => OpCode::Bool { value: true },
             _ => unreachable!("Unexpected TokenType in literal"),
-        }
+        });
     }
 
     fn parse_precedence(&mut self, prec: Precedence) {
@@ -747,7 +768,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         if self.current_function().scope_depth > 0 {
             self.mark_initialized();
         } else {
-            self.emit_opcode(OpCode::DefineGlobal(global))
+            self.emit_opcode(OpCode::DefineGlobal(global));
         }
     }
 
@@ -772,15 +793,15 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     }
 
     fn and(&mut self) {
-        let end_jump = self.emit_jump(OpCode::JumpIfFalse { distance: 0 });
+        let end_jump = self.emit_opcode(OpCode::JumpIfFalse { distance: 0 });
         self.emit_opcode(OpCode::Pop);
         self.parse_precedence(Precedence::And);
         self.patch_jump(end_jump);
     }
 
     fn or(&mut self) {
-        let else_jump = self.emit_jump(OpCode::JumpIfFalse { distance: 0 });
-        let end_jump = self.emit_jump(OpCode::Jump { distance: 0 });
+        let else_jump = self.emit_opcode(OpCode::JumpIfFalse { distance: 0 });
+        let end_jump = self.emit_opcode(OpCode::Jump { distance: 0 });
 
         self.patch_jump(else_jump);
         self.emit_opcode(OpCode::Pop);
@@ -936,11 +957,13 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     }
 
     fn emit_return(&mut self) {
-        if self.current_function().function_type == FunctionType::Initializer {
-            self.emit_opcode(OpCode::GetLocal(StackSlotOffset::special()));
-        } else {
-            self.emit_opcode(OpCode::Nil);
-        }
+        self.emit_opcode(
+            if self.current_function().function_type == FunctionType::Initializer {
+                OpCode::GetLocal(StackSlotOffset::special())
+            } else {
+                OpCode::Nil
+            },
+        );
         self.emit_opcode(OpCode::Return);
     }
 

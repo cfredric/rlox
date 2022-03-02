@@ -35,14 +35,26 @@ impl ConstantIndex {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+pub(crate) struct OpCodeIndex(usize);
+
 impl Chunk {
     pub(crate) fn new() -> Self {
         Self::default()
     }
 
-    pub(crate) fn write_chunk(&mut self, op: OpCode, line: usize) {
+    pub(crate) fn write_chunk(&mut self, op: OpCode, line: usize) -> OpCodeIndex {
         self.code.push(op);
         self.lines.push(line);
+        OpCodeIndex(self.code.len() - 1)
+    }
+
+    pub(crate) fn distance_from(&self, op: OpCodeIndex) -> usize {
+        self.code.len() - op.0 - 1
+    }
+
+    pub(crate) fn opcode_at_mut(&mut self, op: OpCodeIndex) -> &mut OpCode {
+        &mut self.code[op.0]
     }
 
     pub(crate) fn add_constant(&mut self, value: Value) -> Option<ConstantIndex> {
