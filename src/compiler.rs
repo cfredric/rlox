@@ -573,7 +573,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
 
     fn expression_statement(&mut self) {
         self.expression();
-        let consumed_semicolon = match self.mode {
+        if match self.mode {
             Mode::Repl => {
                 if self.current_function().function_type == FunctionType::Script {
                     if self.maybe_consume(TokenType::Semicolon) {
@@ -597,8 +597,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
                 self.consume(TokenType::Semicolon, "Expect ';' after expression.");
                 true
             }
-        };
-        if consumed_semicolon {
+        } {
             self.emit_opcode(OpCode::Pop);
         }
     }
