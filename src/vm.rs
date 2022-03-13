@@ -97,7 +97,7 @@ impl<'opt> VM<'opt> {
         }
     }
 
-    pub(crate) fn take_string(&mut self, s: String) -> Ptr {
+    fn take_string(&mut self, s: String) -> Ptr {
         if let Some(v) = self.strings.get(&s) {
             *v
         } else {
@@ -139,11 +139,7 @@ impl<'opt> VM<'opt> {
         self.allocate_object(Obj::OpenUpValue(open), prev_to_rewrite.as_mut())
     }
 
-    pub(crate) fn allocate_object<R: Rewrite>(
-        &mut self,
-        mut obj: Obj,
-        mut pending_rewrite: R,
-    ) -> Ptr {
+    fn allocate_object<R: Rewrite>(&mut self, mut obj: Obj, mut pending_rewrite: R) -> Ptr {
         if self.opt.log_garbage_collection {
             eprintln!("allocate for {}", obj.to_string(&self.heap));
         }
