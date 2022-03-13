@@ -150,11 +150,16 @@ impl<'opt> VM<'opt> {
             eprintln!("allocate for {}", obj.to_string(&self.heap));
         }
 
-        self.bytes_allocated += std::mem::size_of::<Obj>();
-        if self.bytes_allocated > self.next_gc || self.opt.stress_garbage_collector {
+        if self.allocation_would_cause_gc() {
             self.collect_garbage(Some((&mut obj, &mut pending_rewrite)));
         }
+        self.bytes_allocated += std::mem::size_of::<Obj>();
         self.heap.push(obj)
+    }
+
+    fn allocation_would_cause_gc(&self) -> bool {
+        self.opt.stress_garbage_collector
+            || self.bytes_allocated + std::mem::size_of::<Obj>() > self.next_gc
     }
 
     fn function(&self) -> &Function {
