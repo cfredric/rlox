@@ -46,6 +46,10 @@ impl Heap {
         }
     }
 
+    pub(crate) fn bytes_allocated(&self) -> usize {
+        std::mem::size_of::<Obj>() * self.heap.len()
+    }
+
     pub(crate) fn mark_value(&mut self, value: Value) {
         if self.log_gc {
             eprintln!("    mark value ({})", value.to_string(self));
@@ -127,7 +131,7 @@ impl Heap {
         }
     }
 
-    pub(crate) fn sweep_and_compact(&mut self) -> (HashMap<Ptr, Ptr>, usize) {
+    pub(crate) fn sweep_and_compact(&mut self) -> HashMap<Ptr, Ptr> {
         // Build the mapping from pre-sweep pointers to post-sweep pointers.
         let mapping = self
             .heap
@@ -139,13 +143,12 @@ impl Heap {
             .collect();
 
         // Remove unreachable objects.
-        let before = self.heap.len();
         self.heap.retain(|obj| obj.is_marked());
         for obj in self.heap.iter_mut() {
             obj.mark(false);
         }
 
-        (mapping, before - self.heap.len())
+        mapping
     }
 
     pub(crate) fn deref(&self, ptr: Ptr) -> &Obj {

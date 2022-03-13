@@ -29,7 +29,6 @@ pub(crate) struct VM<'opt> {
     open_upvalues: Option<Ptr>,
     globals: HashMap<String, Value>,
 
-    bytes_allocated: usize,
     next_gc: usize,
     /// Hack: we don't do garbage collection until we start executing. Differs from the book.
     is_executing: bool,
@@ -80,7 +79,6 @@ impl<'opt> VM<'opt> {
             strings: HashMap::new(),
             open_upvalues: None,
             globals: HashMap::new(),
-            bytes_allocated: 0,
             next_gc: 1024 * 1024,
             is_executing: false,
         };
@@ -153,13 +151,12 @@ impl<'opt> VM<'opt> {
         if self.allocation_would_cause_gc() {
             self.collect_garbage(Some((&mut obj, &mut pending_rewrite)));
         }
-        self.bytes_allocated += std::mem::size_of::<Obj>();
         self.heap.push(obj)
     }
 
     fn allocation_would_cause_gc(&self) -> bool {
         self.opt.stress_garbage_collector
-            || self.bytes_allocated + std::mem::size_of::<Obj>() > self.next_gc
+            || self.heap.bytes_allocated() + std::mem::size_of::<Obj>() > self.next_gc
     }
 
     fn function(&self) -> &Function {
@@ -437,23 +434,23 @@ impl<'opt> VM<'opt> {
         if self.opt.log_garbage_collection {
             eprintln!("-- gc begin");
         }
-        let before = self.bytes_allocated;
+        let before = self.heap.bytes_allocated();
 
         self.mark_roots();
         self.heap.trace_references();
-        let removed = self.sweep_and_compact(pending_rewrites);
+        self.sweep_and_compact(pending_rewrites);
 
-        self.bytes_allocated -= removed * std::mem::size_of::<Obj>();
-        self.next_gc = self.bytes_allocated * GC_HEAP_GROWTH_FACTOR;
+        let after = self.heap.bytes_allocated();
+        self.next_gc = after * GC_HEAP_GROWTH_FACTOR;
 
         if self.opt.log_garbage_collection {
             eprintln!("-- gc end");
             eprintln!(
                 "   collected {} bytes ({} objects) ({} to {}), next at {}",
-                before - self.bytes_allocated,
-                (before - self.bytes_allocated) / std::mem::size_of::<Obj>(),
+                before - after,
+                (before - after) / std::mem::size_of::<Obj>(),
                 before,
-                self.bytes_allocated,
+                after,
                 self.next_gc
             );
         }
@@ -493,8 +490,8 @@ impl<'opt> VM<'opt> {
     ///
     /// Differs from the book, since clox doesn't do compaction (since it uses
     /// C's heap, rather than manually managing a separate heap).
-    fn sweep_and_compact<R: Rewrite>(&mut self, mut pending_rewrites: R) -> usize {
-        let (mapping, diff) = self.heap.sweep_and_compact();
+    fn sweep_and_compact<R: Rewrite>(&mut self, mut pending_rewrites: R) {
+        let mapping = self.heap.sweep_and_compact();
 
         // Prune out unused strings from the strings table:
         let reachable_strings = self
@@ -516,8 +513,6 @@ impl<'opt> VM<'opt> {
         pending_rewrites.rewrite(&mapping);
 
         debug_assert!(self.check_upvalues());
-
-        diff
     }
 
     fn open_upvalues_iter(&self) -> OpenUpValueIter {
