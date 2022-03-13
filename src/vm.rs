@@ -108,33 +108,33 @@ impl<'opt> VM<'opt> {
     }
 
     fn allocate_string(&mut self, s: String) -> Ptr {
-        let ptr = self.allocate_object::<()>(Obj::String(LoxString::new(s.clone())), None);
+        let ptr = self.allocate_object(Obj::String(LoxString::new(s.clone())), ());
         self.strings.insert(s, ptr);
         ptr
     }
 
     pub(crate) fn new_function(&mut self, f: Function) -> Ptr {
-        self.allocate_object::<()>(Obj::Function(f), None)
+        self.allocate_object(Obj::Function(f), ())
     }
 
     pub(crate) fn new_native(&mut self, f: NativeFn) -> Ptr {
-        self.allocate_object::<()>(Obj::NativeFn(f), None)
+        self.allocate_object(Obj::NativeFn(f), ())
     }
 
     pub(crate) fn new_closure(&mut self, func: Ptr, upvalues: Vec<Ptr>) -> Ptr {
-        self.allocate_object::<()>(Obj::Closure(Closure::new(func, upvalues)), None)
+        self.allocate_object(Obj::Closure(Closure::new(func, upvalues)), ())
     }
 
     pub(crate) fn new_class(&mut self, name: &str) -> Ptr {
-        self.allocate_object::<()>(Obj::Class(Class::new(name)), None)
+        self.allocate_object(Obj::Class(Class::new(name)), ())
     }
 
     pub(crate) fn new_instance(&mut self, class: &mut Ptr) -> Ptr {
-        self.allocate_object(Obj::Instance(Instance::new(*class)), Some(class))
+        self.allocate_object(Obj::Instance(Instance::new(*class)), class)
     }
 
     pub(crate) fn new_bound_method(&mut self, receiver: Ptr, closure: Ptr) -> Ptr {
-        self.allocate_object::<()>(Obj::BoundMethod(BoundMethod::new(receiver, closure)), None)
+        self.allocate_object(Obj::BoundMethod(BoundMethod::new(receiver, closure)), ())
     }
 
     pub(crate) fn new_upvalue(&mut self, open: Open, prev_to_rewrite: &mut Option<Ptr>) -> Ptr {
@@ -144,7 +144,7 @@ impl<'opt> VM<'opt> {
     pub(crate) fn allocate_object<R: Rewrite>(
         &mut self,
         mut obj: Obj,
-        mut pending_rewrite: Option<R>,
+        mut pending_rewrite: R,
     ) -> Ptr {
         if self.opt.log_garbage_collection {
             eprintln!("allocate for {}", obj.to_string(&self.heap));
@@ -425,7 +425,7 @@ impl<'opt> VM<'opt> {
         self.is_executing && !self.opt.disable_garbage_collection
     }
 
-    fn collect_garbage<R: Rewrite>(&mut self, pending_rewrites: Option<(&mut Obj, &mut R)>) {
+    fn collect_garbage<R: Rewrite>(&mut self, pending_rewrites: R) {
         if !self.should_run_garbage_collection() {
             return;
         }
@@ -488,10 +488,7 @@ impl<'opt> VM<'opt> {
     ///
     /// Differs from the book, since clox doesn't do compaction (since it uses
     /// C's heap, rather than manually managing a separate heap).
-    fn sweep_and_compact<R: Rewrite>(
-        &mut self,
-        pending_rewrites: Option<(&mut Obj, &mut R)>,
-    ) -> usize {
+    fn sweep_and_compact<R: Rewrite>(&mut self, mut pending_rewrites: R) -> usize {
         let (mapping, diff) = self.heap.sweep_and_compact();
 
         // Prune out unused strings from the strings table:
@@ -511,10 +508,7 @@ impl<'opt> VM<'opt> {
         self.strings.rewrite(&mapping);
         self.open_upvalues.rewrite(&mapping);
 
-        if let Some((obj, pending_rewrite)) = pending_rewrites {
-            obj.rewrite(&mapping);
-            pending_rewrite.rewrite(&mapping);
-        }
+        pending_rewrites.rewrite(&mapping);
 
         debug_assert!(self.check_upvalues());
 
@@ -569,7 +563,7 @@ impl<'opt> VM<'opt> {
             }
 
             if self.opt.stress_garbage_collector {
-                self.collect_garbage::<()>(None);
+                self.collect_garbage(());
             }
 
             use crate::value::*;

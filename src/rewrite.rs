@@ -47,3 +47,10 @@ impl<T: Rewrite> Rewrite for &mut T {
         (*self).rewrite(mapping);
     }
 }
+
+impl<T: Rewrite, U: Rewrite> Rewrite for (T, U) {
+    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
+        self.0.rewrite(mapping);
+        self.1.rewrite(mapping);
+    }
+}
