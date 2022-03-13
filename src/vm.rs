@@ -139,13 +139,13 @@ impl<'opt> VM<'opt> {
         self.allocate_object(Obj::OpenUpValue(open), prev_to_rewrite.as_mut())
     }
 
-    fn allocate_object<R: Rewrite>(&mut self, mut obj: Obj, mut pending_rewrite: R) -> Ptr {
+    fn allocate_object<R: Rewrite>(&mut self, mut obj: Obj, mut pending: R) -> Ptr {
         if self.opt.log_garbage_collection {
             eprintln!("allocate for {}", obj.to_string(&self.heap));
         }
 
         if self.allocation_would_cause_gc() {
-            self.collect_garbage(Some((&mut obj, &mut pending_rewrite)));
+            self.collect_garbage(Some((&mut obj, &mut pending)));
         }
         self.heap.push(obj)
     }
@@ -423,7 +423,7 @@ impl<'opt> VM<'opt> {
         self.is_executing && !self.opt.disable_garbage_collection
     }
 
-    fn collect_garbage<R: Rewrite>(&mut self, pending_rewrites: R) {
+    fn collect_garbage<R: Rewrite>(&mut self, pending: R) {
         if !self.should_run_garbage_collection() {
             return;
         }
@@ -434,7 +434,7 @@ impl<'opt> VM<'opt> {
 
         self.mark_roots();
         self.heap.trace_references();
-        self.sweep_and_compact(pending_rewrites);
+        self.sweep_and_compact(pending);
 
         let after = self.heap.bytes_allocated();
         self.next_gc = after * GC_HEAP_GROWTH_FACTOR;
@@ -486,7 +486,7 @@ impl<'opt> VM<'opt> {
     ///
     /// Differs from the book, since clox doesn't do compaction (since it uses
     /// C's heap, rather than manually managing a separate heap).
-    fn sweep_and_compact<R: Rewrite>(&mut self, mut pending_rewrites: R) {
+    fn sweep_and_compact<R: Rewrite>(&mut self, mut pending: R) {
         let mapping = self.heap.sweep_and_compact();
 
         // Prune out unused strings from the strings table:
@@ -506,7 +506,7 @@ impl<'opt> VM<'opt> {
         self.strings.rewrite(&mapping);
         self.open_upvalues.rewrite(&mapping);
 
-        pending_rewrites.rewrite(&mapping);
+        pending.rewrite(&mapping);
 
         debug_assert!(self.check_upvalues());
     }
