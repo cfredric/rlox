@@ -52,15 +52,15 @@ impl<'source> FunctionState<'source> {
         Self::with_name(function_type, "")
     }
     fn with_name(function_type: FunctionType, name: &str) -> Self {
-        let local = if function_type != FunctionType::Function {
-            Local::new("this")
-        } else {
-            Local::new("")
-        };
         Self {
             function: Function::new(name),
             function_type,
-            locals: vec![local],
+            locals: vec![Local::new(match function_type {
+                // No special vars for functions and the top-level script.
+                FunctionType::Function | FunctionType::Script => "",
+                // Special "this" variable for class constructors and class methods.
+                FunctionType::Initializer | FunctionType::Method => "this",
+            })],
             scope_depth: 0,
             upvalues: Vec::new(),
         }
@@ -1217,7 +1217,7 @@ impl<'source> Local<'source> {
     }
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, Clone, Copy, PartialEq)]
 enum FunctionType {
     Function,
     Initializer,
