@@ -131,21 +131,28 @@ impl Heap {
         }
     }
 
-    pub(crate) fn sweep_and_compact(&mut self) -> HashMap<Ptr, Ptr> {
+    pub(crate) fn sweep_and_compact(&mut self, rotate: bool) -> HashMap<Ptr, Ptr> {
         // Build the mapping from pre-sweep pointers to post-sweep pointers.
-        let mapping = self
+        let mut mapping = self
             .heap
             .iter()
             .enumerate()
             .filter_map(|(i, obj)| obj.is_marked().then(|| i))
             .enumerate()
             .map(|(post, pre)| (Ptr::new(pre), Ptr::new(post)))
-            .collect();
+            .collect::<HashMap<Ptr, Ptr>>();
 
         // Remove unreachable objects.
         self.heap.retain(|obj| obj.is_marked());
         for obj in self.heap.iter_mut() {
             obj.mark(false);
+        }
+
+        if rotate && !self.heap.is_empty() {
+            self.heap.rotate_right(1);
+            for (_, post) in mapping.iter_mut() {
+                *post = Ptr::new((post.0 + 1) % self.heap.len());
+            }
         }
 
         mapping

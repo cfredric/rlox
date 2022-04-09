@@ -495,7 +495,9 @@ impl<'opt> VM<'opt> {
     /// Differs from the book, since clox doesn't do compaction (since it uses
     /// C's heap, rather than manually managing a separate heap).
     fn sweep_and_compact<R: Rewrite>(&mut self, mut pending: R) {
-        let mapping = self.heap.sweep_and_compact();
+        let mapping = self
+            .heap
+            .sweep_and_compact(self.opt.stress_garbage_collector);
 
         // Prune out unused strings from the strings table:
         let reachable_strings = self
