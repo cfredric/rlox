@@ -69,6 +69,10 @@ fn now_native(_args: &[Value]) -> Value {
     Value::Double(now as f64)
 }
 
+fn atoi_native(_args: &[Value]) -> Value {
+    todo!()
+}
+
 impl<'opt> VM<'opt> {
     pub(crate) fn new(opt: &'opt Opt) -> Self {
         let mut vm = Self {
@@ -85,6 +89,7 @@ impl<'opt> VM<'opt> {
         vm.define_native("clock", NativeFn::new(clock_native));
         vm.define_native("sleep", NativeFn::new(sleep_native));
         vm.define_native("now", NativeFn::new(now_native));
+        vm.define_native("atoi", NativeFn::new(atoi_native));
 
         vm
     }
@@ -231,8 +236,6 @@ impl<'opt> VM<'opt> {
 
     fn define_native(&mut self, name: &str, function: NativeFn) {
         debug_assert!(!self.should_run_garbage_collection());
-        let string = self.copy_string(name);
-        self.heap.deref_mut(string).set_gc_exempt();
         let func_ref = Value::ObjReference(self.new_native(function));
 
         self.globals.insert(name.to_string(), func_ref);

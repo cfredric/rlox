@@ -34,10 +34,6 @@ impl Header {
     pub(crate) fn is_marked(&self) -> bool {
         self.is_marked || !self.is_gc_able
     }
-
-    fn set_gc_able(&mut self, gc: bool) {
-        self.is_gc_able = gc;
-    }
 }
 
 #[derive(Debug, EnumAsInner)]
@@ -80,10 +76,6 @@ impl Obj {
             Obj::Instance(i) => &mut i.header,
             Obj::BoundMethod(b) => &mut b.header,
         }
-    }
-
-    pub(crate) fn set_gc_exempt(&mut self) {
-        self.header_mut().set_gc_able(false);
     }
 
     pub(crate) fn mark(&mut self, marked: bool) {
