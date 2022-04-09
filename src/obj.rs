@@ -166,7 +166,8 @@ impl Rewrite for Function {
     }
 }
 
-type Native = fn(args: &[Value]) -> Value;
+type Native =
+    for<'opt, 'vm, 'args> fn(&'vm mut crate::vm::VM<'opt>, &mut Ptr, &'args [Value]) -> Value;
 
 pub(crate) struct NativeFn {
     header: Header,

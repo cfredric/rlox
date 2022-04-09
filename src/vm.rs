@@ -47,12 +47,12 @@ mod ffi {
     }
 }
 
-fn clock_native(_args: &[Value]) -> Value {
+fn clock_native<'opt>(_: &mut VM<'opt>, _: &mut Ptr, _args: &[Value]) -> Value {
     let t = unsafe { ffi::clock() };
     Value::Double(t as f64 / 1_000_000_f64)
 }
 
-fn sleep_native(args: &[Value]) -> Value {
+fn sleep_native<'opt>(_: &mut VM<'opt>, _: &mut Ptr, args: &[Value]) -> Value {
     if let Some(Value::Double(d)) = args.get(0) {
         std::thread::sleep(std::time::Duration::from_millis(d.floor() as u64));
     }
@@ -60,7 +60,7 @@ fn sleep_native(args: &[Value]) -> Value {
     Value::Nil
 }
 
-fn now_native(_args: &[Value]) -> Value {
+fn now_native<'opt>(_: &mut VM<'opt>, _: &mut Ptr, _args: &[Value]) -> Value {
     let now = std::time::SystemTime::now();
     let now = match now.duration_since(std::time::UNIX_EPOCH) {
         Ok(d) => d.as_millis(),
@@ -69,8 +69,11 @@ fn now_native(_args: &[Value]) -> Value {
     Value::Double(now as f64)
 }
 
-fn atoi_native(_args: &[Value]) -> Value {
-    todo!()
+fn atoi_native<'opt>(vm: &mut VM<'opt>, ptr: &mut Ptr, args: &[Value]) -> Value {
+    if let Some(Value::Double(d)) = args.get(0) {
+        return Value::ObjReference(vm.take_string(format!("{}", d), ptr));
+    }
+    return Value::Nil;
 }
 
 impl<'opt> VM<'opt> {
@@ -98,20 +101,20 @@ impl<'opt> VM<'opt> {
         if let Some(v) = self.strings.get(s) {
             *v
         } else {
-            self.allocate_string(s.to_string())
+            self.allocate_string(s.to_string(), ())
         }
     }
 
-    fn take_string(&mut self, s: String) -> Ptr {
+    fn take_string<R: Rewrite>(&mut self, s: String, r: R) -> Ptr {
         if let Some(v) = self.strings.get(&s) {
             *v
         } else {
-            self.allocate_string(s)
+            self.allocate_string(s, r)
         }
     }
 
-    fn allocate_string(&mut self, s: String) -> Ptr {
-        let ptr = self.allocate_object(Obj::String(LoxString::new(s.clone())), ());
+    fn allocate_string<R: Rewrite>(&mut self, s: String, r: R) -> Ptr {
+        let ptr = self.allocate_object(Obj::String(LoxString::new(s.clone())), r);
         self.strings.insert(s, ptr);
         ptr
     }
@@ -199,7 +202,7 @@ impl<'opt> VM<'opt> {
     }
 
     fn concatenate(&mut self, s: &str, t: &str) -> Value {
-        Value::ObjReference(self.take_string(format!("{}{}", s, t)))
+        Value::ObjReference(self.take_string(format!("{}{}", s, t), ()))
     }
 
     fn binary_op<R>(
@@ -251,7 +254,8 @@ impl<'opt> VM<'opt> {
                 | Obj::Instance(_) => self.runtime_error("Can only call functions and classes."),
                 Obj::Closure(_) => self.call(ptr, arg_count),
                 Obj::NativeFn(native) => {
-                    let result = (native.f)(self.stack.top_n(arg_count));
+                    let args = self.stack.top_n(arg_count).to_vec();
+                    let result = (native.f)(self, &mut ptr, &*args);
                     self.stack.pop_n(arg_count + 1);
                     self.stack.push(result);
                     Ok(())
@@ -717,6 +721,7 @@ impl<'opt> VM<'opt> {
                     self.stack.push(Value::ObjReference(closure));
                 }
                 OpCode::GetUpvalue(slot) => {
+                    // dbg!(true);
                     let uv = self.closure().upvalue_at(*slot);
                     let val = match &self.heap.deref(uv) {
                         Obj::ClosedUpValue(c) => c.value,
@@ -870,6 +875,7 @@ pub(crate) enum Mode {
     Script,
 }
 
+#[derive(Debug)]
 struct CallFrame {
     closure: Ptr,
     // Offset into function.chunk.code.

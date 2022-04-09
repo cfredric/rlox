@@ -12,3 +12,6 @@ itertools = "0.10.3"
 libc = "0.2.109"
 rustyline = "9.1.2"
 structopt = "0.3.25"
+
+[profile.release]
+debug = true

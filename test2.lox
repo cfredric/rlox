@@ -223,3 +223,4 @@ cruller.finish("asdf");
 sleep(1000);
 print clock() - start;
 print now() - start_now;
+print atoi(now() - start) + " milliseconds";
