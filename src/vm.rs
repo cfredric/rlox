@@ -727,7 +727,6 @@ impl<'opt> VM<'opt> {
                     self.stack.push(Value::ObjReference(closure));
                 }
                 OpCode::GetUpvalue(slot) => {
-                    // dbg!(true);
                     let uv = self.closure().upvalue_at(*slot);
                     let val = match &self.heap.deref(uv) {
                         Obj::ClosedUpValue(c) => c.value,
