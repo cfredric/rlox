@@ -11,14 +11,14 @@ use crate::{
     value::Value,
 };
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct Header {
     is_marked: bool,
     is_gc_able: bool,
 }
 
 impl Header {
-    fn new(gcs: bool) -> Self {
+    pub(crate) fn new(gcs: bool) -> Self {
         Self {
             is_marked: false,
             is_gc_able: gcs,
@@ -36,8 +36,9 @@ impl Header {
     }
 }
 
-#[derive(Debug, EnumAsInner)]
+#[derive(Clone, Debug, EnumAsInner)]
 pub(crate) enum Obj {
+    Dummy(Header),
     String(LoxString),
     Function(Function),
     Closure(Closure),
@@ -52,6 +53,7 @@ pub(crate) enum Obj {
 impl Obj {
     fn header(&self) -> &Header {
         match self {
+            Obj::Dummy(h) => &h,
             Obj::String(s) => &s.header,
             Obj::Function(f) => &f.header,
             Obj::Closure(c) => &c.header,
@@ -66,6 +68,7 @@ impl Obj {
 
     fn header_mut(&mut self) -> &mut Header {
         match self {
+            Obj::Dummy(ref mut h) => h,
             Obj::String(s) => &mut s.header,
             Obj::Function(f) => &mut f.header,
             Obj::Closure(c) => &mut c.header,
@@ -90,12 +93,13 @@ impl Obj {
 impl ToString for Obj {
     fn to_string(&self, heap: &Heap) -> String {
         match self {
+            Obj::Dummy(_) => "<Dummy>".to_string(),
             Obj::String(s) => s.string.to_string(),
             Obj::Function(fun) => format!("<fn {}>", fun.name),
             Obj::NativeFn(_) => "<native fn>".to_string(),
             Obj::Closure(fun) => heap.deref(fun.function).to_string(heap),
-            Obj::OpenUpValue(_) => unreachable!(),
-            Obj::ClosedUpValue(_) => unreachable!(),
+            Obj::OpenUpValue(_) => "<OpenUpValue>".to_string(),
+            Obj::ClosedUpValue(_) => "<ClosedUpValue>".to_string(),
             Obj::Class(c) => c.name.to_string(),
             Obj::Instance(i) => {
                 format!("{} instance", heap.as_class(i.class).name)
@@ -110,6 +114,7 @@ impl ToString for Obj {
 impl Rewrite for Obj {
     fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
         match self {
+            Obj::Dummy(_) => {}
             Obj::String(s) => s.rewrite(mapping),
             Obj::NativeFn(n) => n.rewrite(mapping),
             Obj::Class(c) => c.rewrite(mapping),
@@ -123,7 +128,7 @@ impl Rewrite for Obj {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct LoxString {
     pub(crate) header: Header,
     pub(crate) string: String,
@@ -141,7 +146,7 @@ impl Rewrite for LoxString {
     fn rewrite(&mut self, _mapping: &HashMap<Ptr, Ptr>) {}
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct Function {
     header: Header,
     pub(crate) arity: usize,
@@ -169,6 +174,7 @@ impl Rewrite for Function {
 type Native =
     for<'opt, 'vm, 'args> fn(&'vm mut crate::vm::VM<'opt>, &mut Ptr, &'args [Value]) -> Value;
 
+#[derive(Clone)]
 pub(crate) struct NativeFn {
     header: Header,
     pub(crate) f: Native,
@@ -195,7 +201,7 @@ impl Rewrite for NativeFn {
     fn rewrite(&mut self, _mapping: &HashMap<Ptr, Ptr>) {}
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct Closure {
     header: Header,
     pub(crate) function: Ptr,
@@ -230,7 +236,7 @@ impl Rewrite for Closure {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct Class {
     header: Header,
     name: String,
@@ -254,7 +260,7 @@ impl Rewrite for Class {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct Instance {
     header: Header,
     pub(crate) class: Ptr,
@@ -278,7 +284,7 @@ impl Rewrite for Instance {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct BoundMethod {
     header: Header,
     pub(crate) receiver: Ptr,
@@ -302,7 +308,7 @@ impl Rewrite for BoundMethod {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct Open {
     header: Header,
     /// The stack slot that holds the associated value.
@@ -326,7 +332,7 @@ impl Rewrite for Open {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct Closed {
     header: Header,
     pub(crate) value: Value,

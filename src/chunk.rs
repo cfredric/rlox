@@ -5,7 +5,7 @@ use crate::rewrite::Rewrite;
 use crate::to_string::ToString;
 use crate::value::Value;
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct Chunk {
     pub(crate) code: Vec<OpCode>,
     constants: Vec<Value>,

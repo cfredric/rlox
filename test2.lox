@@ -39,9 +39,23 @@ while (true) {
   print "ITERATION:";
   print iteration;
   iteration = iteration + 1;
-{
+  {
+    var i = 0;
+    while (i < 3) {
+        print i;
+        i = i + 1;
+    }
+
+    print "";
+    print "";
+
+    for (var j = 5; j < 10; j = j + 1) {
+        print j;
+    }
+  }
+  print "";
   var i = 0;
-   while (i < 3) {
+  while (i < 0 or false) {
       print i;
       i = i + 1;
   }
@@ -52,173 +66,159 @@ while (true) {
   for (var j = 5; j < 10; j = j + 1) {
       print j;
   }
-}
-print "";
-var i = 0;
- while (i < 0 or false) {
-    print i;
-    i = i + 1;
-}
 
-print "";
-print "";
+  fun areWeHavingItYet() {
+    print "Yes we are!";
+  }
 
-for (var j = 5; j < 10; j = j + 1) {
-    print j;
-}
+  print areWeHavingItYet;
+  areWeHavingItYet();
 
-fun areWeHavingItYet() {
-  print "Yes we are!";
-}
+  fun fibonacci(n) {
+      if (n == 0 or n == 1) {
+          return 1;
+      }
+      return fibonacci(n-1) + fibonacci(n-2);
+  }
 
-print areWeHavingItYet;
-areWeHavingItYet();
+  for (var i = 0; i < 10; i = i + 1) {
+      // print fibonacci(i);
+  }
 
- fun fibonacci(n) {
-     if (n == 0 or n == 1) {
-         return 1;
-     }
-     return fibonacci(n-1) + fibonacci(n-2);
- }
+  fun sum(a, b, c) {
+    return a + b + c;
+  }
 
- for (var i = 0; i < 10; i = i + 1) {
-     // print fibonacci(i);
- }
+  print 4 + sum(5, 6, 7);
 
-fun sum(a, b, c) {
-  return a + b + c;
-}
+  var start = clock();
+  print fibonacci(5);
+  print clock() - start;
 
-print 4 + sum(5, 6, 7);
-
-var start = clock();
-print fibonacci(5);
-print clock() - start;
-
-fun outer() {
-  var x = "outside";
-  fun inner() {
+  fun outer() {
+    var x = "outside";
+    fun inner() {
+      print x;
+      x = "from inside";
+    }
+    inner();
     print x;
-    x = "from inside";
   }
-  inner();
-  print x;
-}
-outer();
+  outer();
 
-fun foo() {
-  var x = 123;
-  print x;
-}
-
-foo();
-
-fun outer2() {
-  var y = "outside";
-  var z = "outside2";
-  fun inner() {
-    print y;
-    print z;
-    z = "modified";
+  fun foo() {
+    var x = 123;
+    print x;
   }
 
-  return inner;
-}
+  foo();
 
-{
-  var x = "make a string" + " that can be garbage collected";
-  print x;
-}
-
-var closure = outer2();
-closure();
-closure();
-
-class Brioche{}
-print Brioche;
-print Brioche();
-
-class Toast {}
-var toast = Toast();
-print toast.jam = "grape";
-print toast.jam;
-
-class Scone {
-  topping(first, second) {
-    print "scone with " + first + " and " + second;
-  }
-}
-
-var scone = Scone();
-scone.topping("berries", "cream");
-
-class CoffeeMaker {
-  init(coffee) {
-    this.coffee = coffee;
-  }
-
-  brew() {
-    print "Enjoy your cup of " + this.coffee;
-
-    // No reusing the grounds!
-    this.coffee = nil;
-  }
-}
-
-var maker = CoffeeMaker("coffee and chicory");
-maker.brew();
-
-class Oops {
-  init() {
-    fun f() {
-      print "not a method";
+  fun outer2() {
+    var y = "outside";
+    var z = "outside2";
+    fun inner() {
+      print y;
+      print z;
+      z = "modified";
     }
 
-    this.field = f;
+    return inner;
   }
-}
 
-var oops = Oops();
-oops.field();
+  {
+    var x = "make a string" + " that can be garbage collected";
+    print x;
+  }
 
-fun boolToString(b) {
-    if (b) {
-        return "true";
+  var closure = outer2();
+  closure();
+  closure();
+
+  class Brioche{}
+  print Brioche;
+  print Brioche();
+
+  class Toast {}
+  var toast = Toast();
+  print toast.jam = "grape";
+  print toast.jam;
+
+  class Scone {
+    topping(first, second) {
+      print "scone with " + first + " and " + second;
     }
-    return "false";
-}
-
-class Doughnut {
-  init(fresh) {
-    this.isFresh = fresh;
-  }
-  cook() {
-    print "Dunk in the fryer.";
-    this.finish("sprinkles");
   }
 
-  finish(ingredient) {
-    print "Finish with " + ingredient;
+  var scone = Scone();
+  scone.topping("berries", "cream");
+
+  class CoffeeMaker {
+    init(coffee) {
+      this.coffee = coffee;
+    }
+
+    brew() {
+      print "Enjoy your cup of " + this.coffee;
+
+      // No reusing the grounds!
+      this.coffee = nil;
+    }
   }
 
-  freshness() {
-    return this.isFresh;
-  }
-}
+  var maker = CoffeeMaker("coffee and chicory");
+  maker.brew();
 
-class Cruller < Doughnut {
+  class Oops {
+    init() {
+      fun f() {
+        print "not a method";
+      }
+
+      this.field = f;
+    }
+  }
+
+  var oops = Oops();
+  oops.field();
+
+  fun boolToString(b) {
+      if (b) {
+          return "true";
+      }
+      return "false";
+  }
+
+  class Doughnut {
     init(fresh) {
-      super.init(fresh);
+      this.isFresh = fresh;
     }
-  finish(ingredient) {
-    // No sprinkles, always icing.
-    super.finish("icing");
-  }
-}
+    cook() {
+      print "Dunk in the fryer.";
+      this.finish("sprinkles");
+    }
 
-var cruller = Cruller(true);
-print "is it fresh? " + boolToString(cruller.freshness());
-cruller.finish("asdf");
+    finish(ingredient) {
+      print "Finish with " + ingredient;
+    }
+
+    freshness() {
+      return this.isFresh;
+    }
+  }
+
+  class Cruller < Doughnut {
+      init(fresh) {
+        super.init(fresh);
+      }
+    finish(ingredient) {
+      // No sprinkles, always icing.
+      super.finish("icing");
+    }
+  }
+
+  var cruller = Cruller(true);
+  print "is it fresh? " + boolToString(cruller.freshness());
+  cruller.finish("asdf");
 }
 sleep(1000);
 print clock() - start;

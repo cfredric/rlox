@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    obj::{Class, Closure, Function, Instance, LoxString, Obj, Open},
+    obj::{Class, Closure, Function, Header, Instance, LoxString, Obj, Open},
     rewrite::Rewrite,
     to_string::ToString,
     value::Value,
@@ -89,6 +89,7 @@ impl Heap {
         }
 
         match &self.heap[ptr.0] {
+            Obj::Dummy(_) => {}
             Obj::String(_) | Obj::NativeFn(_) | Obj::OpenUpValue(_) => {}
             Obj::Function(f) => {
                 // TODO: don't clone here.
@@ -131,7 +132,7 @@ impl Heap {
         }
     }
 
-    pub(crate) fn sweep_and_compact(&mut self, rotate: bool) -> HashMap<Ptr, Ptr> {
+    pub(crate) fn sweep_and_compact(&mut self, perturb: bool) -> HashMap<Ptr, Ptr> {
         // Build the mapping from pre-sweep pointers to post-sweep pointers.
         let mut mapping = self
             .heap
@@ -148,10 +149,16 @@ impl Heap {
             obj.mark(false);
         }
 
-        if rotate && !self.heap.is_empty() {
-            self.heap.rotate_right(1);
+        if perturb && !self.heap.is_empty() {
+            let delta: i32 = if let Obj::Dummy(_) = self.heap[0] {
+                self.heap.remove(0);
+                -1
+            } else {
+                self.heap.insert(0, Obj::Dummy(Header::new(false)));
+                1
+            };
             for (_, post) in mapping.iter_mut() {
-                *post = Ptr::new((post.0 + 1) % self.heap.len());
+                *post = Ptr::new((post.0 as i32 + delta) as usize);
             }
         }
 

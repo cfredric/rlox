@@ -214,7 +214,7 @@ impl<'source> Iterator for Scanner<'source> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct Token<'a> {
     pub(crate) ty: TokenType<'a>,
     pub(crate) line: usize,
@@ -290,7 +290,7 @@ impl<'source> std::fmt::Display for TokenType<'source> {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub(crate) enum TokenType<'source> {
     LeftParen,
     RightParen,

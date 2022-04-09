@@ -247,6 +247,7 @@ impl<'opt> VM<'opt> {
     fn call_value(&mut self, callee: Value, arg_count: usize) -> Result<(), InterpretResult> {
         if let Value::ObjReference(mut ptr) = callee {
             match &self.heap.deref(ptr) {
+                Obj::Dummy(_) => unreachable!(),
                 Obj::String(_)
                 | Obj::Function(_)
                 | Obj::OpenUpValue(_)
@@ -701,7 +702,7 @@ impl<'opt> VM<'opt> {
                     self.call_value(self.stack.peek(*arg_count), *arg_count)?
                 }
                 OpCode::Closure { function, upvalues } => {
-                    let function = *self
+                    let mut function = *self
                         .read_constant(*function)
                         .as_obj_reference()
                         .expect("constant should have been a function reference");
@@ -711,7 +712,7 @@ impl<'opt> VM<'opt> {
                             let new_uv_ptr = match uv {
                                 CompiledUpValue::Local { index } => self.capture_upvalue(
                                     self.frame().start_slot.offset(*index),
-                                    &mut uvs,
+                                    (&mut uvs, &mut function),
                                 ),
                                 CompiledUpValue::Nonlocal { index } => self
                                     .heap
