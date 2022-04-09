@@ -752,11 +752,14 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     ) -> (ConstantIndex, &'source str) {
         let name = self.consume_identifier(error_message);
         self.declare_variable(name);
-        if self.current_function().scope_depth > 0 {
-            (ConstantIndex::error(), "")
-        } else {
-            (self.identifier_constant(name), name)
-        }
+        (
+            if self.current_function().scope_depth > 0 {
+                ConstantIndex::error()
+            } else {
+                self.identifier_constant(name)
+            },
+            name,
+        )
     }
 
     fn identifier_constant(&mut self, name: &str) -> ConstantIndex {
