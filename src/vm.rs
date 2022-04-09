@@ -143,8 +143,8 @@ impl<'opt> VM<'opt> {
         self.allocate_object(Obj::BoundMethod(BoundMethod::new(receiver, closure)), ())
     }
 
-    pub(crate) fn new_upvalue(&mut self, open: Open, prev_to_rewrite: &mut Option<Ptr>) -> Ptr {
-        self.allocate_object(Obj::OpenUpValue(open), prev_to_rewrite.as_mut())
+    pub(crate) fn new_upvalue<R: Rewrite>(&mut self, open: Open, pending: R) -> Ptr {
+        self.allocate_object(Obj::OpenUpValue(open), pending)
     }
 
     fn allocate_object<R: Rewrite>(&mut self, mut obj: Obj, mut pending: R) -> Ptr {
@@ -348,7 +348,7 @@ impl<'opt> VM<'opt> {
     /// Captures the given stack slot as a local upvalue. Inserts the new
     /// upvalue into the linked list of upvalues on the heap, sorted by stack
     /// slot (higher first).
-    fn capture_upvalue(&mut self, slot: Slot) -> Ptr {
+    fn capture_upvalue<R: Rewrite>(&mut self, slot: Slot, pending: R) -> Ptr {
         let mut prev_upvalue = None;
         let mut next = self.open_upvalues;
         while matches!(next, Some(uv) if self.heap.as_open_up_value(uv).slot > slot) {
@@ -363,7 +363,8 @@ impl<'opt> VM<'opt> {
             return next.expect("already checked via matches!");
         }
 
-        let created_upvalue = self.new_upvalue(Open::new(slot, next), &mut prev_upvalue);
+        let created_upvalue =
+            self.new_upvalue(Open::new(slot, next), (prev_upvalue.as_mut(), pending));
 
         if let Some(prev) = prev_upvalue {
             self.heap.as_open_up_value_mut(prev).next = Some(created_upvalue);
@@ -705,15 +706,17 @@ impl<'opt> VM<'opt> {
                     let uvs = {
                         let mut uvs = vec![];
                         for uv in upvalues {
-                            uvs.push(match uv {
-                                CompiledUpValue::Local { index } => {
-                                    self.capture_upvalue(self.frame().start_slot.offset(*index))
-                                }
+                            let new_uv_ptr = match uv {
+                                CompiledUpValue::Local { index } => self.capture_upvalue(
+                                    self.frame().start_slot.offset(*index),
+                                    &mut uvs,
+                                ),
                                 CompiledUpValue::Nonlocal { index } => self
                                     .heap
                                     .as_closure(self.frame().closure)
                                     .upvalue_at(*index),
-                            });
+                            };
+                            uvs.push(new_uv_ptr);
                         }
                         uvs
                     };
