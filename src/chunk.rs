@@ -1,4 +1,4 @@
-use std::ops::{Index, IndexMut};
+use std::ops::{AddAssign, Index, IndexMut, Sub, SubAssign};
 
 use crate::compiler::CompiledUpValue;
 use crate::heap::{Heap, Ptr};
@@ -46,8 +46,28 @@ impl ConstantIndex {
 pub(crate) struct OpCodeIndex(usize);
 
 impl OpCodeIndex {
-    pub(crate) fn new(index: usize) -> Self {
-        Self(index)
+    pub(crate) fn zero() -> Self {
+        Self(0)
+    }
+}
+
+impl AddAssign<usize> for OpCodeIndex {
+    fn add_assign(&mut self, rhs: usize) {
+        self.0 += rhs;
+    }
+}
+
+impl Sub<usize> for OpCodeIndex {
+    type Output = OpCodeIndex;
+
+    fn sub(self, rhs: usize) -> Self::Output {
+        OpCodeIndex(self.0 - rhs)
+    }
+}
+
+impl SubAssign<usize> for OpCodeIndex {
+    fn sub_assign(&mut self, rhs: usize) {
+        self.0 -= rhs;
     }
 }
 
@@ -60,8 +80,8 @@ impl Chunk {
         self.code.len()
     }
 
-    pub(crate) fn line_of(&self, index: usize) -> usize {
-        self.code[index].line
+    pub(crate) fn line_of(&self, index: OpCodeIndex) -> usize {
+        self.code[index.0].line
     }
 
     pub(crate) fn write_chunk(&mut self, op: OpCode, line: usize) -> OpCodeIndex {
@@ -89,20 +109,20 @@ impl Chunk {
         println!("== {} ==", name);
 
         for offset in 0..self.code.len() {
-            self.disassemble_instruction(heap, offset);
+            self.disassemble_instruction(heap, OpCodeIndex(offset));
         }
     }
 
-    pub(crate) fn disassemble_instruction(&self, heap: &Heap, offset: usize) {
-        print!("{:04} ", offset);
+    pub(crate) fn disassemble_instruction(&self, heap: &Heap, index: OpCodeIndex) {
+        print!("{:04} ", index.0);
 
-        if offset > 0 && self.code[offset].line == self.code[offset - 1].line {
+        if index.0 > 0 && self.line_of(index) == self.line_of(index - 1) {
             print!("   | ");
         } else {
-            print!("{:04} ", self.code[offset].line);
+            print!("{:04} ", self.line_of(index));
         }
 
-        match &self.code[offset].op {
+        match &self[index] {
             OpCode::Return => simple_instruction("OP_RETURN"),
             OpCode::Constant { index } => self.constant_instruction("OP_CONSTANT", heap, *index),
             OpCode::Negate => simple_instruction("OP_NEGATE"),

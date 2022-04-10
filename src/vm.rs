@@ -197,7 +197,7 @@ impl<'opt> VM<'opt> {
     fn read_byte(&mut self) -> &OpCode {
         // NB: this reads by OpCodes, not by bytes. Differs from the book.
         self.frame_mut().ip += 1;
-        &self.function().chunk[OpCodeIndex::new(self.frame().ip - 1)]
+        &self.function().chunk[self.frame().ip - 1]
     }
 
     // Reads a constant from the constants table.
@@ -697,16 +697,16 @@ impl<'opt> VM<'opt> {
                 }
                 OpCode::JumpIfFalse { distance } => {
                     if self.stack.peek(0).is_falsey() {
-                        self.frame_mut().ip += distance;
+                        self.frame_mut().ip += *distance;
                     }
                 }
                 OpCode::Jump { distance } => {
-                    self.frame_mut().ip += distance;
+                    self.frame_mut().ip += *distance;
                 }
                 OpCode::Loop {
                     distance_to_loop_start,
                 } => {
-                    self.frame_mut().ip -= distance_to_loop_start;
+                    self.frame_mut().ip -= *distance_to_loop_start;
                 }
                 OpCode::Call { arg_count } => {
                     self.call_value(self.stack.peek(*arg_count), *arg_count)?
@@ -894,7 +894,7 @@ pub(crate) enum Mode {
 struct CallFrame {
     closure: Ptr,
     // Offset into function.chunk.code.
-    ip: usize,
+    ip: OpCodeIndex,
     // The first stack slot that belongs to this frame.
     start_slot: Slot,
 }
@@ -903,7 +903,7 @@ impl CallFrame {
     fn new(closure: Ptr, start_slot: Slot) -> Self {
         Self {
             closure,
-            ip: 0,
+            ip: OpCodeIndex::zero(),
             start_slot,
         }
     }
