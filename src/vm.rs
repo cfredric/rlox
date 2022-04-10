@@ -105,16 +105,16 @@ impl<'opt> VM<'opt> {
         }
     }
 
-    fn take_string<R: Rewrite>(&mut self, s: String, r: R) -> Ptr {
+    fn take_string<R: Rewrite>(&mut self, s: String, pending: R) -> Ptr {
         if let Some(v) = self.strings.get(&s) {
             *v
         } else {
-            self.allocate_string(s, r)
+            self.allocate_string(s, pending)
         }
     }
 
-    fn allocate_string<R: Rewrite>(&mut self, s: String, r: R) -> Ptr {
-        let ptr = self.allocate_object(Obj::String(LoxString::new(s.clone())), r);
+    fn allocate_string<R: Rewrite>(&mut self, s: String, pending: R) -> Ptr {
+        let ptr = self.allocate_object(Obj::String(LoxString::new(s.clone())), pending);
         self.strings.insert(s, ptr);
         ptr
     }
@@ -135,8 +135,8 @@ impl<'opt> VM<'opt> {
         self.allocate_object(Obj::Class(Class::new(name)), ())
     }
 
-    pub(crate) fn new_instance(&mut self, class: &mut Ptr) -> Ptr {
-        self.allocate_object(Obj::Instance(Instance::new(*class)), class)
+    pub(crate) fn new_instance<R: Rewrite>(&mut self, class: Ptr, pending: R) -> Ptr {
+        self.allocate_object(Obj::Instance(Instance::new(class)), pending)
     }
 
     pub(crate) fn new_bound_method(&mut self, receiver: Ptr, closure: Ptr) -> Ptr {
@@ -147,13 +147,13 @@ impl<'opt> VM<'opt> {
         self.allocate_object(Obj::OpenUpValue(open), pending)
     }
 
-    fn allocate_object<R: Rewrite>(&mut self, mut obj: Obj, mut pending: R) -> Ptr {
+    fn allocate_object<R: Rewrite>(&mut self, mut obj: Obj, pending: R) -> Ptr {
         if self.opt.log_garbage_collection {
             eprintln!("allocate for {}", obj.to_string(&self.heap));
         }
 
         if self.allocation_would_cause_gc() {
-            self.collect_garbage(Some((&mut obj, &mut pending)));
+            self.collect_garbage((&mut obj, pending));
         }
         self.heap.push(obj)
     }
@@ -262,7 +262,7 @@ impl<'opt> VM<'opt> {
                     Ok(())
                 }
                 Obj::Class(_) => {
-                    let instance = self.new_instance(&mut ptr);
+                    let instance = self.new_instance(ptr, &mut ptr);
                     self.stack.assign(
                         self.stack.from_top_slot(arg_count),
                         Value::ObjReference(instance),

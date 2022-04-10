@@ -219,8 +219,9 @@ while (true) {
   var cruller = Cruller(true);
   print "is it fresh? " + boolToString(cruller.freshness());
   cruller.finish("asdf");
+  print atoi(now() - start_now) + " milliseconds";
 }
 sleep(1000);
 print clock() - start;
 print now() - start_now;
-print atoi(now() - start) + " milliseconds";
+print atoi(now() - start_now) + " milliseconds";

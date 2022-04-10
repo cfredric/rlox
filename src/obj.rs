@@ -18,7 +18,7 @@ pub(crate) struct Header {
 }
 
 impl Header {
-    pub(crate) fn new(gcs: bool) -> Self {
+    fn new(gcs: bool) -> Self {
         Self {
             is_marked: false,
             is_gc_able: gcs,
@@ -38,7 +38,7 @@ impl Header {
 
 #[derive(Clone, Debug, EnumAsInner)]
 pub(crate) enum Obj {
-    Dummy(Header),
+    Dummy(Dummy),
     String(LoxString),
     Function(Function),
     Closure(Closure),
@@ -53,7 +53,7 @@ pub(crate) enum Obj {
 impl Obj {
     fn header(&self) -> &Header {
         match self {
-            Obj::Dummy(h) => &h,
+            Obj::Dummy(d) => &d.header,
             Obj::String(s) => &s.header,
             Obj::Function(f) => &f.header,
             Obj::Closure(c) => &c.header,
@@ -68,7 +68,7 @@ impl Obj {
 
     fn header_mut(&mut self) -> &mut Header {
         match self {
-            Obj::Dummy(ref mut h) => h,
+            Obj::Dummy(d) => &mut d.header,
             Obj::String(s) => &mut s.header,
             Obj::Function(f) => &mut f.header,
             Obj::Closure(c) => &mut c.header,
@@ -124,6 +124,19 @@ impl Rewrite for Obj {
             Obj::ClosedUpValue(uv) => uv.rewrite(mapping),
             Obj::Instance(i) => i.rewrite(mapping),
             Obj::BoundMethod(b) => b.rewrite(mapping),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct Dummy {
+    header: Header,
+}
+
+impl Dummy {
+    pub(crate) fn new() -> Self {
+        Self {
+            header: Header::new(false),
         }
     }
 }

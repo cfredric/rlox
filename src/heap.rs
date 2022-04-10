@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    obj::{Class, Closure, Function, Header, Instance, LoxString, Obj, Open},
+    obj::{Class, Closure, Dummy, Function, Instance, LoxString, Obj, Open},
     rewrite::Rewrite,
     to_string::ToString,
     value::Value,
@@ -134,13 +134,18 @@ impl Heap {
 
     pub(crate) fn sweep_and_compact(&mut self, perturb: bool) -> HashMap<Ptr, Ptr> {
         // Build the mapping from pre-sweep pointers to post-sweep pointers.
-        let mut mapping = self
+        let delta: i32 = match (perturb, self.heap.get(0)) {
+            (true, Some(Obj::Dummy(_))) => -1,
+            (true, Some(_)) => 1,
+            _ => 0,
+        };
+        let mapping = self
             .heap
             .iter()
             .enumerate()
             .filter_map(|(i, obj)| obj.is_marked().then(|| i))
             .enumerate()
-            .map(|(post, pre)| (Ptr::new(pre), Ptr::new(post)))
+            .map(|(post, pre)| (Ptr::new(pre), Ptr::new(((post as i32) + delta) as usize)))
             .collect::<HashMap<Ptr, Ptr>>();
 
         // Remove unreachable objects.
@@ -149,17 +154,14 @@ impl Heap {
             obj.mark(false);
         }
 
-        if perturb && !self.heap.is_empty() {
-            let delta: i32 = if let Obj::Dummy(_) = self.heap[0] {
-                self.heap.remove(0);
-                -1
-            } else {
-                self.heap.insert(0, Obj::Dummy(Header::new(false)));
-                1
-            };
-            for (_, post) in mapping.iter_mut() {
-                *post = Ptr::new((post.0 as i32 + delta) as usize);
+        match delta {
+            1 => {
+                self.heap.insert(0, Obj::Dummy(Dummy::new()));
             }
+            -1 => {
+                self.heap.remove(0);
+            }
+            _ => {}
         }
 
         mapping
