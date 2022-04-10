@@ -20,7 +20,7 @@ pub(crate) struct VM<'opt> {
 
     frames: Vec<CallFrame>,
 
-    pub(crate) heap: Heap,
+    pub(crate) heap: Heap<'opt>,
     stack: Stack,
     /// Values are pointers into the heap, to LoxStrings.
     pub(crate) strings: HashMap<String, Ptr>,
@@ -81,7 +81,7 @@ impl<'opt> VM<'opt> {
         let mut vm = Self {
             opt,
             frames: Vec::new(),
-            heap: Heap::new(opt.log_garbage_collection),
+            heap: Heap::new(opt),
             stack: Stack::new(),
             strings: HashMap::new(),
             open_upvalues: None,
@@ -496,9 +496,7 @@ impl<'opt> VM<'opt> {
     /// Differs from the book, since clox doesn't do compaction (since it uses
     /// C's heap, rather than manually managing a separate heap).
     fn sweep_and_compact<R: Rewrite>(&mut self, mut pending: R) {
-        let mapping = self
-            .heap
-            .sweep_and_compact(self.opt.stress_garbage_collector);
+        let mapping = self.heap.sweep_and_compact();
 
         // Prune out unused strings from the strings table:
         let reachable_strings = self
@@ -905,12 +903,12 @@ impl Rewrite for CallFrame {
     }
 }
 
-struct OpenUpValueIter<'h> {
-    heap: &'h Heap,
+struct OpenUpValueIter<'h, 'opt> {
+    heap: &'h Heap<'opt>,
     it: Option<Ptr>,
 }
 
-impl<'h> Iterator for OpenUpValueIter<'h> {
+impl<'h, 'opt> Iterator for OpenUpValueIter<'h, 'opt> {
     type Item = Ptr;
 
     fn next(&mut self) -> Option<Self::Item> {

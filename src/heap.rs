@@ -5,6 +5,7 @@ use crate::{
     rewrite::Rewrite,
     to_string::ToString,
     value::Value,
+    Opt,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
@@ -28,21 +29,20 @@ impl ToString for Ptr {
     }
 }
 
-pub(crate) struct Heap {
+pub(crate) struct Heap<'opt> {
+    opt: &'opt Opt,
     heap: Vec<Obj>,
 
     /// Vector of heap indices, used during GC.
     gray_stack: Vec<Ptr>,
-
-    log_gc: bool,
 }
 
-impl Heap {
-    pub(crate) fn new(log_gc: bool) -> Self {
+impl<'opt> Heap<'opt> {
+    pub(crate) fn new(opt: &'opt Opt) -> Self {
         Self {
+            opt,
             heap: Vec::new(),
             gray_stack: Vec::new(),
-            log_gc,
         }
     }
 
@@ -51,7 +51,7 @@ impl Heap {
     }
 
     pub(crate) fn mark_value(&mut self, value: Value) {
-        if self.log_gc {
+        if self.opt.log_garbage_collection {
             eprintln!("    mark value ({})", value.to_string(self));
         }
         if let Value::ObjReference(ptr) = value {
@@ -60,7 +60,7 @@ impl Heap {
     }
 
     pub(crate) fn mark_object(&mut self, ptr: Ptr) {
-        if self.log_gc {
+        if self.opt.log_garbage_collection {
             eprintln!(
                 "{:3} mark object {}",
                 ptr.0,
@@ -84,7 +84,7 @@ impl Heap {
     }
 
     pub(crate) fn blacken_object(&mut self, ptr: Ptr) {
-        if self.log_gc {
+        if self.opt.log_garbage_collection {
             eprintln!("{} blacken {}", ptr.0, self.heap[ptr.0].to_string(self));
         }
 
@@ -132,9 +132,9 @@ impl Heap {
         }
     }
 
-    pub(crate) fn sweep_and_compact(&mut self, perturb: bool) -> HashMap<Ptr, Ptr> {
+    pub(crate) fn sweep_and_compact(&mut self) -> HashMap<Ptr, Ptr> {
         // Build the mapping from pre-sweep pointers to post-sweep pointers.
-        let delta: i32 = match (perturb, self.heap.get(0)) {
+        let delta: i32 = match (self.opt.stress_garbage_collector, self.heap.get(0)) {
             (true, Some(Obj::Dummy(_))) => -1,
             (true, Some(_)) => 1,
             _ => 0,
@@ -235,7 +235,7 @@ impl Heap {
     }
 }
 
-impl Rewrite for Heap {
+impl<'opt> Rewrite for Heap<'opt> {
     fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
         self.heap.rewrite(mapping);
     }
