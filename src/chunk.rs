@@ -1,3 +1,5 @@
+use std::ops::{Index, IndexMut};
+
 use crate::compiler::CompiledUpValue;
 use crate::heap::{Heap, Ptr};
 use crate::opcode::OpCode;
@@ -53,20 +55,12 @@ impl Chunk {
         self.code.len() - op.0 - 1
     }
 
-    pub(crate) fn opcode_at_mut(&mut self, op: OpCodeIndex) -> &mut OpCode {
-        &mut self.code[op.0]
-    }
-
     pub(crate) fn add_constant(&mut self, value: Value) -> Option<ConstantIndex> {
         self.constants.push(value);
         if self.constants.len() > 2_usize.pow(8) {
             return None;
         }
         Some(ConstantIndex::new(self.constants.len() - 1))
-    }
-
-    pub(crate) fn constant_at(&self, index: ConstantIndex) -> Value {
-        self.constants[index.0]
     }
 
     pub(crate) fn constants_iter<'s>(&'s self) -> impl Iterator<Item = &Value> + 's {
@@ -123,7 +117,7 @@ impl Chunk {
             OpCode::Call { arg_count } => byte_instruction("OP_CALL", *arg_count),
             OpCode::Closure { function, upvalues } => {
                 print!("{:16} {} ", "OP_CLOSURE", function.0);
-                print!("{}", self.constant_at(*function).to_string(heap));
+                print!("{}", self[*function].to_string(heap));
                 println!();
 
                 println!(
@@ -164,7 +158,29 @@ impl Chunk {
     }
 
     fn constant_instruction(&self, name: &str, heap: &Heap, index: ConstantIndex) {
-        println!("{:16} {}", name, self.constant_at(index).to_string(heap));
+        println!("{:16} {}", name, self[index].to_string(heap));
+    }
+}
+
+impl Index<OpCodeIndex> for Chunk {
+    type Output = OpCode;
+
+    fn index(&self, index: OpCodeIndex) -> &Self::Output {
+        &self.code[index.0]
+    }
+}
+
+impl IndexMut<OpCodeIndex> for Chunk {
+    fn index_mut(&mut self, index: OpCodeIndex) -> &mut Self::Output {
+        &mut self.code[index.0]
+    }
+}
+
+impl Index<ConstantIndex> for Chunk {
+    type Output = Value;
+
+    fn index(&self, index: ConstantIndex) -> &Self::Output {
+        &self.constants[index.0]
     }
 }
 

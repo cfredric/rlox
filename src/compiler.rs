@@ -201,12 +201,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         if jump_distance > MAX_JUMP_SIZE {
             self.error("Too much code to jump over.");
         }
-        match &mut self
-            .current_function_mut()
-            .function
-            .chunk
-            .opcode_at_mut(jump_index)
-        {
+        match &mut self.current_function_mut().function.chunk[jump_index] {
             OpCode::JumpIfFalse { distance } => {
                 *distance = jump_distance;
             }

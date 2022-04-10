@@ -202,7 +202,7 @@ impl<'opt> VM<'opt> {
 
     // Reads a constant from the constants table.
     fn read_constant(&self, index: ConstantIndex) -> Value {
-        self.function().chunk.constant_at(index)
+        self.function().chunk[index]
     }
 
     /// Reads a string from the constants table.
