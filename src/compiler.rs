@@ -71,7 +71,7 @@ impl<'source> FunctionState<'source> {
     }
 
     fn chunk_len(&self) -> usize {
-        self.function.chunk.code.len()
+        self.function.chunk.len()
     }
 }
 

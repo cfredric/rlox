@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::chunk::ConstantIndex;
+use crate::chunk::{ConstantIndex, OpCodeIndex};
 use crate::compiler::{compile, CompiledUpValue};
 use crate::heap::{Heap, Ptr};
 use crate::obj::{
@@ -197,7 +197,7 @@ impl<'opt> VM<'opt> {
     fn read_byte(&mut self) -> &OpCode {
         // NB: this reads by OpCodes, not by bytes. Differs from the book.
         self.frame_mut().ip += 1;
-        &self.function().chunk.code[self.frame().ip - 1]
+        &self.function().chunk[OpCodeIndex::new(self.frame().ip - 1)]
     }
 
     // Reads a constant from the constants table.
@@ -241,7 +241,11 @@ impl<'opt> VM<'opt> {
             let closure = self.heap.as_closure(frame.closure);
             let func = self.heap.as_function(closure.function);
             let instruction = frame.ip - 1;
-            eprintln!("[line {}] in {}", func.chunk.lines[instruction], func.name);
+            eprintln!(
+                "[line {}] in {}",
+                func.chunk.line_of(instruction),
+                func.name
+            );
         }
 
         self.stack.clear();

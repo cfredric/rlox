@@ -7,11 +7,16 @@ use crate::rewrite::Rewrite;
 use crate::to_string::ToString;
 use crate::value::Value;
 
+#[derive(Clone)]
+pub(crate) struct CodeEntry {
+    pub op: OpCode,
+    pub line: usize,
+}
+
 #[derive(Clone, Default)]
 pub(crate) struct Chunk {
-    pub(crate) code: Vec<OpCode>,
+    code: Vec<CodeEntry>,
     constants: Vec<Value>,
-    pub(crate) lines: Vec<usize>,
 }
 
 impl std::fmt::Debug for Chunk {
@@ -40,14 +45,27 @@ impl ConstantIndex {
 #[derive(Copy, Clone, Debug)]
 pub(crate) struct OpCodeIndex(usize);
 
+impl OpCodeIndex {
+    pub(crate) fn new(index: usize) -> Self {
+        Self(index)
+    }
+}
+
 impl Chunk {
     pub(crate) fn new() -> Self {
         Self::default()
     }
 
+    pub(crate) fn len(&self) -> usize {
+        self.code.len()
+    }
+
+    pub(crate) fn line_of(&self, index: usize) -> usize {
+        self.code[index].line
+    }
+
     pub(crate) fn write_chunk(&mut self, op: OpCode, line: usize) -> OpCodeIndex {
-        self.code.push(op);
-        self.lines.push(line);
+        self.code.push(CodeEntry { op, line });
         OpCodeIndex(self.code.len() - 1)
     }
 
@@ -78,13 +96,13 @@ impl Chunk {
     pub(crate) fn disassemble_instruction(&self, heap: &Heap, offset: usize) {
         print!("{:04} ", offset);
 
-        if offset > 0 && self.lines[offset] == self.lines[offset - 1] {
+        if offset > 0 && self.code[offset].line == self.code[offset - 1].line {
             print!("   | ");
         } else {
-            print!("{:04} ", self.lines[offset]);
+            print!("{:04} ", self.code[offset].line);
         }
 
-        match &self.code[offset] {
+        match &self.code[offset].op {
             OpCode::Return => simple_instruction("OP_RETURN"),
             OpCode::Constant { index } => self.constant_instruction("OP_CONSTANT", heap, *index),
             OpCode::Negate => simple_instruction("OP_NEGATE"),
@@ -166,13 +184,13 @@ impl Index<OpCodeIndex> for Chunk {
     type Output = OpCode;
 
     fn index(&self, index: OpCodeIndex) -> &Self::Output {
-        &self.code[index.0]
+        &self.code[index.0].op
     }
 }
 
 impl IndexMut<OpCodeIndex> for Chunk {
     fn index_mut(&mut self, index: OpCodeIndex) -> &mut Self::Output {
-        &mut self.code[index.0]
+        &mut self.code[index.0].op
     }
 }
 
