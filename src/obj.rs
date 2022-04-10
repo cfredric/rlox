@@ -97,16 +97,14 @@ impl ToString for Obj {
             Obj::String(s) => s.string.to_string(),
             Obj::Function(fun) => format!("<fn {}>", fun.name),
             Obj::NativeFn(_) => "<native fn>".to_string(),
-            Obj::Closure(fun) => heap.deref(fun.function).to_string(heap),
+            Obj::Closure(fun) => heap[fun.function].to_string(heap),
             Obj::OpenUpValue(_) => "<OpenUpValue>".to_string(),
             Obj::ClosedUpValue(_) => "<ClosedUpValue>".to_string(),
             Obj::Class(c) => c.name.to_string(),
             Obj::Instance(i) => {
                 format!("{} instance", heap.as_class(i.class).name)
             }
-            Obj::BoundMethod(b) => heap
-                .deref(heap.as_closure(b.closure).function)
-                .to_string(heap),
+            Obj::BoundMethod(b) => heap[heap.as_closure(b.closure).function].to_string(heap),
         }
     }
 }

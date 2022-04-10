@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    ops::{Index, IndexMut},
+};
 
 use crate::{heap::Ptr, rewrite::Rewrite, value::Value};
 
@@ -86,19 +89,25 @@ impl Stack {
         self.stack.is_empty()
     }
 
-    pub(crate) fn at(&self, slot: Slot) -> Value {
-        self.stack[slot.0]
-    }
-
-    pub(crate) fn assign(&mut self, slot: Slot, val: Value) {
-        self.stack[slot.0] = val;
-    }
-
     pub(crate) fn iter(&self) -> impl Iterator<Item = &Value> + '_ {
         self.stack.iter()
     }
     pub(crate) fn iter_from(&self, s: Slot) -> impl Iterator<Item = &Value> + '_ {
         self.stack.iter().skip(s.0)
+    }
+}
+
+impl Index<Slot> for Stack {
+    type Output = Value;
+
+    fn index(&self, slot: Slot) -> &Self::Output {
+        &self.stack[slot.0]
+    }
+}
+
+impl IndexMut<Slot> for Stack {
+    fn index_mut(&mut self, slot: Slot) -> &mut Self::Output {
+        &mut self.stack[slot.0]
     }
 }
 

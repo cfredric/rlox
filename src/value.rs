@@ -45,7 +45,7 @@ impl ToString for Value {
             Value::Double(d) => d.to_string(),
             Value::Nil => "nil".to_string(),
             Value::Bool(b) => b.to_string(),
-            Value::ObjReference(i) => heap.deref(*i).to_string(heap),
+            Value::ObjReference(i) => heap[*i].to_string(heap),
         }
     }
 }

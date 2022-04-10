@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    ops::{Index, IndexMut},
+};
 
 use crate::{
     obj::{Class, Closure, Dummy, Function, Instance, LoxString, Obj, Open},
@@ -25,7 +28,7 @@ impl Rewrite for Ptr {
 
 impl ToString for Ptr {
     fn to_string(&self, heap: &Heap) -> String {
-        heap.deref(*self).to_string(heap)
+        heap[*self].to_string(heap)
     }
 }
 
@@ -167,17 +170,6 @@ impl<'opt> Heap<'opt> {
         mapping
     }
 
-    pub(crate) fn deref(&self, ptr: Ptr) -> &Obj {
-        &self.heap[ptr.0]
-    }
-    pub(crate) fn deref_mut(&mut self, ptr: Ptr) -> &mut Obj {
-        &mut self.heap[ptr.0]
-    }
-
-    pub(crate) fn assign(&mut self, ptr: Ptr, obj: Obj) {
-        self.heap[ptr.0] = obj;
-    }
-
     pub(crate) fn push(&mut self, obj: Obj) -> Ptr {
         self.heap.push(obj);
         Ptr::new(self.heap.len() - 1)
@@ -232,6 +224,20 @@ impl<'opt> Heap<'opt> {
 
     pub(crate) fn len(&self) -> usize {
         self.heap.len()
+    }
+}
+
+impl<'opt> Index<Ptr> for Heap<'opt> {
+    type Output = Obj;
+
+    fn index(&self, ptr: Ptr) -> &Self::Output {
+        &self.heap[ptr.0]
+    }
+}
+
+impl<'opt> IndexMut<Ptr> for Heap<'opt> {
+    fn index_mut(&mut self, ptr: Ptr) -> &mut Self::Output {
+        &mut self.heap[ptr.0]
     }
 }
 
