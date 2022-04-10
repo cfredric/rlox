@@ -76,6 +76,18 @@ fn atoi_native<'opt>(vm: &mut VM<'opt>, ptr: &mut Ptr, args: &[Value]) -> Value 
     return Value::Nil;
 }
 
+fn itoa_native<'opt>(vm: &mut VM<'opt>, _pending: &mut Ptr, args: &[Value]) -> Value {
+    if let Some(Value::ObjReference(ptr)) = args.get(0) {
+        if let Some(LoxString { string, .. }) = vm.heap.deref(*ptr).as_string() {
+            if let Ok(d) = string.parse::<f64>() {
+                return Value::Double(d);
+            }
+        }
+    }
+
+    return Value::Nil;
+}
+
 impl<'opt> VM<'opt> {
     pub(crate) fn new(opt: &'opt Opt) -> Self {
         let mut vm = Self {
@@ -93,6 +105,7 @@ impl<'opt> VM<'opt> {
         vm.define_native("sleep", NativeFn::new(sleep_native));
         vm.define_native("now", NativeFn::new(now_native));
         vm.define_native("atoi", NativeFn::new(atoi_native));
+        vm.define_native("itoa", NativeFn::new(itoa_native));
 
         vm
     }

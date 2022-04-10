@@ -220,6 +220,10 @@ while (true) {
   print "is it fresh? " + boolToString(cruller.freshness());
   cruller.finish("asdf");
   print atoi(now() - start_now) + " milliseconds";
+  print itoa("3.7");
+  print itoa("3");
+  print itoa("whoops");
+  print itoa(1234);
 }
 sleep(1000);
 print clock() - start;
