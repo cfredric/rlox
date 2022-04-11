@@ -218,16 +218,12 @@ impl<'opt> VM<'opt> {
         Value::ObjReference(self.take_string(format!("{}{}", s, t), ()))
     }
 
-    fn binary_op<R>(
-        &mut self,
-        op: fn(f64, f64) -> R,
-        value_type: fn(R) -> Value,
-    ) -> Result<(), InterpretResult> {
+    fn binary_op(&mut self, op: fn(f64, f64) -> Value) -> Result<(), InterpretResult> {
         let b = self.stack.pop();
         let a = self.stack.pop();
         match (a, b) {
             (Value::Double(ad), Value::Double(bd)) => {
-                self.stack.push(value_type(op(ad, bd)));
+                self.stack.push(op(ad, bd));
                 Ok(())
             }
             _ => self.runtime_error("Operands must be numbers."),
@@ -639,9 +635,9 @@ impl<'opt> VM<'opt> {
                         _ => self.runtime_error("Operands must be two numbers or two strings.")?,
                     }
                 }
-                OpCode::Subtract => self.binary_op(|a, b| a - b, Value::Double)?,
-                OpCode::Multiply => self.binary_op(|a, b| a * b, Value::Double)?,
-                OpCode::Divide => self.binary_op(|a, b| a / b, Value::Double)?,
+                OpCode::Subtract => self.binary_op(|a, b| Value::Double(a - b))?,
+                OpCode::Multiply => self.binary_op(|a, b| Value::Double(a * b))?,
+                OpCode::Divide => self.binary_op(|a, b| Value::Double(a / b))?,
                 OpCode::Nil => self.stack.push(Value::Nil),
                 OpCode::Bool { value } => self.stack.push(Value::Bool(*value)),
                 OpCode::Not => {
@@ -653,8 +649,8 @@ impl<'opt> VM<'opt> {
                     let a = self.stack.pop();
                     self.stack.push(Value::Bool(Value::equal(a, b)));
                 }
-                OpCode::Greater => self.binary_op(|a, b| a > b, Value::Bool)?,
-                OpCode::Less => self.binary_op(|a, b| a < b, Value::Bool)?,
+                OpCode::Greater => self.binary_op(|a, b| Value::Bool(a > b))?,
+                OpCode::Less => self.binary_op(|a, b| Value::Bool(a < b))?,
                 OpCode::Print => {
                     println!("{}", self.stack.pop().to_string(&self.heap));
                 }
