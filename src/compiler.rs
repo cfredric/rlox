@@ -213,7 +213,12 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     }
 
     fn emit_loop(&mut self, loop_start: OpCodeIndex) {
-        let distance_to_loop_start = self.current_function().next_opcode_index() - loop_start + 1;
+        let distance_to_loop_start = self
+            .current_function()
+            .function
+            .chunk
+            .distance_from(loop_start)
+            + 2;
         if distance_to_loop_start > MAX_JUMP_SIZE {
             self.error("Loop body too large.");
         }
@@ -389,19 +394,21 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
             self.expression_statement();
         }
 
-        let mut loop_start = self.current_function().next_opcode_index();
-        let mut exit_jump = None;
-        if !self.maybe_consume(TokenType::Semicolon) {
+        let condition_and_increment_start = self.current_function().next_opcode_index();
+        let condition_failed_jump = if !self.maybe_consume(TokenType::Semicolon) {
             self.expression();
             self.consume(TokenType::Semicolon, "Expect ';' after loop condition.");
 
-            exit_jump = Some(self.emit_opcode(OpCode::JumpIfFalse {
+            let condition_failed_jump = self.emit_opcode(OpCode::JumpIfFalse {
                 distance: OpCodeDelta::zero(),
-            }));
+            });
             self.emit_opcode(OpCode::Pop);
-        }
+            Some(condition_failed_jump)
+        } else {
+            None
+        };
 
-        if !self.maybe_consume(TokenType::RightParen) {
+        let post_body_target = if !self.maybe_consume(TokenType::RightParen) {
             let body_jump = self.emit_opcode(OpCode::Jump {
                 distance: OpCodeDelta::zero(),
             });
@@ -410,16 +417,18 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
             self.emit_opcode(OpCode::Pop);
             self.consume(TokenType::RightParen, "Expect ')' after for clauses.");
 
-            self.emit_loop(loop_start);
-            loop_start = increment_start;
+            self.emit_loop(condition_and_increment_start);
             self.patch_jump(body_jump);
-        }
+            increment_start
+        } else {
+            condition_and_increment_start
+        };
 
         self.statement();
-        self.emit_loop(loop_start);
+        self.emit_loop(post_body_target);
 
-        if let Some(offset) = exit_jump {
-            self.patch_jump(offset);
+        if let Some(index) = condition_failed_jump {
+            self.patch_jump(index);
             self.emit_opcode(OpCode::Pop);
         }
 
@@ -448,7 +457,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     }
 
     fn while_statement(&mut self) {
-        let loop_start = self.current_function().next_opcode_index();
+        let condition_start = self.current_function().next_opcode_index();
         self.consume(TokenType::LeftParen, "Expect '(' after 'while'.");
         self.expression();
         self.consume(TokenType::RightParen, "Expect ')' after condition.");
@@ -458,7 +467,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         });
         self.emit_opcode(OpCode::Pop);
         self.statement();
-        self.emit_loop(loop_start);
+        self.emit_loop(condition_start);
 
         self.patch_jump(exit_jump);
         self.emit_opcode(OpCode::Pop);
