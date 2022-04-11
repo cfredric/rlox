@@ -49,19 +49,15 @@ impl OpCodeIndex {
     pub(crate) fn zero() -> Self {
         Self(0)
     }
-}
 
-impl Add<usize> for OpCodeIndex {
-    type Output = OpCodeIndex;
-
-    fn add(self, rhs: usize) -> Self::Output {
-        OpCodeIndex(self.0 + rhs)
+    pub(crate) fn increment(&mut self) {
+        self.0 += 1;
     }
 }
 
-impl AddAssign<usize> for OpCodeIndex {
-    fn add_assign(&mut self, rhs: usize) {
-        self.0 += rhs;
+impl AddAssign<OpCodeDelta> for OpCodeIndex {
+    fn add_assign(&mut self, rhs: OpCodeDelta) {
+        self.0 += rhs.0;
     }
 }
 
@@ -73,9 +69,38 @@ impl Sub<usize> for OpCodeIndex {
     }
 }
 
-impl SubAssign<usize> for OpCodeIndex {
-    fn sub_assign(&mut self, rhs: usize) {
-        self.0 -= rhs;
+impl Sub<OpCodeIndex> for OpCodeIndex {
+    type Output = OpCodeDelta;
+
+    fn sub(self, rhs: OpCodeIndex) -> Self::Output {
+        OpCodeDelta(self.0 - rhs.0)
+    }
+}
+
+impl SubAssign<OpCodeDelta> for OpCodeIndex {
+    fn sub_assign(&mut self, rhs: OpCodeDelta) {
+        self.0 -= rhs.0;
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialOrd, PartialEq)]
+pub(crate) struct OpCodeDelta(usize);
+
+impl OpCodeDelta {
+    pub(crate) fn zero() -> Self {
+        Self(0)
+    }
+
+    pub(crate) const fn bound(b: usize) -> Self {
+        Self(b)
+    }
+}
+
+impl Add<usize> for OpCodeDelta {
+    type Output = OpCodeDelta;
+
+    fn add(self, rhs: usize) -> Self::Output {
+        OpCodeDelta(self.0 + rhs)
     }
 }
 
@@ -84,8 +109,8 @@ impl Chunk {
         Self::default()
     }
 
-    pub(crate) fn next_opcode_index(&self) -> usize {
-        self.code.len()
+    pub(crate) fn next_opcode_index(&self) -> OpCodeIndex {
+        OpCodeIndex(self.code.len())
     }
 
     pub(crate) fn line_of(&self, index: OpCodeIndex) -> usize {
@@ -97,8 +122,8 @@ impl Chunk {
         OpCodeIndex(self.code.len() - 1)
     }
 
-    pub(crate) fn distance_from(&self, op: OpCodeIndex) -> usize {
-        self.code.len() - op.0 - 1
+    pub(crate) fn distance_from(&self, op: OpCodeIndex) -> OpCodeDelta {
+        OpCodeDelta(self.code.len() - op.0 - 1)
     }
 
     pub(crate) fn add_constant(&mut self, value: Value) -> Option<ConstantIndex> {
@@ -236,8 +261,8 @@ fn simple_instruction(name: &str) {
 fn byte_instruction(name: &str, slot: usize) {
     println!("{:16} {}", name, slot);
 }
-fn jump_instruction(name: &str, distance: usize, positive: bool) {
-    let distance = distance as isize * if positive { 1 } else { -1 };
+fn jump_instruction(name: &str, distance: OpCodeDelta, positive: bool) {
+    let distance = distance.0 as isize * if positive { 1 } else { -1 };
     println!("{:16} {}", name, distance);
 }
 

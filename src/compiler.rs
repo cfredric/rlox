@@ -1,7 +1,7 @@
 use const_format::formatcp;
 use std::iter::Peekable;
 
-use crate::chunk::{ConstantIndex, OpCodeIndex};
+use crate::chunk::{ConstantIndex, OpCodeDelta, OpCodeIndex};
 use crate::obj::{Function, UpValueIndex};
 use crate::opcode::OpCode;
 use crate::scanner::{ScanError, Token, TokenPayload, TokenType};
@@ -16,7 +16,7 @@ const MAX_NESTED_FUNCTIONS: usize = 10;
 const MAX_ARITY: usize = 255;
 const MAX_LOCALS: usize = 256;
 const MAX_UPVALUES: usize = 256;
-const MAX_JUMP_SIZE: usize = 2_usize.pow(16) - 1;
+const MAX_JUMP_SIZE: OpCodeDelta = OpCodeDelta::bound(2_usize.pow(16) - 1);
 
 const ARGS_ERROR_STR: &str = formatcp!("Can't have more than {} arguments.", MAX_ARITY);
 const PARAMS_ERROR_STR: &str = formatcp!("Can't have more than {} parameters.", MAX_ARITY);
@@ -70,7 +70,7 @@ impl<'source> FunctionState<'source> {
         &mut self.locals[offset.0]
     }
 
-    fn next_opcode_index(&self) -> usize {
+    fn next_opcode_index(&self) -> OpCodeIndex {
         self.function.chunk.next_opcode_index()
     }
 }
@@ -212,7 +212,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         }
     }
 
-    fn emit_loop(&mut self, loop_start: usize) {
+    fn emit_loop(&mut self, loop_start: OpCodeIndex) {
         let distance_to_loop_start = self.current_function().next_opcode_index() - loop_start + 1;
         if distance_to_loop_start > MAX_JUMP_SIZE {
             self.error("Loop body too large.");
@@ -395,12 +395,16 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
             self.expression();
             self.consume(TokenType::Semicolon, "Expect ';' after loop condition.");
 
-            exit_jump = Some(self.emit_opcode(OpCode::JumpIfFalse { distance: 0 }));
+            exit_jump = Some(self.emit_opcode(OpCode::JumpIfFalse {
+                distance: OpCodeDelta::zero(),
+            }));
             self.emit_opcode(OpCode::Pop);
         }
 
         if !self.maybe_consume(TokenType::RightParen) {
-            let body_jump = self.emit_opcode(OpCode::Jump { distance: 0 });
+            let body_jump = self.emit_opcode(OpCode::Jump {
+                distance: OpCodeDelta::zero(),
+            });
             let increment_start = self.current_function().next_opcode_index();
             self.expression();
             self.emit_opcode(OpCode::Pop);
@@ -427,10 +431,14 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         self.expression();
         self.consume(TokenType::RightParen, "Expect ')' after condition.");
 
-        let then_jump = self.emit_opcode(OpCode::JumpIfFalse { distance: 0 });
+        let then_jump = self.emit_opcode(OpCode::JumpIfFalse {
+            distance: OpCodeDelta::zero(),
+        });
         self.emit_opcode(OpCode::Pop);
         self.statement();
-        let else_jump = self.emit_opcode(OpCode::Jump { distance: 0 });
+        let else_jump = self.emit_opcode(OpCode::Jump {
+            distance: OpCodeDelta::zero(),
+        });
         self.patch_jump(then_jump);
         self.emit_opcode(OpCode::Pop);
         if self.maybe_consume(TokenType::Else) {
@@ -445,7 +453,9 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         self.expression();
         self.consume(TokenType::RightParen, "Expect ')' after condition.");
 
-        let exit_jump = self.emit_opcode(OpCode::JumpIfFalse { distance: 0 });
+        let exit_jump = self.emit_opcode(OpCode::JumpIfFalse {
+            distance: OpCodeDelta::zero(),
+        });
         self.emit_opcode(OpCode::Pop);
         self.statement();
         self.emit_loop(loop_start);
@@ -791,15 +801,21 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     }
 
     fn and(&mut self) {
-        let end_jump = self.emit_opcode(OpCode::JumpIfFalse { distance: 0 });
+        let end_jump = self.emit_opcode(OpCode::JumpIfFalse {
+            distance: OpCodeDelta::zero(),
+        });
         self.emit_opcode(OpCode::Pop);
         self.parse_precedence(Precedence::And);
         self.patch_jump(end_jump);
     }
 
     fn or(&mut self) {
-        let else_jump = self.emit_opcode(OpCode::JumpIfFalse { distance: 0 });
-        let end_jump = self.emit_opcode(OpCode::Jump { distance: 0 });
+        let else_jump = self.emit_opcode(OpCode::JumpIfFalse {
+            distance: OpCodeDelta::zero(),
+        });
+        let end_jump = self.emit_opcode(OpCode::Jump {
+            distance: OpCodeDelta::zero(),
+        });
 
         self.patch_jump(else_jump);
         self.emit_opcode(OpCode::Pop);

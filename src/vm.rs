@@ -196,7 +196,7 @@ impl<'opt> VM<'opt> {
 
     fn read_byte(&mut self) -> &OpCode {
         // NB: this reads by OpCodes, not by bytes. Differs from the book.
-        self.frame_mut().ip += 1;
+        self.frame_mut().ip.increment();
         &self.function().chunk[self.frame().ip - 1]
     }
 

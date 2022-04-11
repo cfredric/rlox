@@ -1,5 +1,8 @@
 use crate::{
-    chunk::ConstantIndex, compiler::CompiledUpValue, obj::UpValueIndex, stack::StackSlotOffset,
+    chunk::{ConstantIndex, OpCodeDelta},
+    compiler::CompiledUpValue,
+    obj::UpValueIndex,
+    stack::StackSlotOffset,
 };
 
 #[derive(Clone, Debug)]
@@ -28,13 +31,13 @@ pub(crate) enum OpCode {
     Pop,
     Print,
     JumpIfFalse {
-        distance: usize,
+        distance: OpCodeDelta,
     },
     Jump {
-        distance: usize,
+        distance: OpCodeDelta,
     },
     Loop {
-        distance_to_loop_start: usize,
+        distance_to_loop_start: OpCodeDelta,
     },
     Call {
         arg_count: usize,
