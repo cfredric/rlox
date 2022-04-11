@@ -70,8 +70,8 @@ impl<'source> FunctionState<'source> {
         &mut self.locals[offset.0]
     }
 
-    fn chunk_len(&self) -> usize {
-        self.function.chunk.len()
+    fn next_opcode_index(&self) -> usize {
+        self.function.chunk.next_opcode_index()
     }
 }
 
@@ -213,7 +213,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     }
 
     fn emit_loop(&mut self, loop_start: usize) {
-        let distance_to_loop_start = self.current_function().chunk_len() - loop_start + 1;
+        let distance_to_loop_start = self.current_function().next_opcode_index() - loop_start + 1;
         if distance_to_loop_start > MAX_JUMP_SIZE {
             self.error("Loop body too large.");
         }
@@ -389,7 +389,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
             self.expression_statement();
         }
 
-        let mut loop_start = self.current_function().chunk_len();
+        let mut loop_start = self.current_function().next_opcode_index();
         let mut exit_jump = None;
         if !self.maybe_consume(TokenType::Semicolon) {
             self.expression();
@@ -401,7 +401,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
 
         if !self.maybe_consume(TokenType::RightParen) {
             let body_jump = self.emit_opcode(OpCode::Jump { distance: 0 });
-            let increment_start = self.current_function().chunk_len();
+            let increment_start = self.current_function().next_opcode_index();
             self.expression();
             self.emit_opcode(OpCode::Pop);
             self.consume(TokenType::RightParen, "Expect ')' after for clauses.");
@@ -440,7 +440,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     }
 
     fn while_statement(&mut self) {
-        let loop_start = self.current_function().chunk_len();
+        let loop_start = self.current_function().next_opcode_index();
         self.consume(TokenType::LeftParen, "Expect '(' after 'while'.");
         self.expression();
         self.consume(TokenType::RightParen, "Expect ')' after condition.");

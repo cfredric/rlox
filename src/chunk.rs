@@ -1,4 +1,4 @@
-use std::ops::{AddAssign, Index, IndexMut, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Index, IndexMut, Sub, SubAssign};
 
 use crate::compiler::CompiledUpValue;
 use crate::heap::{Heap, Ptr};
@@ -51,6 +51,14 @@ impl OpCodeIndex {
     }
 }
 
+impl Add<usize> for OpCodeIndex {
+    type Output = OpCodeIndex;
+
+    fn add(self, rhs: usize) -> Self::Output {
+        OpCodeIndex(self.0 + rhs)
+    }
+}
+
 impl AddAssign<usize> for OpCodeIndex {
     fn add_assign(&mut self, rhs: usize) {
         self.0 += rhs;
@@ -76,7 +84,7 @@ impl Chunk {
         Self::default()
     }
 
-    pub(crate) fn len(&self) -> usize {
+    pub(crate) fn next_opcode_index(&self) -> usize {
         self.code.len()
     }
 
