@@ -703,10 +703,8 @@ impl<'opt> VM<'opt> {
                 OpCode::Jump { distance } => {
                     self.frame_mut().ip += *distance;
                 }
-                OpCode::Loop {
-                    distance_to_loop_start,
-                } => {
-                    self.frame_mut().ip -= *distance_to_loop_start;
+                OpCode::BackwardJump { distance } => {
+                    self.frame_mut().ip -= *distance;
                 }
                 OpCode::Call { arg_count } => {
                     self.call_value(self.stack.peek(*arg_count), *arg_count)?

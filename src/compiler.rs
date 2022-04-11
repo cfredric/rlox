@@ -212,19 +212,16 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         }
     }
 
-    fn emit_loop(&mut self, loop_start: OpCodeIndex) {
-        let distance_to_loop_start = self
-            .current_function()
-            .function
-            .chunk
-            .distance_from(loop_start)
-            + 2;
-        if distance_to_loop_start > MAX_JUMP_SIZE {
+    fn emit_backward_jump(&mut self, target: OpCodeIndex) {
+        // Add 2 to the distance: 1 for jumping over the BackwardJump
+        // instruction itself; 1 for jumping over the target instruction itself,
+        // since we're jumping backward and we're currently on the wrong side of
+        // it.
+        let distance = self.current_function().function.chunk.distance_from(target) + 2;
+        if distance > MAX_JUMP_SIZE {
             self.error("Loop body too large.");
         }
-        self.emit_opcode(OpCode::Loop {
-            distance_to_loop_start,
-        });
+        self.emit_opcode(OpCode::BackwardJump { distance });
     }
 
     fn emit_opcode(&mut self, opcode: OpCode) -> OpCodeIndex {
@@ -417,7 +414,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
             self.emit_opcode(OpCode::Pop);
             self.consume(TokenType::RightParen, "Expect ')' after for clauses.");
 
-            self.emit_loop(condition_and_increment_start);
+            self.emit_backward_jump(condition_and_increment_start);
             self.patch_jump(body_jump);
             increment_start
         } else {
@@ -425,7 +422,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         };
 
         self.statement();
-        self.emit_loop(post_body_target);
+        self.emit_backward_jump(post_body_target);
 
         if let Some(index) = condition_failed_jump {
             self.patch_jump(index);
@@ -467,7 +464,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         });
         self.emit_opcode(OpCode::Pop);
         self.statement();
-        self.emit_loop(condition_start);
+        self.emit_backward_jump(condition_start);
 
         self.patch_jump(exit_jump);
         self.emit_opcode(OpCode::Pop);

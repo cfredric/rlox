@@ -182,9 +182,7 @@ impl Chunk {
                 jump_instruction("OP_JUMP_IF_FALSE", *distance, true)
             }
             OpCode::Jump { distance } => jump_instruction("OP_JUMP", *distance, true),
-            OpCode::Loop {
-                distance_to_loop_start,
-            } => jump_instruction("OP_LOOP", *distance_to_loop_start, false),
+            OpCode::BackwardJump { distance } => jump_instruction("OP_BACK_JUMP", *distance, false),
             OpCode::Call { arg_count } => byte_instruction("OP_CALL", *arg_count),
             OpCode::Closure { function, upvalues } => {
                 print!("{:16} {} ", "OP_CLOSURE", function.0);

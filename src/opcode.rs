@@ -36,8 +36,8 @@ pub(crate) enum OpCode {
     Jump {
         distance: OpCodeDelta,
     },
-    Loop {
-        distance_to_loop_start: OpCodeDelta,
+    BackwardJump {
+        distance: OpCodeDelta,
     },
     Call {
         arg_count: usize,
