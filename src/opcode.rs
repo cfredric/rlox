@@ -36,9 +36,6 @@ pub(crate) enum OpCode {
     Jump {
         distance: OpCodeDelta,
     },
-    BackwardJump {
-        distance: OpCodeDelta,
-    },
     Call {
         arg_count: usize,
     },

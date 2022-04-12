@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use std::ops::{Add, AddAssign, Index, IndexMut, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Index, IndexMut, Neg, Sub, SubAssign};
 
 use crate::compiler::CompiledUpValue;
 use crate::heap::{Heap, Ptr};
@@ -60,11 +60,15 @@ impl OpCodeIndex {
     pub(crate) fn increment(&mut self) {
         self.0 += 1;
     }
+
+    pub(crate) fn distance_to(self, other: Self) -> OpCodeDelta {
+        other - self
+    }
 }
 
 impl AddAssign<OpCodeDelta> for OpCodeIndex {
     fn add_assign(&mut self, rhs: OpCodeDelta) {
-        self.0 += rhs.0;
+        self.0 = (self.0 as isize + rhs.0) as usize
     }
 }
 
@@ -80,34 +84,56 @@ impl Sub<OpCodeIndex> for OpCodeIndex {
     type Output = OpCodeDelta;
 
     fn sub(self, rhs: OpCodeIndex) -> Self::Output {
-        OpCodeDelta(self.0 - rhs.0)
+        OpCodeDelta(self.0 as isize - rhs.0 as isize)
     }
 }
 
 impl SubAssign<OpCodeDelta> for OpCodeIndex {
     fn sub_assign(&mut self, rhs: OpCodeDelta) {
-        self.0 -= rhs.0;
+        self.0 = (self.0 as isize - rhs.0) as usize;
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialOrd, PartialEq)]
-pub(crate) struct OpCodeDelta(usize);
+pub(crate) struct OpCodeDelta(isize);
 
 impl OpCodeDelta {
     pub(crate) fn zero() -> Self {
         Self(0)
     }
 
-    pub(crate) const fn bound(b: usize) -> Self {
+    pub(crate) const fn bound(b: isize) -> Self {
         Self(b)
     }
 }
 
-impl Add<usize> for OpCodeDelta {
+impl Display for OpCodeDelta {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl Neg for OpCodeDelta {
     type Output = OpCodeDelta;
 
-    fn add(self, rhs: usize) -> Self::Output {
+    fn neg(self) -> Self::Output {
+        OpCodeDelta(-self.0)
+    }
+}
+
+impl Add<isize> for OpCodeDelta {
+    type Output = OpCodeDelta;
+
+    fn add(self, rhs: isize) -> Self::Output {
         OpCodeDelta(self.0 + rhs)
+    }
+}
+
+impl Sub<isize> for OpCodeDelta {
+    type Output = OpCodeDelta;
+
+    fn sub(self, rhs: isize) -> Self::Output {
+        OpCodeDelta(self.0 - rhs)
     }
 }
 
@@ -119,6 +145,9 @@ impl Chunk {
     pub(crate) fn next_opcode_index(&self) -> OpCodeIndex {
         OpCodeIndex(self.code.len())
     }
+    pub(crate) fn last_opcode_index(&self) -> OpCodeIndex {
+        self.next_opcode_index() - 1
+    }
 
     pub(crate) fn line_of(&self, index: OpCodeIndex) -> usize {
         self.code[index.0].line
@@ -126,11 +155,7 @@ impl Chunk {
 
     pub(crate) fn write_chunk(&mut self, op: OpCode, line: usize) -> OpCodeIndex {
         self.code.push(CodeEntry { op, line });
-        OpCodeIndex(self.code.len() - 1)
-    }
-
-    pub(crate) fn distance_from(&self, op: OpCodeIndex) -> OpCodeDelta {
-        OpCodeDelta(self.code.len() - op.0 - 1)
+        self.last_opcode_index()
     }
 
     pub(crate) fn add_constant(&mut self, value: Value) -> Option<ConstantIndex> {
@@ -185,11 +210,8 @@ impl Chunk {
             OpCode::SetGlobal(i) => self.constant_instruction("OP_SET_GLOBAL", heap, *i),
             OpCode::GetLocal(i) => byte_instruction("OP_GET_LOCAL", *i),
             OpCode::SetLocal(i) => byte_instruction("OP_SET_LOCAL", *i),
-            OpCode::JumpIfFalse { distance } => {
-                jump_instruction("OP_JUMP_IF_FALSE", *distance, true)
-            }
-            OpCode::Jump { distance } => jump_instruction("OP_JUMP", *distance, true),
-            OpCode::BackwardJump { distance } => jump_instruction("OP_BACK_JUMP", *distance, false),
+            OpCode::JumpIfFalse { distance } => jump_instruction("OP_JUMP_IF_FALSE", *distance),
+            OpCode::Jump { distance } => jump_instruction("OP_JUMP", *distance),
             OpCode::Call { arg_count } => byte_instruction("OP_CALL", *arg_count),
             OpCode::Closure { function, upvalues } => {
                 print!("{:16} {} ", "OP_CLOSURE", function.0);
@@ -266,8 +288,7 @@ fn simple_instruction(name: &str) {
 fn byte_instruction<D: Display>(name: &str, d: D) {
     println!("{:16} {}", name, d);
 }
-fn jump_instruction(name: &str, distance: OpCodeDelta, positive: bool) {
-    let distance = distance.0 as isize * if positive { 1 } else { -1 };
+fn jump_instruction(name: &str, distance: OpCodeDelta) {
     println!("{:16} {}", name, distance);
 }
 

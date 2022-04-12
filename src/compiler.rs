@@ -16,7 +16,7 @@ const MAX_NESTED_FUNCTIONS: usize = 10;
 const MAX_ARITY: usize = 255;
 const MAX_LOCALS: usize = 256;
 const MAX_UPVALUES: usize = 256;
-const MAX_JUMP_SIZE: OpCodeDelta = OpCodeDelta::bound(2_usize.pow(16) - 1);
+const MAX_JUMP_SIZE: OpCodeDelta = OpCodeDelta::bound(2_isize.pow(16) - 1);
 
 const ARGS_ERROR_STR: &str = formatcp!("Can't have more than {} arguments.", MAX_ARITY);
 const PARAMS_ERROR_STR: &str = formatcp!("Can't have more than {} parameters.", MAX_ARITY);
@@ -193,11 +193,8 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     }
 
     fn patch_jump(&mut self, jump_index: OpCodeIndex) {
-        let jump_distance = self
-            .current_function()
-            .function
-            .chunk
-            .distance_from(jump_index);
+        let jump_distance =
+            jump_index.distance_to(self.current_function().function.chunk.last_opcode_index());
         if jump_distance > MAX_JUMP_SIZE {
             self.error("Too much code to jump over.");
         }
@@ -217,11 +214,18 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         // instruction itself; 1 for jumping over the target instruction itself,
         // since we're jumping backward and we're currently on the wrong side of
         // it.
-        let distance = self.current_function().function.chunk.distance_from(target) + 2;
-        if distance > MAX_JUMP_SIZE {
+        let distance = self
+            .current_function()
+            .function
+            .chunk
+            .last_opcode_index()
+            .distance_to(target)
+            - 2;
+        debug_assert!(distance < OpCodeDelta::zero());
+        if distance < -MAX_JUMP_SIZE {
             self.error("Loop body too large.");
         }
-        self.emit_opcode(OpCode::BackwardJump { distance });
+        self.emit_opcode(OpCode::Jump { distance });
     }
 
     fn emit_opcode(&mut self, opcode: OpCode) -> OpCodeIndex {
