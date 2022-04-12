@@ -210,8 +210,8 @@ impl Chunk {
             OpCode::SetGlobal(i) => self.constant_instruction("OP_SET_GLOBAL", heap, *i),
             OpCode::GetLocal(i) => byte_instruction("OP_GET_LOCAL", *i),
             OpCode::SetLocal(i) => byte_instruction("OP_SET_LOCAL", *i),
-            OpCode::JumpIfFalse { distance } => jump_instruction("OP_JUMP_IF_FALSE", *distance),
-            OpCode::Jump { distance } => jump_instruction("OP_JUMP", *distance),
+            OpCode::JumpIfFalse { distance } => byte_instruction("OP_JUMP_IF_FALSE", *distance),
+            OpCode::Jump { distance } => byte_instruction("OP_JUMP", *distance),
             OpCode::Call { arg_count } => byte_instruction("OP_CALL", *arg_count),
             OpCode::Closure { function, upvalues } => {
                 print!("{:16} {} ", "OP_CLOSURE", function.0);
@@ -287,9 +287,6 @@ fn simple_instruction(name: &str) {
 }
 fn byte_instruction<D: Display>(name: &str, d: D) {
     println!("{:16} {}", name, d);
-}
-fn jump_instruction(name: &str, distance: OpCodeDelta) {
-    println!("{:16} {}", name, distance);
 }
 
 fn invoke_instruction(name: &str, constant: ConstantIndex, arg_count: usize) {
