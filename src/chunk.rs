@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::ops::{Add, AddAssign, Index, IndexMut, Sub, SubAssign};
 
 use crate::compiler::CompiledUpValue;
@@ -39,6 +40,12 @@ impl ConstantIndex {
 
     pub(crate) fn special() -> Self {
         Self(0)
+    }
+}
+
+impl Display for ConstantIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }
 
@@ -176,8 +183,8 @@ impl Chunk {
             OpCode::DefineGlobal(i) => self.constant_instruction("OP_DEFINE_GLOBAL", heap, *i),
             OpCode::GetGlobal(i) => self.constant_instruction("OP_GET_GLOBAL", heap, *i),
             OpCode::SetGlobal(i) => self.constant_instruction("OP_SET_GLOBAL", heap, *i),
-            OpCode::GetLocal(i) => byte_instruction("OP_GET_LOCAL", i.0),
-            OpCode::SetLocal(i) => byte_instruction("OP_SET_LOCAL", i.0),
+            OpCode::GetLocal(i) => byte_instruction("OP_GET_LOCAL", *i),
+            OpCode::SetLocal(i) => byte_instruction("OP_SET_LOCAL", *i),
             OpCode::JumpIfFalse { distance } => {
                 jump_instruction("OP_JUMP_IF_FALSE", *distance, true)
             }
@@ -203,8 +210,8 @@ impl Chunk {
                         .collect::<String>()
                 );
             }
-            OpCode::GetUpvalue(index) => byte_instruction("OP_GET_UPVALUE", index.0),
-            OpCode::SetUpvalue(index) => byte_instruction("OP_SET_UPVALUE", index.0),
+            OpCode::GetUpvalue(index) => byte_instruction("OP_GET_UPVALUE", index),
+            OpCode::SetUpvalue(index) => byte_instruction("OP_SET_UPVALUE", index),
             OpCode::CloseUpvalue => simple_instruction("OP_CLOSE_UPVALUE"),
             OpCode::Class { name } => self.constant_instruction("OP_CLASS", heap, *name),
             OpCode::GetProperty { name } => {
@@ -256,8 +263,8 @@ impl Index<ConstantIndex> for Chunk {
 fn simple_instruction(name: &str) {
     println!("{}", name);
 }
-fn byte_instruction(name: &str, slot: usize) {
-    println!("{:16} {}", name, slot);
+fn byte_instruction<D: Display>(name: &str, d: D) {
+    println!("{:16} {}", name, d);
 }
 fn jump_instruction(name: &str, distance: OpCodeDelta, positive: bool) {
     let distance = distance.0 as isize * if positive { 1 } else { -1 };
@@ -265,7 +272,7 @@ fn jump_instruction(name: &str, distance: OpCodeDelta, positive: bool) {
 }
 
 fn invoke_instruction(name: &str, constant: ConstantIndex, arg_count: usize) {
-    println!("{:16} ({} args) {}", name, arg_count, constant.0)
+    println!("{:16} ({} args) {}", name, arg_count, constant)
 }
 
 impl Rewrite for Chunk {
