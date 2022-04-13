@@ -49,7 +49,7 @@ impl Display for ConstantIndex {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(crate) struct OpCodeIndex(usize);
 
 impl OpCodeIndex {
@@ -63,6 +63,12 @@ impl OpCodeIndex {
 
     pub(crate) fn distance_to(self, other: Self) -> OpCodeDelta {
         other - self
+    }
+}
+
+impl Display for OpCodeIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }
 
@@ -173,46 +179,53 @@ impl Chunk {
     pub(crate) fn disassemble_chunk(&self, name: &str, heap: &Heap) {
         println!("== {} ==", name);
 
-        for offset in 0..self.code.len() {
-            self.disassemble_instruction(heap, OpCodeIndex(offset));
+        let mut prev_line = None;
+        for index in 0..self.code.len() {
+            let index = OpCodeIndex(index);
+            print!("{:04} ", index);
+
+            let current_line = self.line_of(index);
+            if prev_line == Some(current_line) {
+                print!("   | ");
+            } else {
+                print!("{:04} ", self.line_of(index));
+            }
+            self.disassemble_instruction(heap, index);
+            prev_line = Some(current_line);
         }
     }
 
     pub(crate) fn disassemble_instruction(&self, heap: &Heap, index: OpCodeIndex) {
-        print!("{:04} ", index.0);
-
-        if index.0 > 0 && self.line_of(index) == self.line_of(index - 1) {
-            print!("   | ");
-        } else {
-            print!("{:04} ", self.line_of(index));
-        }
-
         match &self[index] {
-            OpCode::Return => simple_instruction("OP_RETURN"),
-            OpCode::Constant { index } => self.constant_instruction("OP_CONSTANT", heap, *index),
-            OpCode::Negate => simple_instruction("OP_NEGATE"),
-            OpCode::Add => simple_instruction("OP_ADD"),
-            OpCode::Subtract => simple_instruction("OP_SUBTRACT"),
-            OpCode::Multiply => simple_instruction("OP_MULTIPLY"),
-            OpCode::Divide => simple_instruction("OP_DIVIDE"),
-            OpCode::Nil => simple_instruction("OP_NIL"),
-            OpCode::Bool { value } => {
-                simple_instruction(if *value { "OP_TRUE" } else { "OP_FALSE" })
+            OpCode::Return => println!("OP_RETURN"),
+            OpCode::Constant { index } => {
+                unary_instruction("OP_CONSTANT", self[*index].to_string(heap))
             }
-            OpCode::Not => simple_instruction("OP_NOT"),
-            OpCode::Equal => simple_instruction("OP_EQUAL"),
-            OpCode::Greater => simple_instruction("OP_GREATER"),
-            OpCode::Less => simple_instruction("OP_LESS"),
-            OpCode::Print => simple_instruction("OP_PRINT"),
-            OpCode::Pop => simple_instruction("OP_POP"),
-            OpCode::DefineGlobal(i) => self.constant_instruction("OP_DEFINE_GLOBAL", heap, *i),
-            OpCode::GetGlobal(i) => self.constant_instruction("OP_GET_GLOBAL", heap, *i),
-            OpCode::SetGlobal(i) => self.constant_instruction("OP_SET_GLOBAL", heap, *i),
-            OpCode::GetLocal(i) => byte_instruction("OP_GET_LOCAL", *i),
-            OpCode::SetLocal(i) => byte_instruction("OP_SET_LOCAL", *i),
-            OpCode::JumpIfFalse { distance } => byte_instruction("OP_JUMP_IF_FALSE", *distance),
-            OpCode::Jump { distance } => byte_instruction("OP_JUMP", *distance),
-            OpCode::Call { arg_count } => byte_instruction("OP_CALL", *arg_count),
+            OpCode::Negate => println!("OP_NEGATE"),
+            OpCode::Add => println!("OP_ADD"),
+            OpCode::Subtract => println!("OP_SUBTRACT"),
+            OpCode::Multiply => println!("OP_MULTIPLY"),
+            OpCode::Divide => println!("OP_DIVIDE"),
+            OpCode::Nil => println!("OP_NIL"),
+            OpCode::Bool { value } => {
+                println!("{}", if *value { "OP_TRUE" } else { "OP_FALSE" })
+            }
+            OpCode::Not => println!("OP_NOT"),
+            OpCode::Equal => println!("OP_EQUAL"),
+            OpCode::Greater => println!("OP_GREATER"),
+            OpCode::Less => println!("OP_LESS"),
+            OpCode::Print => println!("OP_PRINT"),
+            OpCode::Pop => println!("OP_POP"),
+            OpCode::DefineGlobal(i) => {
+                unary_instruction("OP_DEFINE_GLOBAL", self[*i].to_string(heap))
+            }
+            OpCode::GetGlobal(i) => unary_instruction("OP_GET_GLOBAL", self[*i].to_string(heap)),
+            OpCode::SetGlobal(i) => unary_instruction("OP_SET_GLOBAL", self[*i].to_string(heap)),
+            OpCode::GetLocal(i) => unary_instruction("OP_GET_LOCAL", *i),
+            OpCode::SetLocal(i) => unary_instruction("OP_SET_LOCAL", *i),
+            OpCode::JumpIfFalse { distance } => unary_instruction("OP_JUMP_IF_FALSE", *distance),
+            OpCode::Jump { distance } => unary_instruction("OP_JUMP", *distance),
+            OpCode::Call { arg_count } => unary_instruction("OP_CALL", *arg_count),
             OpCode::Closure { function, upvalues } => {
                 print!("{:16} {} ", "OP_CLOSURE", function.0);
                 print!("{}", self[*function].to_string(heap));
@@ -232,31 +245,29 @@ impl Chunk {
                         .collect::<String>()
                 );
             }
-            OpCode::GetUpvalue(index) => byte_instruction("OP_GET_UPVALUE", index),
-            OpCode::SetUpvalue(index) => byte_instruction("OP_SET_UPVALUE", index),
-            OpCode::CloseUpvalue => simple_instruction("OP_CLOSE_UPVALUE"),
-            OpCode::Class { name } => self.constant_instruction("OP_CLASS", heap, *name),
+            OpCode::GetUpvalue(index) => unary_instruction("OP_GET_UPVALUE", index),
+            OpCode::SetUpvalue(index) => unary_instruction("OP_SET_UPVALUE", index),
+            OpCode::CloseUpvalue => println!("OP_CLOSE_UPVALUE"),
+            OpCode::Class { name } => unary_instruction("OP_CLASS", self[*name].to_string(heap)),
             OpCode::GetProperty { name } => {
-                self.constant_instruction("OP_GET_PROPERTY", heap, *name)
+                unary_instruction("OP_GET_PROPERTY", self[*name].to_string(heap))
             }
             OpCode::SetProperty { name } => {
-                self.constant_instruction("OP_SET_PROPERTY", heap, *name)
+                unary_instruction("OP_SET_PROPERTY", self[*name].to_string(heap))
             }
-            OpCode::Method { name } => self.constant_instruction("OP_METHOD", heap, *name),
+            OpCode::Method { name } => unary_instruction("OP_METHOD", self[*name].to_string(heap)),
             OpCode::Invoke {
                 method_name,
                 arg_count,
             } => invoke_instruction("OP_INVOKE", *method_name, *arg_count),
-            OpCode::Inherit => simple_instruction("OP_INHERIT"),
-            OpCode::GetSuper { method } => self.constant_instruction("OP_GET_SUPER", heap, *method),
+            OpCode::Inherit => println!("OP_INHERIT"),
+            OpCode::GetSuper { method } => {
+                unary_instruction("OP_GET_SUPER", self[*method].to_string(heap))
+            }
             OpCode::SuperInvoke { method, arg_count } => {
                 invoke_instruction("OP_SUPER_INVOKE", *method, *arg_count);
             }
         }
-    }
-
-    fn constant_instruction(&self, name: &str, heap: &Heap, index: ConstantIndex) {
-        println!("{:16} {}", name, self[index].to_string(heap));
     }
 }
 
@@ -282,13 +293,9 @@ impl Index<ConstantIndex> for Chunk {
     }
 }
 
-fn simple_instruction(name: &str) {
-    println!("{}", name);
-}
-fn byte_instruction<D: Display>(name: &str, d: D) {
+fn unary_instruction<D: Display>(name: &str, d: D) {
     println!("{:16} {}", name, d);
 }
-
 fn invoke_instruction(name: &str, constant: ConstantIndex, arg_count: usize) {
     println!("{:16} ({} args) {}", name, arg_count, constant)
 }
