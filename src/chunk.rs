@@ -159,12 +159,12 @@ impl Chunk {
         self.code[index.0].line
     }
 
-    pub(crate) fn write_chunk(&mut self, op: OpCode, line: usize) -> OpCodeIndex {
+    pub(crate) fn append_opcode(&mut self, op: OpCode, line: usize) -> OpCodeIndex {
         self.code.push(CodeEntry { op, line });
         self.last_opcode_index()
     }
 
-    pub(crate) fn add_constant(&mut self, value: Value) -> Option<ConstantIndex> {
+    pub(crate) fn append_constant(&mut self, value: Value) -> Option<ConstantIndex> {
         self.constants.push(value);
         if self.constants.len() > 2_usize.pow(8) {
             return None;

@@ -233,7 +233,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         self.current_function_mut()
             .function
             .chunk
-            .write_chunk(opcode, line)
+            .append_opcode(opcode, line)
     }
 
     fn end_compiler(&mut self) -> Option<(Function, Vec<CompiledUpValue>)> {
@@ -996,7 +996,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
             .current_function_mut()
             .function
             .chunk
-            .add_constant(value)
+            .append_constant(value)
         {
             None => {
                 self.error("Too many constants in one chunk.");
