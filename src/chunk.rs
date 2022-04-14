@@ -231,7 +231,7 @@ impl Chunk {
                 print!("{}", self[*function].to_string(heap));
                 println!();
 
-                println!(
+                print!(
                     "{}",
                     upvalues
                         .iter()
@@ -240,7 +240,7 @@ impl Chunk {
                                 CompiledUpValue::Local { index } => ("local", index.0),
                                 CompiledUpValue::Nonlocal { index } => ("upvalue", index.0),
                             };
-                            format!("        |   {} {}", ty, index)
+                            format!("        |   {} {}\n", ty, index)
                         })
                         .collect::<String>()
                 );
