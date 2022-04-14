@@ -227,16 +227,19 @@ impl Chunk {
             OpCode::Jump { distance } => unary_instruction("OP_JUMP", *distance),
             OpCode::Call { arg_count } => unary_instruction("OP_CALL", *arg_count),
             OpCode::Closure { function, upvalues } => {
-                print!("{:16} {} ", "OP_CLOSURE", function.0);
-                print!("{}", self[*function].to_string(heap));
-                println!();
+                println!(
+                    "{:16} {} {}",
+                    "OP_CLOSURE",
+                    function.0,
+                    self[*function].to_string(heap)
+                );
 
                 for upvalue in upvalues {
                     let (ty, index) = match upvalue {
                         CompiledUpValue::Local { index } => ("local", index.0),
                         CompiledUpValue::Nonlocal { index } => ("upvalue", index.0),
                     };
-                    println!("        |   {} {}", ty, index)
+                    println!("        | {:7} {}", ty, index)
                 }
             }
             OpCode::GetUpvalue(index) => unary_instruction("OP_GET_UPVALUE", index),
