@@ -1,5 +1,6 @@
 use const_format::formatcp;
 use std::iter::Peekable;
+use std::ops::{Index, IndexMut};
 
 use crate::chunk::{ConstantIndex, OpCodeDelta, OpCodeIndex};
 use crate::obj::{Function, UpValueIndex};
@@ -65,13 +66,19 @@ impl<'source> FunctionState<'source> {
             upvalues: Vec::new(),
         }
     }
+}
 
-    fn local_at_mut(&mut self, offset: StackSlotOffset) -> &mut Local<'source> {
-        &mut self.locals[offset.0]
+impl<'source> Index<StackSlotOffset> for FunctionState<'source> {
+    type Output = Local<'source>;
+
+    fn index(&self, index: StackSlotOffset) -> &Self::Output {
+        &self.locals[index.0]
     }
+}
 
-    fn next_opcode_index(&self) -> OpCodeIndex {
-        self.function.chunk.next_opcode_index()
+impl<'source> IndexMut<StackSlotOffset> for FunctionState<'source> {
+    fn index_mut(&mut self, index: StackSlotOffset) -> &mut Self::Output {
+        &mut self.locals[index.0]
     }
 }
 
@@ -175,21 +182,12 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     /// the current token. If the next token does not have the expected type,
     /// does nothing.
     fn maybe_consume(&mut self, ty: TokenType) -> bool {
-        if self.next_token_is(ty) {
+        if self.next_token().ty == ty {
             self.advance();
             true
         } else {
             false
         }
-    }
-
-    fn next_token_is(&mut self, ty: TokenType) -> bool {
-        self.next_token().ty == ty
-    }
-
-    fn emit_opcodes(&mut self, a: OpCode, b: OpCode) {
-        self.emit_opcode(a);
-        self.emit_opcode(b);
     }
 
     fn patch_jump(&mut self, jump_index: OpCodeIndex) {
@@ -324,7 +322,9 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
 
         self.named_variable(name, false);
         self.consume(TokenType::LeftBrace, "Expect '{' before class body.");
-        while !self.next_token_is(TokenType::RightBrace) && !self.next_token_is(TokenType::Eof) {
+        while self.next_token().ty != TokenType::RightBrace
+            && self.next_token().ty != TokenType::Eof
+        {
             self.method();
         }
         self.consume(TokenType::RightBrace, "Expect '}' after class body.");
@@ -395,7 +395,8 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
             self.expression_statement();
         }
 
-        let condition_and_increment_start = self.current_function().next_opcode_index();
+        let condition_and_increment_start =
+            self.current_function().function.chunk.next_opcode_index();
         let condition_failed_jump = if !self.maybe_consume(TokenType::Semicolon) {
             self.expression();
             self.consume(TokenType::Semicolon, "Expect ';' after loop condition.");
@@ -413,7 +414,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
             let body_jump = self.emit_opcode(OpCode::Jump {
                 distance: OpCodeDelta::zero(),
             });
-            let increment_start = self.current_function().next_opcode_index();
+            let increment_start = self.current_function().function.chunk.next_opcode_index();
             self.expression();
             self.emit_opcode(OpCode::Pop);
             self.consume(TokenType::RightParen, "Expect ')' after for clauses.");
@@ -458,7 +459,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     }
 
     fn while_statement(&mut self) {
-        let condition_start = self.current_function().next_opcode_index();
+        let condition_start = self.current_function().function.chunk.next_opcode_index();
         self.consume(TokenType::LeftParen, "Expect '(' after 'while'.");
         self.expression();
         self.consume(TokenType::RightParen, "Expect ')' after condition.");
@@ -480,7 +481,9 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
             return;
         }
         self.block_depth += 1;
-        while !self.next_token_is(TokenType::RightBrace) && !self.next_token_is(TokenType::Eof) {
+        while self.next_token().ty != TokenType::RightBrace
+            && self.next_token().ty != TokenType::Eof
+        {
             self.declaration();
         }
 
@@ -501,7 +504,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         self.begin_scope();
 
         self.consume(TokenType::LeftParen, "Expect '(' after function name.");
-        if !self.next_token_is(TokenType::RightParen) {
+        if self.next_token().ty != TokenType::RightParen {
             loop {
                 self.current_function_mut().function.arity += 1;
                 if self.current_function().function.arity > MAX_ARITY {
@@ -546,11 +549,14 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         let method_name = self.consume_identifier("Expect method name.");
         let name = self.identifier_constant(method_name);
 
-        let mut ty = FunctionType::Method;
-        if method_name == "init" {
-            ty = FunctionType::Initializer;
-        }
-        self.function(ty, method_name);
+        self.function(
+            if method_name == "init" {
+                FunctionType::Initializer
+            } else {
+                FunctionType::Method
+            },
+            method_name,
+        );
 
         self.emit_opcode(OpCode::Method { name });
     }
@@ -665,18 +671,27 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
         self.parse_precedence(precedence.plus_one());
 
         match ty {
-            TokenType::BangEqual => self.emit_opcodes(OpCode::Equal, OpCode::Not),
+            TokenType::BangEqual => {
+                self.emit_opcode(OpCode::Equal);
+                self.emit_opcode(OpCode::Not);
+            }
             TokenType::EqualEqual => {
                 self.emit_opcode(OpCode::Equal);
             }
             TokenType::Greater => {
                 self.emit_opcode(OpCode::Greater);
             }
-            TokenType::GreaterEqual => self.emit_opcodes(OpCode::Less, OpCode::Not),
+            TokenType::GreaterEqual => {
+                self.emit_opcode(OpCode::Less);
+                self.emit_opcode(OpCode::Not);
+            }
             TokenType::Less => {
                 self.emit_opcode(OpCode::Less);
             }
-            TokenType::LessEqual => self.emit_opcodes(OpCode::Greater, OpCode::Not),
+            TokenType::LessEqual => {
+                self.emit_opcode(OpCode::Greater);
+                self.emit_opcode(OpCode::Not);
+            }
             TokenType::Plus => {
                 self.emit_opcode(OpCode::Add);
             }
@@ -792,7 +807,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
 
     fn argument_list(&mut self) -> usize {
         let mut arg_count = 0;
-        if !self.next_token_is(TokenType::RightParen) {
+        if self.next_token().ty != TokenType::RightParen {
             loop {
                 self.expression();
                 arg_count += 1;
@@ -876,7 +891,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     }
 
     fn this(&mut self) {
-        if self.class_compilers.last().is_some() {
+        if !self.class_compilers.is_empty() {
             self.variable("this", false);
         } else {
             self.error("Can't use 'this' outside of a class.");
@@ -885,7 +900,9 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
 
     fn super_(&mut self) {
         match self.class_compilers.last() {
-            Some(c) if !c.has_superclass => {
+            Some(ClassState {
+                has_superclass: false,
+            }) => {
                 self.error("Can't use 'super' in a class with no superclass.");
             }
             Some(_) => {}
@@ -971,7 +988,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
 
         let enclosing = state_index - 1;
         if let Some(local) = self.resolve_local(enclosing, name) {
-            self.functions[enclosing].local_at_mut(local).is_captured = true;
+            self.functions[enclosing][local].is_captured = true;
             Some(self.add_upvalue(state_index, CompiledUpValue::Local { index: local }))
         } else {
             self.resolve_upvalue(enclosing, name).map(|upvalue| {
