@@ -2,6 +2,7 @@ use enum_as_inner::EnumAsInner;
 
 pub(crate) struct Scanner<'source> {
     source: &'source [u8],
+    // The next byte to be consumed.
     current: usize,
     line: usize,
 }
@@ -22,7 +23,6 @@ impl<'source> Scanner<'source> {
     pub(crate) fn new(source: &'source str) -> Self {
         Scanner {
             source: source.as_bytes(),
-            // Starts at 0. The next byte to be consumed.
             current: 0,
             line: 1,
         }
