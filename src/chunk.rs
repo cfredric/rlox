@@ -231,19 +231,13 @@ impl Chunk {
                 print!("{}", self[*function].to_string(heap));
                 println!();
 
-                print!(
-                    "{}",
-                    upvalues
-                        .iter()
-                        .map(|upvalue| {
-                            let (ty, index) = match upvalue {
-                                CompiledUpValue::Local { index } => ("local", index.0),
-                                CompiledUpValue::Nonlocal { index } => ("upvalue", index.0),
-                            };
-                            format!("        |   {} {}\n", ty, index)
-                        })
-                        .collect::<String>()
-                );
+                for upvalue in upvalues {
+                    let (ty, index) = match upvalue {
+                        CompiledUpValue::Local { index } => ("local", index.0),
+                        CompiledUpValue::Nonlocal { index } => ("upvalue", index.0),
+                    };
+                    println!("        |   {} {}", ty, index)
+                }
             }
             OpCode::GetUpvalue(index) => unary_instruction("OP_GET_UPVALUE", index),
             OpCode::SetUpvalue(index) => unary_instruction("OP_SET_UPVALUE", index),
