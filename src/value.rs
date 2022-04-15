@@ -1,11 +1,11 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
 use enum_as_inner::EnumAsInner;
 
 use crate::{
     heap::{Heap, Ptr},
+    obj::ObjWithContext,
     rewrite::Rewrite,
-    to_string::ToString,
 };
 
 #[derive(Copy, Clone, Debug, EnumAsInner)]
@@ -39,21 +39,34 @@ impl Value {
     }
 }
 
-impl ToString for Value {
-    fn to_string(&self, heap: &Heap) -> String {
-        match self {
-            Value::Double(d) => d.to_string(),
-            Value::Nil => "nil".to_string(),
-            Value::Bool(b) => b.to_string(),
-            Value::ObjReference(i) => heap[*i].to_string(heap),
-        }
-    }
-}
-
 impl Rewrite for Value {
     fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
         if let Value::ObjReference(i) = self {
             i.rewrite(mapping);
+        }
+    }
+}
+
+pub(crate) struct ValueWithContext<'a, 'opt> {
+    val: Value,
+    heap: &'a Heap<'opt>,
+}
+
+impl<'a, 'opt> ValueWithContext<'a, 'opt> {
+    pub(crate) fn new(val: Value, heap: &'a Heap<'opt>) -> Self {
+        Self { val, heap }
+    }
+}
+
+impl<'a, 'opt> Display for ValueWithContext<'a, 'opt> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.val {
+            Value::Nil => write!(f, "nil"),
+            Value::Bool(b) => write!(f, "{}", b),
+            Value::Double(d) => write!(f, "{}", d),
+            Value::ObjReference(i) => {
+                write!(f, "{}", ObjWithContext::new(&self.heap[i], self.heap))
+            }
         }
     }
 }

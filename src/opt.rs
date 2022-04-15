@@ -27,9 +27,3 @@ pub struct Opt {
     #[structopt(short = "d", long = "disable_garbage_collection")]
     pub disable_garbage_collection: bool,
 }
-
-impl Opt {
-    pub fn new() -> Self {
-        Self::default()
-    }
-}

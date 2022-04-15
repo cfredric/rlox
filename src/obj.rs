@@ -7,7 +7,6 @@ use crate::{
     heap::{Heap, Ptr},
     rewrite::Rewrite,
     stack::Slot,
-    to_string::ToString,
     value::Value,
 };
 
@@ -90,21 +89,37 @@ impl Obj {
     }
 }
 
-impl ToString for Obj {
-    fn to_string(&self, heap: &Heap) -> String {
-        match self {
-            Obj::Dummy(_) => "<Dummy>".to_string(),
-            Obj::String(s) => s.string.to_string(),
-            Obj::Function(fun) => format!("<fn {}>", fun.name),
-            Obj::NativeFn(_) => "<native fn>".to_string(),
-            Obj::Closure(fun) => heap[fun.function].to_string(heap),
-            Obj::OpenUpValue(_) => "<OpenUpValue>".to_string(),
-            Obj::ClosedUpValue(_) => "<ClosedUpValue>".to_string(),
-            Obj::Class(c) => c.name.to_string(),
-            Obj::Instance(i) => {
-                format!("{} instance", heap.as_class(i.class).name)
+pub(crate) struct ObjWithContext<'a, 'opt> {
+    obj: &'a Obj,
+    heap: &'a Heap<'opt>,
+}
+
+impl<'a, 'opt> ObjWithContext<'a, 'opt> {
+    pub(crate) fn new(obj: &'a Obj, heap: &'a Heap<'opt>) -> Self {
+        Self { obj, heap }
+    }
+}
+
+impl<'a, 'opt> Display for ObjWithContext<'a, 'opt> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.obj {
+            Obj::Dummy(_) => write!(f, "<Dummy>"),
+            Obj::String(s) => write!(f, "{}", s.string),
+            Obj::Function(fun) => write!(f, "<fn {}>", fun.name),
+            Obj::Closure(c) => write!(
+                f,
+                "{}",
+                ObjWithContext::new(&self.heap[c.function], self.heap)
+            ),
+            Obj::NativeFn(_) => write!(f, "<native fn>"),
+            Obj::OpenUpValue(_) => write!(f, "<OpenUpValue>"),
+            Obj::ClosedUpValue(_) => write!(f, "ClosedUpValue>"),
+            Obj::Class(c) => write!(f, "{}", c.name),
+            Obj::Instance(i) => write!(f, "{} instance", self.heap.as_class(i.class).name),
+            Obj::BoundMethod(b) => {
+                let fun = &self.heap[self.heap.as_closure(b.closure).function];
+                write!(f, "{}", ObjWithContext::new(fun, self.heap))
             }
-            Obj::BoundMethod(b) => heap[heap.as_closure(b.closure).function].to_string(heap),
         }
     }
 }

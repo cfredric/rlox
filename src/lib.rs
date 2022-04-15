@@ -9,7 +9,6 @@ mod opt;
 mod rewrite;
 mod scanner;
 mod stack;
-mod to_string;
 mod value;
 mod vm;
 

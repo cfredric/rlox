@@ -5,8 +5,7 @@ use crate::compiler::CompiledUpValue;
 use crate::heap::{Heap, Ptr};
 use crate::opcode::OpCode;
 use crate::rewrite::Rewrite;
-use crate::to_string::ToString;
-use crate::value::Value;
+use crate::value::{Value, ValueWithContext};
 
 #[derive(Clone)]
 pub(crate) struct CodeEntry {
@@ -199,7 +198,7 @@ impl Chunk {
         match &self[index] {
             OpCode::Return => println!("OP_RETURN"),
             OpCode::Constant { index } => {
-                unary_instruction("OP_CONSTANT", self[*index].to_string(heap))
+                unary_instruction("OP_CONSTANT", ValueWithContext::new(self[*index], heap))
             }
             OpCode::Negate => println!("OP_NEGATE"),
             OpCode::Add => println!("OP_ADD"),
@@ -217,10 +216,14 @@ impl Chunk {
             OpCode::Print => println!("OP_PRINT"),
             OpCode::Pop => println!("OP_POP"),
             OpCode::DefineGlobal(i) => {
-                unary_instruction("OP_DEFINE_GLOBAL", self[*i].to_string(heap))
+                unary_instruction("OP_DEFINE_GLOBAL", ValueWithContext::new(self[*i], heap))
             }
-            OpCode::GetGlobal(i) => unary_instruction("OP_GET_GLOBAL", self[*i].to_string(heap)),
-            OpCode::SetGlobal(i) => unary_instruction("OP_SET_GLOBAL", self[*i].to_string(heap)),
+            OpCode::GetGlobal(i) => {
+                unary_instruction("OP_GET_GLOBAL", ValueWithContext::new(self[*i], heap))
+            }
+            OpCode::SetGlobal(i) => {
+                unary_instruction("OP_SET_GLOBAL", ValueWithContext::new(self[*i], heap))
+            }
             OpCode::GetLocal(i) => unary_instruction("OP_GET_LOCAL", *i),
             OpCode::SetLocal(i) => unary_instruction("OP_SET_LOCAL", *i),
             OpCode::JumpIfFalse { distance } => unary_instruction("OP_JUMP_IF_FALSE", *distance),
@@ -231,7 +234,7 @@ impl Chunk {
                     "{:16} {} {}",
                     "OP_CLOSURE",
                     function.0,
-                    self[*function].to_string(heap)
+                    ValueWithContext::new(self[*function], heap)
                 );
 
                 for upvalue in upvalues {
@@ -245,21 +248,25 @@ impl Chunk {
             OpCode::GetUpvalue(index) => unary_instruction("OP_GET_UPVALUE", index),
             OpCode::SetUpvalue(index) => unary_instruction("OP_SET_UPVALUE", index),
             OpCode::CloseUpvalue => println!("OP_CLOSE_UPVALUE"),
-            OpCode::Class { name } => unary_instruction("OP_CLASS", self[*name].to_string(heap)),
+            OpCode::Class { name } => {
+                unary_instruction("OP_CLASS", ValueWithContext::new(self[*name], heap))
+            }
             OpCode::GetProperty { name } => {
-                unary_instruction("OP_GET_PROPERTY", self[*name].to_string(heap))
+                unary_instruction("OP_GET_PROPERTY", ValueWithContext::new(self[*name], heap))
             }
             OpCode::SetProperty { name } => {
-                unary_instruction("OP_SET_PROPERTY", self[*name].to_string(heap))
+                unary_instruction("OP_SET_PROPERTY", ValueWithContext::new(self[*name], heap))
             }
-            OpCode::Method { name } => unary_instruction("OP_METHOD", self[*name].to_string(heap)),
+            OpCode::Method { name } => {
+                unary_instruction("OP_METHOD", ValueWithContext::new(self[*name], heap))
+            }
             OpCode::Invoke {
                 method_name,
                 arg_count,
             } => invoke_instruction("OP_INVOKE", *method_name, *arg_count),
             OpCode::Inherit => println!("OP_INHERIT"),
             OpCode::GetSuper { method } => {
-                unary_instruction("OP_GET_SUPER", self[*method].to_string(heap))
+                unary_instruction("OP_GET_SUPER", ValueWithContext::new(self[*method], heap))
             }
             OpCode::SuperInvoke { method, arg_count } => {
                 invoke_instruction("OP_SUPER_INVOKE", *method, *arg_count);

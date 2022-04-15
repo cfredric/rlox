@@ -4,14 +4,14 @@ use crate::chunk::{ConstantIndex, OpCodeIndex};
 use crate::compiler::{compile, CompiledUpValue};
 use crate::heap::{Heap, Ptr};
 use crate::obj::{
-    BoundMethod, Class, Closed, Closure, Function, Instance, LoxString, NativeFn, Obj, Open,
+    BoundMethod, Class, Closed, Closure, Function, Instance, LoxString, NativeFn, Obj,
+    ObjWithContext, Open,
 };
 use crate::opcode::OpCode;
 use crate::opt::Opt;
 use crate::rewrite::Rewrite;
 use crate::stack::{Slot, Stack};
-use crate::to_string::ToString;
-use crate::value::Value;
+use crate::value::{Value, ValueWithContext};
 
 const GC_HEAP_GROWTH_FACTOR: usize = 2;
 
@@ -162,7 +162,7 @@ impl<'opt> VM<'opt> {
 
     fn allocate_object<R: Rewrite>(&mut self, mut obj: Obj, pending: R) -> Ptr {
         if self.opt.log_garbage_collection {
-            eprintln!("allocate for {}", obj.to_string(&self.heap));
+            eprintln!("allocate for {}", ObjWithContext::new(&obj, &self.heap));
         }
 
         if self.allocation_would_cause_gc() {
@@ -554,7 +554,7 @@ impl<'opt> VM<'opt> {
             label,
             self.stack
                 .iter_from(start)
-                .map(|i| format!("[ {} ]", i.to_string(&self.heap)))
+                .map(|i| format!("[ {} ]", ValueWithContext::new(*i, &self.heap)))
                 .collect::<String>()
         );
     }
@@ -592,7 +592,7 @@ impl<'opt> VM<'opt> {
                     if self.frames.is_empty() {
                         let top = self.stack.pop();
                         if !self.stack.is_empty() {
-                            println!("{}", top.to_string(&self.heap));
+                            println!("{}", ValueWithContext::new(top, &self.heap));
                             self.stack.pop();
                         }
                         if self.opt.trace_execution {
@@ -652,7 +652,7 @@ impl<'opt> VM<'opt> {
                 OpCode::Greater => self.binary_op(|a, b| Value::Bool(a > b))?,
                 OpCode::Less => self.binary_op(|a, b| Value::Bool(a < b))?,
                 OpCode::Print => {
-                    println!("{}", self.stack.pop().to_string(&self.heap));
+                    println!("{}", ValueWithContext::new(self.stack.pop(), &self.heap));
                 }
                 OpCode::Pop => {
                     self.stack.pop();

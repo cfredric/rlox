@@ -4,10 +4,9 @@ use std::{
 };
 
 use crate::{
-    obj::{Class, Closure, Dummy, Function, Instance, LoxString, Obj, Open},
+    obj::{Class, Closure, Dummy, Function, Instance, LoxString, Obj, ObjWithContext, Open},
     rewrite::Rewrite,
-    to_string::ToString,
-    value::Value,
+    value::{Value, ValueWithContext},
     Opt,
 };
 
@@ -23,12 +22,6 @@ impl Ptr {
 impl Rewrite for Ptr {
     fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
         *self = mapping[self];
-    }
-}
-
-impl ToString for Ptr {
-    fn to_string(&self, heap: &Heap) -> String {
-        heap[*self].to_string(heap)
     }
 }
 
@@ -55,7 +48,7 @@ impl<'opt> Heap<'opt> {
 
     pub(crate) fn mark_value(&mut self, value: Value) {
         if self.opt.log_garbage_collection {
-            eprintln!("    mark value ({})", value.to_string(self));
+            eprintln!("    mark value ({})", ValueWithContext::new(value, self));
         }
         if let Value::ObjReference(ptr) = value {
             self.mark_object(ptr);
@@ -67,7 +60,7 @@ impl<'opt> Heap<'opt> {
             eprintln!(
                 "{:3} mark object {}",
                 ptr.0,
-                self.heap[ptr.0].to_string(self)
+                ObjWithContext::new(&self.heap[ptr.0], self)
             );
         }
 
@@ -88,7 +81,11 @@ impl<'opt> Heap<'opt> {
 
     pub(crate) fn blacken_object(&mut self, ptr: Ptr) {
         if self.opt.log_garbage_collection {
-            eprintln!("{} blacken {}", ptr.0, self.heap[ptr.0].to_string(self));
+            eprintln!(
+                "{} blacken {}",
+                ptr.0,
+                ObjWithContext::new(&self.heap[ptr.0], self)
+            );
         }
 
         match &self.heap[ptr.0] {
