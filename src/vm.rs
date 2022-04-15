@@ -647,7 +647,7 @@ impl<'opt> VM<'opt> {
                 OpCode::Equal => {
                     let b = self.stack.pop();
                     let a = self.stack.pop();
-                    self.stack.push(Value::Bool(Value::equal(a, b)));
+                    self.stack.push(Value::Bool(Value::equals(a, b)));
                 }
                 OpCode::Greater => self.binary_op(|a, b| Value::Bool(a > b))?,
                 OpCode::Less => self.binary_op(|a, b| Value::Bool(a < b))?,

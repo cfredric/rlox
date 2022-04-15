@@ -27,9 +27,9 @@ impl Value {
         }
     }
 
-    pub(crate) fn equal(a: Value, b: Value) -> bool {
+    pub(crate) fn equals(self, b: Value) -> bool {
         use Value::*;
-        match (a, b) {
+        match (self, b) {
             (Nil, Nil) => true,
             (Bool(a), Bool(b)) => a == b,
             (Double(f), Double(g)) => (f - g).abs() < ERROR_MARGIN,
