@@ -18,14 +18,6 @@ impl<T: Rewrite> Rewrite for Vec<T> {
     }
 }
 
-impl<T: Rewrite> Rewrite for [T] {
-    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
-        for e in self {
-            e.rewrite(mapping);
-        }
-    }
-}
-
 impl<K, V: Rewrite> Rewrite for HashMap<K, V> {
     fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
         for v in self.values_mut() {
