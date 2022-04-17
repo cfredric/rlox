@@ -260,7 +260,7 @@ impl<'opt> VM<'opt> {
     fn call_value(&mut self, callee: Value, arg_count: usize) -> Result<(), InterpretResult> {
         if let Value::ObjReference(mut ptr) = callee {
             match &self.heap[ptr] {
-                Obj::Dummy(_) => unreachable!(),
+                Obj::Dummy => unreachable!(),
                 Obj::String(_)
                 | Obj::Function(_)
                 | Obj::OpenUpValue(_)

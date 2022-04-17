@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    obj::{Class, Closure, Dummy, Function, Instance, LoxString, Obj, ObjWithContext, Open},
+    obj::{Class, Closure, Function, Instance, LoxString, Obj, ObjWithContext, Open},
     rewrite::Rewrite,
     value::{Value, ValueWithContext},
     Opt,
@@ -89,7 +89,7 @@ impl<'opt> Heap<'opt> {
         }
 
         match &self.heap[ptr.0] {
-            Obj::Dummy(_) => {}
+            Obj::Dummy => {}
             Obj::String(_) | Obj::NativeFn(_) | Obj::OpenUpValue(_) => {}
             Obj::Function(f) => {
                 // TODO: don't clone here.
@@ -135,7 +135,7 @@ impl<'opt> Heap<'opt> {
     pub(crate) fn sweep_and_compact(&mut self) -> HashMap<Ptr, Ptr> {
         // Build the mapping from pre-sweep pointers to post-sweep pointers.
         let delta: i32 = match (self.opt.stress_garbage_collector, self.heap.get(0)) {
-            (true, Some(Obj::Dummy(_))) => -1,
+            (true, Some(Obj::Dummy)) => -1,
             (true, Some(_)) => 1,
             _ => 0,
         };
@@ -156,7 +156,7 @@ impl<'opt> Heap<'opt> {
 
         match delta {
             1 => {
-                self.heap.insert(0, Obj::Dummy(Dummy {}));
+                self.heap.insert(0, Obj::Dummy);
             }
             -1 => {
                 self.heap.remove(0);

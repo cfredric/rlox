@@ -23,7 +23,7 @@ impl GcMetadata {
 
 #[derive(Clone, Debug, EnumAsInner)]
 pub(crate) enum Obj {
-    Dummy(Dummy),
+    Dummy,
     String(LoxString),
     Function(Function),
     Closure(Closure),
@@ -38,7 +38,7 @@ pub(crate) enum Obj {
 impl Obj {
     pub(crate) fn mark(&mut self, marked: bool) {
         let gc_metadata = match self {
-            Obj::Dummy(_) => return,
+            Obj::Dummy => return,
             Obj::String(s) => &mut s.gc_metadata,
             Obj::Function(f) => &mut f.gc_metadata,
             Obj::Closure(c) => &mut c.gc_metadata,
@@ -55,7 +55,7 @@ impl Obj {
 
     pub(crate) fn is_marked(&self) -> bool {
         let gc_metadata = match self {
-            Obj::Dummy(_) => return true,
+            Obj::Dummy => return true,
             Obj::String(s) => &s.gc_metadata,
             Obj::Function(f) => &f.gc_metadata,
             Obj::Closure(c) => &c.gc_metadata,
@@ -85,7 +85,7 @@ impl<'a, 'opt> ObjWithContext<'a, 'opt> {
 impl<'a, 'opt> Display for ObjWithContext<'a, 'opt> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.obj {
-            Obj::Dummy(_) => write!(f, "<Dummy>"),
+            Obj::Dummy => write!(f, "<Dummy>"),
             Obj::String(s) => write!(f, "{}", s.string),
             Obj::Function(fun) => write!(f, "<fn {}>", fun.name),
             Obj::Closure(c) => write!(
@@ -109,7 +109,7 @@ impl<'a, 'opt> Display for ObjWithContext<'a, 'opt> {
 impl Rewrite for Obj {
     fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
         match self {
-            Obj::Dummy(_) => {}
+            Obj::Dummy => {}
             Obj::String(s) => s.rewrite(mapping),
             Obj::NativeFn(n) => n.rewrite(mapping),
             Obj::Class(c) => c.rewrite(mapping),
@@ -122,9 +122,6 @@ impl Rewrite for Obj {
         }
     }
 }
-
-#[derive(Clone, Debug)]
-pub(crate) struct Dummy {}
 
 #[derive(Clone, Debug)]
 pub(crate) struct LoxString {
