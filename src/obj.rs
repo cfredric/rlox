@@ -13,25 +13,11 @@ use crate::{
 #[derive(Clone, Debug)]
 struct Header {
     is_marked: bool,
-    is_gc_able: bool,
 }
 
 impl Header {
-    fn new(gcs: bool) -> Self {
-        Self {
-            is_marked: false,
-            is_gc_able: gcs,
-        }
-    }
-
-    fn mark(&mut self, marked: bool) {
-        if self.is_gc_able {
-            self.is_marked = marked;
-        }
-    }
-
-    pub(crate) fn is_marked(&self) -> bool {
-        self.is_marked || !self.is_gc_able
+    fn new() -> Self {
+        Self { is_marked: false }
     }
 }
 
@@ -50,42 +36,38 @@ pub(crate) enum Obj {
 }
 
 impl Obj {
-    fn header(&self) -> &Header {
-        match self {
-            Obj::Dummy(d) => &d.header,
-            Obj::String(s) => &s.header,
-            Obj::Function(f) => &f.header,
-            Obj::Closure(c) => &c.header,
-            Obj::NativeFn(f) => &f.header,
-            Obj::OpenUpValue(u) => &u.header,
-            Obj::ClosedUpValue(u) => &u.header,
-            Obj::Class(c) => &c.header,
-            Obj::Instance(i) => &i.header,
-            Obj::BoundMethod(b) => &b.header,
-        }
-    }
-
-    fn header_mut(&mut self) -> &mut Header {
-        match self {
-            Obj::Dummy(d) => &mut d.header,
+    pub(crate) fn mark(&mut self, marked: bool) {
+        let header = match self {
+            Obj::Dummy(_) => return,
             Obj::String(s) => &mut s.header,
             Obj::Function(f) => &mut f.header,
             Obj::Closure(c) => &mut c.header,
-            Obj::NativeFn(f) => &mut f.header,
-            Obj::OpenUpValue(u) => &mut u.header,
-            Obj::ClosedUpValue(u) => &mut u.header,
+            Obj::NativeFn(_) => return,
+            Obj::OpenUpValue(o) => &mut o.header,
+            Obj::ClosedUpValue(c) => &mut c.header,
             Obj::Class(c) => &mut c.header,
             Obj::Instance(i) => &mut i.header,
             Obj::BoundMethod(b) => &mut b.header,
-        }
-    }
+        };
 
-    pub(crate) fn mark(&mut self, marked: bool) {
-        self.header_mut().mark(marked);
+        header.is_marked = marked;
     }
 
     pub(crate) fn is_marked(&self) -> bool {
-        self.header().is_marked()
+        let header = match self {
+            Obj::Dummy(_) => return true,
+            Obj::String(s) => &s.header,
+            Obj::Function(f) => &f.header,
+            Obj::Closure(c) => &c.header,
+            Obj::NativeFn(_) => return true,
+            Obj::OpenUpValue(o) => &o.header,
+            Obj::ClosedUpValue(c) => &c.header,
+            Obj::Class(c) => &c.header,
+            Obj::Instance(i) => &i.header,
+            Obj::BoundMethod(b) => &b.header,
+        };
+
+        header.is_marked
     }
 }
 
@@ -142,17 +124,7 @@ impl Rewrite for Obj {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct Dummy {
-    header: Header,
-}
-
-impl Dummy {
-    pub(crate) fn new() -> Self {
-        Self {
-            header: Header::new(false),
-        }
-    }
-}
+pub(crate) struct Dummy {}
 
 #[derive(Clone, Debug)]
 pub(crate) struct LoxString {
@@ -163,7 +135,7 @@ pub(crate) struct LoxString {
 impl LoxString {
     pub(crate) fn new(s: String) -> Self {
         Self {
-            header: Header::new(true),
+            header: Header::new(),
             string: s,
         }
     }
@@ -183,7 +155,7 @@ pub(crate) struct Function {
 impl Function {
     pub(crate) fn new(name: &str) -> Self {
         Self {
-            header: Header::new(true),
+            header: Header::new(),
             arity: 0,
             name: name.to_string(),
             chunk: Chunk::new(),
@@ -202,24 +174,18 @@ type Native =
 
 #[derive(Clone)]
 pub(crate) struct NativeFn {
-    header: Header,
     pub(crate) f: Native,
 }
 
 impl NativeFn {
     pub(crate) fn new(f: Native) -> Self {
-        Self {
-            header: Header::new(false),
-            f,
-        }
+        Self { f }
     }
 }
 
 impl std::fmt::Debug for NativeFn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("NativeFn")
-            .field("header", &self.header)
-            .finish()
+        f.debug_struct("NativeFn").finish()
     }
 }
 
@@ -237,7 +203,7 @@ pub(crate) struct Closure {
 impl Closure {
     pub(crate) fn new(function: Ptr, upvalues: Vec<Ptr>) -> Self {
         Self {
-            header: Header::new(true),
+            header: Header::new(),
             function,
             upvalues,
         }
@@ -279,7 +245,7 @@ pub(crate) struct Class {
 impl Class {
     pub(crate) fn new(name: &str) -> Self {
         Self {
-            header: Header::new(true),
+            header: Header::new(),
             name: name.to_string(),
             methods: HashMap::new(),
         }
@@ -302,7 +268,7 @@ pub(crate) struct Instance {
 impl Instance {
     pub(crate) fn new(class: Ptr) -> Self {
         Self {
-            header: Header::new(true),
+            header: Header::new(),
             class,
             fields: HashMap::new(),
         }
@@ -326,7 +292,7 @@ pub(crate) struct BoundMethod {
 impl BoundMethod {
     pub(crate) fn new(receiver: Ptr, closure: Ptr) -> Self {
         Self {
-            header: Header::new(true),
+            header: Header::new(),
             receiver,
             closure,
         }
@@ -352,7 +318,7 @@ pub(crate) struct Open {
 impl Open {
     pub(crate) fn new(slot: Slot, next: Option<Ptr>) -> Self {
         Self {
-            header: Header::new(true),
+            header: Header::new(),
             slot,
             next,
         }
@@ -373,7 +339,7 @@ pub(crate) struct Closed {
 impl Closed {
     pub(crate) fn new(value: Value) -> Self {
         Self {
-            header: Header::new(true),
+            header: Header::new(),
             value,
         }
     }

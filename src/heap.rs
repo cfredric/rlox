@@ -156,7 +156,7 @@ impl<'opt> Heap<'opt> {
 
         match delta {
             1 => {
-                self.heap.insert(0, Obj::Dummy(Dummy::new()));
+                self.heap.insert(0, Obj::Dummy(Dummy {}));
             }
             -1 => {
                 self.heap.remove(0);
