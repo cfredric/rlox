@@ -11,11 +11,11 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-struct Header {
+struct GcMetadata {
     is_marked: bool,
 }
 
-impl Header {
+impl GcMetadata {
     fn new() -> Self {
         Self { is_marked: false }
     }
@@ -37,37 +37,37 @@ pub(crate) enum Obj {
 
 impl Obj {
     pub(crate) fn mark(&mut self, marked: bool) {
-        let header = match self {
+        let gc_metadata = match self {
             Obj::Dummy(_) => return,
-            Obj::String(s) => &mut s.header,
-            Obj::Function(f) => &mut f.header,
-            Obj::Closure(c) => &mut c.header,
+            Obj::String(s) => &mut s.gc_metadata,
+            Obj::Function(f) => &mut f.gc_metadata,
+            Obj::Closure(c) => &mut c.gc_metadata,
             Obj::NativeFn(_) => return,
-            Obj::OpenUpValue(o) => &mut o.header,
-            Obj::ClosedUpValue(c) => &mut c.header,
-            Obj::Class(c) => &mut c.header,
-            Obj::Instance(i) => &mut i.header,
-            Obj::BoundMethod(b) => &mut b.header,
+            Obj::OpenUpValue(o) => &mut o.gc_metadata,
+            Obj::ClosedUpValue(c) => &mut c.gc_metadata,
+            Obj::Class(c) => &mut c.gc_metadata,
+            Obj::Instance(i) => &mut i.gc_metadata,
+            Obj::BoundMethod(b) => &mut b.gc_metadata,
         };
 
-        header.is_marked = marked;
+        gc_metadata.is_marked = marked;
     }
 
     pub(crate) fn is_marked(&self) -> bool {
-        let header = match self {
+        let gc_metadata = match self {
             Obj::Dummy(_) => return true,
-            Obj::String(s) => &s.header,
-            Obj::Function(f) => &f.header,
-            Obj::Closure(c) => &c.header,
+            Obj::String(s) => &s.gc_metadata,
+            Obj::Function(f) => &f.gc_metadata,
+            Obj::Closure(c) => &c.gc_metadata,
             Obj::NativeFn(_) => return true,
-            Obj::OpenUpValue(o) => &o.header,
-            Obj::ClosedUpValue(c) => &c.header,
-            Obj::Class(c) => &c.header,
-            Obj::Instance(i) => &i.header,
-            Obj::BoundMethod(b) => &b.header,
+            Obj::OpenUpValue(o) => &o.gc_metadata,
+            Obj::ClosedUpValue(c) => &c.gc_metadata,
+            Obj::Class(c) => &c.gc_metadata,
+            Obj::Instance(i) => &i.gc_metadata,
+            Obj::BoundMethod(b) => &b.gc_metadata,
         };
 
-        header.is_marked
+        gc_metadata.is_marked
     }
 }
 
@@ -128,14 +128,14 @@ pub(crate) struct Dummy {}
 
 #[derive(Clone, Debug)]
 pub(crate) struct LoxString {
-    header: Header,
+    gc_metadata: GcMetadata,
     pub(crate) string: String,
 }
 
 impl LoxString {
     pub(crate) fn new(s: String) -> Self {
         Self {
-            header: Header::new(),
+            gc_metadata: GcMetadata::new(),
             string: s,
         }
     }
@@ -146,7 +146,7 @@ impl Rewrite for LoxString {
 
 #[derive(Clone, Debug)]
 pub(crate) struct Function {
-    header: Header,
+    gc_metadata: GcMetadata,
     pub(crate) arity: usize,
     pub(crate) chunk: Chunk,
     pub(crate) name: String,
@@ -155,7 +155,7 @@ pub(crate) struct Function {
 impl Function {
     pub(crate) fn new(name: &str) -> Self {
         Self {
-            header: Header::new(),
+            gc_metadata: GcMetadata::new(),
             arity: 0,
             name: name.to_string(),
             chunk: Chunk::new(),
@@ -195,7 +195,7 @@ impl Rewrite for NativeFn {
 
 #[derive(Clone, Debug)]
 pub(crate) struct Closure {
-    header: Header,
+    gc_metadata: GcMetadata,
     pub(crate) function: Ptr,
     upvalues: Vec<Ptr>,
 }
@@ -203,7 +203,7 @@ pub(crate) struct Closure {
 impl Closure {
     pub(crate) fn new(function: Ptr, upvalues: Vec<Ptr>) -> Self {
         Self {
-            header: Header::new(),
+            gc_metadata: GcMetadata::new(),
             function,
             upvalues,
         }
@@ -236,7 +236,7 @@ impl Rewrite for Closure {
 
 #[derive(Clone, Debug)]
 pub(crate) struct Class {
-    header: Header,
+    gc_metadata: GcMetadata,
     name: String,
     /// Each method value is a pointer into the heap, pointing to a Closure.
     pub(crate) methods: HashMap<String, Ptr>,
@@ -245,7 +245,7 @@ pub(crate) struct Class {
 impl Class {
     pub(crate) fn new(name: &str) -> Self {
         Self {
-            header: Header::new(),
+            gc_metadata: GcMetadata::new(),
             name: name.to_string(),
             methods: HashMap::new(),
         }
@@ -260,7 +260,7 @@ impl Rewrite for Class {
 
 #[derive(Clone, Debug)]
 pub(crate) struct Instance {
-    header: Header,
+    gc_metadata: GcMetadata,
     pub(crate) class: Ptr,
     pub(crate) fields: HashMap<String, Value>,
 }
@@ -268,7 +268,7 @@ pub(crate) struct Instance {
 impl Instance {
     pub(crate) fn new(class: Ptr) -> Self {
         Self {
-            header: Header::new(),
+            gc_metadata: GcMetadata::new(),
             class,
             fields: HashMap::new(),
         }
@@ -284,7 +284,7 @@ impl Rewrite for Instance {
 
 #[derive(Clone, Debug)]
 pub(crate) struct BoundMethod {
-    header: Header,
+    gc_metadata: GcMetadata,
     pub(crate) receiver: Ptr,
     pub(crate) closure: Ptr,
 }
@@ -292,7 +292,7 @@ pub(crate) struct BoundMethod {
 impl BoundMethod {
     pub(crate) fn new(receiver: Ptr, closure: Ptr) -> Self {
         Self {
-            header: Header::new(),
+            gc_metadata: GcMetadata::new(),
             receiver,
             closure,
         }
@@ -308,7 +308,7 @@ impl Rewrite for BoundMethod {
 
 #[derive(Clone, Debug)]
 pub(crate) struct Open {
-    header: Header,
+    gc_metadata: GcMetadata,
     /// The stack slot that holds the associated value.
     pub(crate) slot: Slot,
     /// Heap pointer to the next open upvalue.
@@ -318,7 +318,7 @@ pub(crate) struct Open {
 impl Open {
     pub(crate) fn new(slot: Slot, next: Option<Ptr>) -> Self {
         Self {
-            header: Header::new(),
+            gc_metadata: GcMetadata::new(),
             slot,
             next,
         }
@@ -332,14 +332,14 @@ impl Rewrite for Open {
 
 #[derive(Clone, Debug)]
 pub(crate) struct Closed {
-    header: Header,
+    gc_metadata: GcMetadata,
     pub(crate) value: Value,
 }
 
 impl Closed {
     pub(crate) fn new(value: Value) -> Self {
         Self {
-            header: Header::new(),
+            gc_metadata: GcMetadata::new(),
             value,
         }
     }
