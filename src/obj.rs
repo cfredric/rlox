@@ -12,12 +12,14 @@ use crate::{
 
 #[derive(Clone, Debug)]
 struct GcMetadata {
-    is_marked: bool,
+    is_reachable: bool,
 }
 
 impl GcMetadata {
     fn new() -> Self {
-        Self { is_marked: false }
+        Self {
+            is_reachable: false,
+        }
     }
 }
 
@@ -36,7 +38,7 @@ pub(crate) enum Obj {
 }
 
 impl Obj {
-    pub(crate) fn mark(&mut self, marked: bool) {
+    pub(crate) fn mark_reached(&mut self, reached: bool) {
         let gc_metadata = match self {
             Obj::Dummy => return,
             Obj::String(s) => &mut s.gc_metadata,
@@ -50,16 +52,16 @@ impl Obj {
             Obj::BoundMethod(b) => &mut b.gc_metadata,
         };
 
-        gc_metadata.is_marked = marked;
+        gc_metadata.is_reachable = reached;
     }
 
-    pub(crate) fn is_marked(&self) -> bool {
+    pub(crate) fn is_eligible_for_deletion(&self) -> bool {
         let gc_metadata = match self {
-            Obj::Dummy => return true,
+            Obj::Dummy => return false,
             Obj::String(s) => &s.gc_metadata,
             Obj::Function(f) => &f.gc_metadata,
             Obj::Closure(c) => &c.gc_metadata,
-            Obj::NativeFn(_) => return true,
+            Obj::NativeFn(_) => return false,
             Obj::OpenUpValue(o) => &o.gc_metadata,
             Obj::ClosedUpValue(c) => &c.gc_metadata,
             Obj::Class(c) => &c.gc_metadata,
@@ -67,7 +69,7 @@ impl Obj {
             Obj::BoundMethod(b) => &b.gc_metadata,
         };
 
-        gc_metadata.is_marked
+        !gc_metadata.is_reachable
     }
 }
 

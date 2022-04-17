@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    ops::{Index, IndexMut},
+    ops::{Index, IndexMut, Not},
 };
 
 use crate::{
@@ -64,11 +64,11 @@ impl<'opt> Heap<'opt> {
             );
         }
 
-        if self.heap[ptr.0].is_marked() {
+        if !self.heap[ptr.0].is_eligible_for_deletion() {
             return;
         }
 
-        self.heap[ptr.0].mark(true);
+        self.heap[ptr.0].mark_reached(true);
 
         self.gray_stack.push(ptr);
     }
@@ -143,15 +143,15 @@ impl<'opt> Heap<'opt> {
             .heap
             .iter()
             .enumerate()
-            .filter_map(|(i, obj)| obj.is_marked().then(|| i))
+            .filter_map(|(i, obj)| obj.is_eligible_for_deletion().not().then(|| i))
             .enumerate()
             .map(|(post, pre)| (Ptr::new(pre), Ptr::new(((post as i32) + delta) as usize)))
             .collect::<HashMap<Ptr, Ptr>>();
 
         // Remove unreachable objects.
-        self.heap.retain(|obj| obj.is_marked());
+        self.heap.retain(|obj| !obj.is_eligible_for_deletion());
         for obj in self.heap.iter_mut() {
-            obj.mark(false);
+            obj.mark_reached(false);
         }
 
         match delta {
