@@ -73,7 +73,7 @@ fn atoi_native<'opt>(vm: &mut VM<'opt>, ptr: &mut Ptr, args: &[Value]) -> Value 
     if let Some(Value::Double(d)) = args.get(0) {
         return Value::ObjReference(vm.take_string(format!("{}", d), ptr));
     }
-    return Value::Nil;
+    Value::Nil
 }
 
 fn itoa_native<'opt>(vm: &mut VM<'opt>, _pending: &mut Ptr, args: &[Value]) -> Value {
@@ -85,7 +85,7 @@ fn itoa_native<'opt>(vm: &mut VM<'opt>, _pending: &mut Ptr, args: &[Value]) -> V
         }
     }
 
-    return Value::Nil;
+    Value::Nil
 }
 
 impl<'opt> VM<'opt> {
@@ -276,7 +276,7 @@ impl<'opt> VM<'opt> {
                 }
                 Obj::Class(_) => {
                     let instance = self.new_instance(ptr, &mut ptr);
-                    let instance_slot = self.stack.from_top_slot(arg_count);
+                    let instance_slot = self.stack.offset_from_top_slot(arg_count);
                     self.stack[instance_slot] = Value::ObjReference(instance);
 
                     if let Some(closure) = self.heap.as_class(ptr).methods.get("init").copied() {
@@ -289,7 +289,7 @@ impl<'opt> VM<'opt> {
                 }
                 Obj::BoundMethod(b) => {
                     let bound_ptr = b.closure;
-                    let slot = self.stack.from_top_slot(arg_count);
+                    let slot = self.stack.offset_from_top_slot(arg_count);
                     self.stack[slot] = Value::ObjReference(b.receiver);
                     self.call(bound_ptr, arg_count)
                 }
@@ -326,7 +326,7 @@ impl<'opt> VM<'opt> {
         };
 
         if let Some(value) = field {
-            let slot = self.stack.from_top_slot(arg_count);
+            let slot = self.stack.offset_from_top_slot(arg_count);
             self.stack[slot] = value;
             self.call_value(value, arg_count)
         } else {
@@ -431,7 +431,7 @@ impl<'opt> VM<'opt> {
 
         self.frames.push(CallFrame::new(
             closure_ptr,
-            self.stack.from_top_slot(arg_count),
+            self.stack.offset_from_top_slot(arg_count),
         ));
         Ok(())
     }

@@ -69,10 +69,10 @@ impl Stack {
     }
 
     pub(crate) fn top_slot(&self) -> Slot {
-        self.from_top_slot(0)
+        self.offset_from_top_slot(0)
     }
 
-    pub(crate) fn from_top_slot(&self, offset: usize) -> Slot {
+    pub(crate) fn offset_from_top_slot(&self, offset: usize) -> Slot {
         Slot::new(self.stack.len() - offset - 1)
     }
 
