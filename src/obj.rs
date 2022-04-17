@@ -11,7 +11,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub(crate) struct Header {
+struct Header {
     is_marked: bool,
     is_gc_able: bool,
 }
@@ -156,7 +156,7 @@ impl Dummy {
 
 #[derive(Clone, Debug)]
 pub(crate) struct LoxString {
-    pub(crate) header: Header,
+    header: Header,
     pub(crate) string: String,
 }
 
