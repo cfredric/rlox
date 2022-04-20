@@ -17,7 +17,7 @@ fn fibonacci(b: &mut Bencher) {
     "
     .into();
 
-    b.iter(|| run_file(&Opt::new(), prog.clone()).unwrap());
+    b.iter(|| run_file(&Opt::default(), prog.clone()).unwrap());
 }
 
 #[bench]
@@ -32,5 +32,5 @@ fn factorial(b: &mut Bencher) {
     "
     .into();
 
-    b.iter(|| run_file(&Opt::new(), prog.clone()).unwrap());
+    b.iter(|| run_file(&Opt::default(), prog.clone()).unwrap());
 }
