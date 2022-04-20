@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     obj::{Class, Closure, Function, Instance, LoxString, Obj, ObjWithContext, Open},
-    rewrite::Rewrite,
+    post_process_gc_sweep::{GcSweepData, PostProcessGcSweep},
     value::{Value, ValueWithContext},
     Opt,
 };
@@ -19,9 +19,9 @@ impl Ptr {
     }
 }
 
-impl Rewrite for Ptr {
-    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
-        *self = mapping[self];
+impl PostProcessGcSweep for Ptr {
+    fn process(&mut self, sweep_data: &GcSweepData) {
+        *self = sweep_data.pointer_mapping[self];
     }
 }
 
@@ -132,14 +132,14 @@ impl<'opt> Heap<'opt> {
         }
     }
 
-    pub(crate) fn sweep_and_compact(&mut self) -> HashMap<Ptr, Ptr> {
+    pub(crate) fn sweep_and_compact(&mut self) -> GcSweepData {
         // Build the mapping from pre-sweep pointers to post-sweep pointers.
         let delta: i32 = match (self.opt.stress_garbage_collector, self.heap.get(0)) {
             (true, Some(Obj::Dummy)) => -1,
             (true, Some(_)) => 1,
             _ => 0,
         };
-        let mapping = self
+        let pointer_mapping = self
             .heap
             .iter()
             .enumerate()
@@ -164,7 +164,7 @@ impl<'opt> Heap<'opt> {
             _ => {}
         }
 
-        mapping
+        GcSweepData { pointer_mapping }
     }
 
     pub(crate) fn push(&mut self, obj: Obj) -> Ptr {
@@ -238,8 +238,8 @@ impl<'opt> IndexMut<Ptr> for Heap<'opt> {
     }
 }
 
-impl<'opt> Rewrite for Heap<'opt> {
-    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
-        self.heap.rewrite(mapping);
+impl<'opt> PostProcessGcSweep for Heap<'opt> {
+    fn process(&mut self, sweep_data: &GcSweepData) {
+        self.heap.process(sweep_data);
     }
 }

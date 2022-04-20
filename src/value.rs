@@ -1,11 +1,11 @@
-use std::{collections::HashMap, fmt::Display};
+use std::fmt::Display;
 
 use enum_as_inner::EnumAsInner;
 
 use crate::{
     heap::{Heap, Ptr},
     obj::ObjWithContext,
-    rewrite::Rewrite,
+    post_process_gc_sweep::{GcSweepData, PostProcessGcSweep},
 };
 
 #[derive(Copy, Clone, Debug, EnumAsInner)]
@@ -39,10 +39,10 @@ impl Value {
     }
 }
 
-impl Rewrite for Value {
-    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
+impl PostProcessGcSweep for Value {
+    fn process(&mut self, sweep_data: &GcSweepData) {
         if let Value::ObjReference(i) = self {
-            i.rewrite(mapping);
+            i.process(sweep_data);
         }
     }
 }

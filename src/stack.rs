@@ -1,10 +1,12 @@
 use std::{
-    collections::HashMap,
     fmt::Display,
     ops::{Index, IndexMut},
 };
 
-use crate::{heap::Ptr, rewrite::Rewrite, value::Value};
+use crate::{
+    post_process_gc_sweep::{GcSweepData, PostProcessGcSweep},
+    value::Value,
+};
 
 #[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub(crate) struct Slot(usize);
@@ -118,8 +120,8 @@ impl IndexMut<Slot> for Stack {
     }
 }
 
-impl Rewrite for Stack {
-    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
-        self.stack.rewrite(mapping);
+impl PostProcessGcSweep for Stack {
+    fn process(&mut self, sweep_data: &GcSweepData) {
+        self.stack.process(sweep_data);
     }
 }

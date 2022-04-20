@@ -5,7 +5,7 @@ use enum_as_inner::EnumAsInner;
 use crate::{
     chunk::Chunk,
     heap::{Heap, Ptr},
-    rewrite::Rewrite,
+    post_process_gc_sweep::{GcSweepData, PostProcessGcSweep},
     stack::Slot,
     value::Value,
 };
@@ -108,19 +108,19 @@ impl<'a, 'opt> Display for ObjWithContext<'a, 'opt> {
     }
 }
 
-impl Rewrite for Obj {
-    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
+impl PostProcessGcSweep for Obj {
+    fn process(&mut self, sweep_data: &GcSweepData) {
         match self {
             Obj::Dummy => {}
-            Obj::String(s) => s.rewrite(mapping),
-            Obj::NativeFn(n) => n.rewrite(mapping),
-            Obj::Class(c) => c.rewrite(mapping),
-            Obj::Function(f) => f.rewrite(mapping),
-            Obj::Closure(c) => c.rewrite(mapping),
-            Obj::OpenUpValue(uv) => uv.rewrite(mapping),
-            Obj::ClosedUpValue(uv) => uv.rewrite(mapping),
-            Obj::Instance(i) => i.rewrite(mapping),
-            Obj::BoundMethod(b) => b.rewrite(mapping),
+            Obj::String(s) => s.process(sweep_data),
+            Obj::NativeFn(n) => n.process(sweep_data),
+            Obj::Class(c) => c.process(sweep_data),
+            Obj::Function(f) => f.process(sweep_data),
+            Obj::Closure(c) => c.process(sweep_data),
+            Obj::OpenUpValue(uv) => uv.process(sweep_data),
+            Obj::ClosedUpValue(uv) => uv.process(sweep_data),
+            Obj::Instance(i) => i.process(sweep_data),
+            Obj::BoundMethod(b) => b.process(sweep_data),
         }
     }
 }
@@ -139,8 +139,8 @@ impl LoxString {
         }
     }
 }
-impl Rewrite for LoxString {
-    fn rewrite(&mut self, _mapping: &HashMap<Ptr, Ptr>) {}
+impl PostProcessGcSweep for LoxString {
+    fn process(&mut self, _sweep_data: &GcSweepData) {}
 }
 
 #[derive(Clone, Debug)]
@@ -162,9 +162,9 @@ impl Function {
     }
 }
 
-impl Rewrite for Function {
-    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
-        self.chunk.rewrite(mapping);
+impl PostProcessGcSweep for Function {
+    fn process(&mut self, sweep_data: &GcSweepData) {
+        self.chunk.process(sweep_data);
     }
 }
 
@@ -188,8 +188,8 @@ impl std::fmt::Debug for NativeFn {
     }
 }
 
-impl Rewrite for NativeFn {
-    fn rewrite(&mut self, _mapping: &HashMap<Ptr, Ptr>) {}
+impl PostProcessGcSweep for NativeFn {
+    fn process(&mut self, _sweep_data: &GcSweepData) {}
 }
 
 #[derive(Clone, Debug)]
@@ -226,10 +226,10 @@ impl Display for UpValueIndex {
     }
 }
 
-impl Rewrite for Closure {
-    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
-        self.function.rewrite(mapping);
-        self.upvalues.rewrite(mapping);
+impl PostProcessGcSweep for Closure {
+    fn process(&mut self, sweep_data: &GcSweepData) {
+        self.function.process(sweep_data);
+        self.upvalues.process(sweep_data);
     }
 }
 
@@ -251,9 +251,9 @@ impl Class {
     }
 }
 
-impl Rewrite for Class {
-    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
-        self.methods.rewrite(mapping);
+impl PostProcessGcSweep for Class {
+    fn process(&mut self, sweep_data: &GcSweepData) {
+        self.methods.process(sweep_data);
     }
 }
 
@@ -274,10 +274,10 @@ impl Instance {
     }
 }
 
-impl Rewrite for Instance {
-    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
-        self.class.rewrite(mapping);
-        self.fields.rewrite(mapping);
+impl PostProcessGcSweep for Instance {
+    fn process(&mut self, sweep_data: &GcSweepData) {
+        self.class.process(sweep_data);
+        self.fields.process(sweep_data);
     }
 }
 
@@ -298,10 +298,10 @@ impl BoundMethod {
     }
 }
 
-impl Rewrite for BoundMethod {
-    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
-        self.receiver.rewrite(mapping);
-        self.closure.rewrite(mapping);
+impl PostProcessGcSweep for BoundMethod {
+    fn process(&mut self, sweep_data: &GcSweepData) {
+        self.receiver.process(sweep_data);
+        self.closure.process(sweep_data);
     }
 }
 
@@ -323,9 +323,9 @@ impl Open {
         }
     }
 }
-impl Rewrite for Open {
-    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
-        self.next.rewrite(mapping);
+impl PostProcessGcSweep for Open {
+    fn process(&mut self, sweep_data: &GcSweepData) {
+        self.next.process(sweep_data);
     }
 }
 
@@ -343,8 +343,8 @@ impl Closed {
         }
     }
 }
-impl Rewrite for Closed {
-    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
-        self.value.rewrite(mapping);
+impl PostProcessGcSweep for Closed {
+    fn process(&mut self, sweep_data: &GcSweepData) {
+        self.value.process(sweep_data);
     }
 }

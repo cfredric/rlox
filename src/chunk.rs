@@ -2,9 +2,9 @@ use std::fmt::Display;
 use std::ops::{Add, AddAssign, Index, IndexMut, Neg, Sub, SubAssign};
 
 use crate::compiler::CompiledUpValue;
-use crate::heap::{Heap, Ptr};
+use crate::heap::Heap;
 use crate::opcode::OpCode;
-use crate::rewrite::Rewrite;
+use crate::post_process_gc_sweep::{GcSweepData, PostProcessGcSweep};
 use crate::value::{Value, ValueWithContext};
 
 #[derive(Clone)]
@@ -304,8 +304,8 @@ fn invoke_instruction(name: &str, constant: ConstantIndex, arg_count: usize) {
     println!("{:16} ({} args) {}", name, arg_count, constant)
 }
 
-impl Rewrite for Chunk {
-    fn rewrite(&mut self, mapping: &std::collections::HashMap<Ptr, Ptr>) {
-        self.constants.rewrite(mapping);
+impl PostProcessGcSweep for Chunk {
+    fn process(&mut self, sweep_data: &GcSweepData) {
+        self.constants.process(sweep_data);
     }
 }

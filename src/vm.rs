@@ -9,7 +9,7 @@ use crate::obj::{
 };
 use crate::opcode::OpCode;
 use crate::opt::Opt;
-use crate::rewrite::Rewrite;
+use crate::post_process_gc_sweep::{GcSweepData, PostProcessGcSweep};
 use crate::stack::{Slot, Stack};
 use crate::value::{Value, ValueWithContext};
 
@@ -118,7 +118,7 @@ impl<'opt> VM<'opt> {
         }
     }
 
-    fn take_string<R: Rewrite>(&mut self, s: String, pending: R) -> Ptr {
+    fn take_string<R: PostProcessGcSweep>(&mut self, s: String, pending: R) -> Ptr {
         if let Some(v) = self.strings.get(&s) {
             *v
         } else {
@@ -126,7 +126,7 @@ impl<'opt> VM<'opt> {
         }
     }
 
-    fn allocate_string<R: Rewrite>(&mut self, s: String, pending: R) -> Ptr {
+    fn allocate_string<R: PostProcessGcSweep>(&mut self, s: String, pending: R) -> Ptr {
         let ptr = self.allocate_object(Obj::String(LoxString::new(s.clone())), pending);
         self.strings.insert(s, ptr);
         ptr
@@ -148,7 +148,7 @@ impl<'opt> VM<'opt> {
         self.allocate_object(Obj::Class(Class::new(name)), ())
     }
 
-    pub(crate) fn new_instance<R: Rewrite>(&mut self, class: Ptr, pending: R) -> Ptr {
+    pub(crate) fn new_instance<R: PostProcessGcSweep>(&mut self, class: Ptr, pending: R) -> Ptr {
         self.allocate_object(Obj::Instance(Instance::new(class)), pending)
     }
 
@@ -156,11 +156,11 @@ impl<'opt> VM<'opt> {
         self.allocate_object(Obj::BoundMethod(BoundMethod::new(receiver, closure)), ())
     }
 
-    pub(crate) fn new_upvalue<R: Rewrite>(&mut self, open: Open, pending: R) -> Ptr {
+    pub(crate) fn new_upvalue<R: PostProcessGcSweep>(&mut self, open: Open, pending: R) -> Ptr {
         self.allocate_object(Obj::OpenUpValue(open), pending)
     }
 
-    fn allocate_object<R: Rewrite>(&mut self, mut obj: Obj, pending: R) -> Ptr {
+    fn allocate_object<R: PostProcessGcSweep>(&mut self, mut obj: Obj, pending: R) -> Ptr {
         if self.opt.log_garbage_collection {
             eprintln!("allocate for {}", ObjWithContext::new(&obj, &self.heap));
         }
@@ -358,7 +358,7 @@ impl<'opt> VM<'opt> {
     /// Captures the given stack slot as a local upvalue. Inserts the new
     /// upvalue into the linked list of upvalues on the heap, sorted by stack
     /// slot (higher first).
-    fn capture_upvalue<R: Rewrite>(&mut self, slot: Slot, pending: R) -> Ptr {
+    fn capture_upvalue<R: PostProcessGcSweep>(&mut self, slot: Slot, pending: R) -> Ptr {
         let mut prev_upvalue = None;
         let mut next = self.open_upvalues;
         while matches!(next, Some(uv) if self.heap.as_open_up_value(uv).slot > slot) {
@@ -440,7 +440,7 @@ impl<'opt> VM<'opt> {
         self.is_executing && !self.opt.disable_garbage_collection
     }
 
-    fn collect_garbage<R: Rewrite>(&mut self, pending: R) {
+    fn collect_garbage<R: PostProcessGcSweep>(&mut self, pending: R) {
         if !self.should_run_garbage_collection() {
             return;
         }
@@ -496,15 +496,15 @@ impl<'opt> VM<'opt> {
     }
 
     /// Does a sweep & compaction of the heap. Since heap pointers are just
-    /// indices, and we're moving objects around, we also have to rewrite
+    /// indices, and we're moving objects around, we also have to fix up
     /// pointers within objects.
     ///
     /// Returns the number of items removed from the heap.
     ///
     /// Differs from the book, since clox doesn't do compaction (since it uses
     /// C's heap, rather than manually managing a separate heap).
-    fn sweep_and_compact<R: Rewrite>(&mut self, mut pending: R) {
-        let mapping = self.heap.sweep_and_compact();
+    fn sweep_and_compact<R: PostProcessGcSweep>(&mut self, mut pending: R) {
+        let sweep_data = self.heap.sweep_and_compact();
 
         // Prune out unused strings from the strings table:
         let reachable_strings = self
@@ -516,14 +516,14 @@ impl<'opt> VM<'opt> {
         self.strings.retain(|s, _| reachable_strings.contains(s));
 
         // Now apply all the pointer rewriting.
-        self.heap.rewrite(&mapping);
-        self.stack.rewrite(&mapping);
-        self.globals.rewrite(&mapping);
-        self.frames.rewrite(&mapping);
-        self.strings.rewrite(&mapping);
-        self.open_upvalues.rewrite(&mapping);
+        self.heap.process(&sweep_data);
+        self.stack.process(&sweep_data);
+        self.globals.process(&sweep_data);
+        self.frames.process(&sweep_data);
+        self.strings.process(&sweep_data);
+        self.open_upvalues.process(&sweep_data);
 
-        pending.rewrite(&mapping);
+        pending.process(&sweep_data);
 
         debug_assert!(self.check_upvalues());
     }
@@ -900,9 +900,9 @@ impl CallFrame {
     }
 }
 
-impl Rewrite for CallFrame {
-    fn rewrite(&mut self, mapping: &HashMap<Ptr, Ptr>) {
-        self.closure.rewrite(mapping);
+impl PostProcessGcSweep for CallFrame {
+    fn process(&mut self, sweep_data: &GcSweepData) {
+        self.closure.process(sweep_data);
     }
 }
 
