@@ -10,7 +10,7 @@ use crate::{
     Opt,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub(crate) struct Ptr(usize);
 
 impl Ptr {
@@ -21,7 +21,7 @@ impl Ptr {
 
 impl PostProcessGcSweep for Ptr {
     fn process(&mut self, sweep_data: &GcSweepData) {
-        *self = sweep_data.pointer_mapping[self];
+        *self = sweep_data.pointer_mapping[self].clone();
     }
 }
 
@@ -46,7 +46,7 @@ impl<'opt> Heap<'opt> {
         std::mem::size_of::<Obj>() * self.heap.len()
     }
 
-    pub(crate) fn mark_value(&mut self, value: Value) {
+    pub(crate) fn mark_value(&mut self, value: &Value) {
         if self.opt.log_garbage_collection {
             eprintln!("    mark value ({})", ValueWithContext::new(value, self));
         }
@@ -55,7 +55,7 @@ impl<'opt> Heap<'opt> {
         }
     }
 
-    pub(crate) fn mark_object(&mut self, ptr: Ptr) {
+    pub(crate) fn mark_object(&mut self, ptr: &Ptr) {
         if self.opt.log_garbage_collection {
             eprintln!(
                 "{:3} mark object {}",
@@ -70,16 +70,16 @@ impl<'opt> Heap<'opt> {
 
         self.heap[ptr.0].mark_reached(true);
 
-        self.gray_stack.push(ptr);
+        self.gray_stack.push(ptr.clone());
     }
 
     pub(crate) fn trace_references(&mut self) {
         while let Some(ptr) = self.gray_stack.pop() {
-            self.blacken_object(ptr);
+            self.blacken_object(&ptr);
         }
     }
 
-    pub(crate) fn blacken_object(&mut self, ptr: Ptr) {
+    pub(crate) fn blacken_object(&mut self, ptr: &Ptr) {
         if self.opt.log_garbage_collection {
             eprintln!(
                 "{} blacken {}",
@@ -94,40 +94,40 @@ impl<'opt> Heap<'opt> {
             Obj::Function(f) => {
                 // TODO: don't clone here.
                 for v in f.chunk.constants_iter().cloned().collect::<Vec<_>>() {
-                    self.mark_value(v);
+                    self.mark_value(&v);
                 }
             }
             Obj::Closure(c) => {
-                let func = c.function;
+                let func = c.function.clone();
                 let uvs = c.upvalues().cloned().collect::<Vec<_>>();
-                self.mark_object(func);
+                self.mark_object(&func);
                 for uv in &uvs {
-                    self.mark_object(*uv);
+                    self.mark_object(uv);
                 }
             }
             Obj::ClosedUpValue(c) => {
-                let v = c.value;
-                self.mark_value(v);
+                let v = c.value.clone();
+                self.mark_value(&v);
             }
             Obj::Class(c) => {
-                let methods = c.methods.values().copied().collect::<Vec<_>>();
+                let methods = c.methods.values().cloned().collect::<Vec<_>>();
                 for m in methods {
-                    self.mark_object(m);
+                    self.mark_object(&m);
                 }
             }
             Obj::Instance(i) => {
-                let class = i.class;
-                let field_values = i.fields.values().copied().collect::<Vec<_>>();
-                self.mark_object(class);
+                let class = i.class.clone();
+                let field_values = i.fields.values().cloned().collect::<Vec<_>>();
+                self.mark_object(&class);
                 for value in field_values {
-                    self.mark_value(value);
+                    self.mark_value(&value);
                 }
             }
             Obj::BoundMethod(b) => {
-                let r = b.receiver;
-                let c = b.closure;
-                self.mark_object(r);
-                self.mark_object(c);
+                let r = b.receiver.clone();
+                let c = b.closure.clone();
+                self.mark_object(&r);
+                self.mark_object(&c);
             }
         }
     }
@@ -172,37 +172,37 @@ impl<'opt> Heap<'opt> {
         Ptr::new(self.heap.len() - 1)
     }
 
-    pub(crate) fn as_string(&self, ptr: Ptr) -> &LoxString {
+    pub(crate) fn as_string(&self, ptr: &Ptr) -> &LoxString {
         self.heap[ptr.0].as_string().expect("expected a LoxString")
     }
-    pub(crate) fn as_function(&self, ptr: Ptr) -> &Function {
+    pub(crate) fn as_function(&self, ptr: &Ptr) -> &Function {
         self.heap[ptr.0].as_function().expect("expected a Function")
     }
-    pub(crate) fn as_closure(&self, ptr: Ptr) -> &Closure {
+    pub(crate) fn as_closure(&self, ptr: &Ptr) -> &Closure {
         self.heap[ptr.0].as_closure().expect("expected a Closure")
     }
-    pub(crate) fn as_class(&self, ptr: Ptr) -> &Class {
+    pub(crate) fn as_class(&self, ptr: &Ptr) -> &Class {
         self.heap[ptr.0].as_class().expect("expected a Class")
     }
-    pub(crate) fn as_class_mut(&mut self, ptr: Ptr) -> &mut Class {
+    pub(crate) fn as_class_mut(&mut self, ptr: &Ptr) -> &mut Class {
         self.heap[ptr.0].as_class_mut().expect("expected a Class")
     }
-    pub(crate) fn as_instance(&self, ptr: Ptr) -> &Instance {
+    pub(crate) fn as_instance(&self, ptr: &Ptr) -> &Instance {
         self.heap[ptr.0]
             .as_instance()
             .expect("expected an Instance")
     }
-    pub(crate) fn as_instance_mut(&mut self, ptr: Ptr) -> &mut Instance {
+    pub(crate) fn as_instance_mut(&mut self, ptr: &Ptr) -> &mut Instance {
         self.heap[ptr.0]
             .as_instance_mut()
             .expect("expected an Instance")
     }
-    pub(crate) fn as_open_up_value(&self, ptr: Ptr) -> &Open {
+    pub(crate) fn as_open_up_value(&self, ptr: &Ptr) -> &Open {
         self.heap[ptr.0]
             .as_open_up_value()
             .expect("expected an OpenUpValue")
     }
-    pub(crate) fn as_open_up_value_mut(&mut self, ptr: Ptr) -> &mut Open {
+    pub(crate) fn as_open_up_value_mut(&mut self, ptr: &Ptr) -> &mut Open {
         self.heap[ptr.0]
             .as_open_up_value_mut()
             .expect("expected an OpenUpValue")
@@ -224,16 +224,16 @@ impl<'opt> Heap<'opt> {
     }
 }
 
-impl<'opt> Index<Ptr> for Heap<'opt> {
+impl<'opt> Index<&Ptr> for Heap<'opt> {
     type Output = Obj;
 
-    fn index(&self, ptr: Ptr) -> &Self::Output {
+    fn index(&self, ptr: &Ptr) -> &Self::Output {
         &self.heap[ptr.0]
     }
 }
 
-impl<'opt> IndexMut<Ptr> for Heap<'opt> {
-    fn index_mut(&mut self, ptr: Ptr) -> &mut Self::Output {
+impl<'opt> IndexMut<&Ptr> for Heap<'opt> {
+    fn index_mut(&mut self, ptr: &Ptr) -> &mut Self::Output {
         &mut self.heap[ptr.0]
     }
 }

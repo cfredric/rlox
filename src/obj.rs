@@ -93,15 +93,15 @@ impl<'a, 'opt> Display for ObjWithContext<'a, 'opt> {
             Obj::Closure(c) => write!(
                 f,
                 "{}",
-                ObjWithContext::new(&self.heap[c.function], self.heap)
+                ObjWithContext::new(&self.heap[&c.function], self.heap)
             ),
             Obj::NativeFn(_) => write!(f, "<native fn>"),
             Obj::OpenUpValue(_) => write!(f, "<OpenUpValue>"),
             Obj::ClosedUpValue(_) => write!(f, "ClosedUpValue>"),
             Obj::Class(c) => write!(f, "{}", c.name),
-            Obj::Instance(i) => write!(f, "{} instance", self.heap.as_class(i.class).name),
+            Obj::Instance(i) => write!(f, "{} instance", self.heap.as_class(&i.class).name),
             Obj::BoundMethod(b) => {
-                let fun = &self.heap[self.heap.as_closure(b.closure).function];
+                let fun = &self.heap[&self.heap.as_closure(&b.closure).function];
                 write!(f, "{}", ObjWithContext::new(fun, self.heap))
             }
         }
@@ -208,8 +208,8 @@ impl Closure {
         }
     }
 
-    pub(crate) fn upvalue_at(&self, index: UpValueIndex) -> Ptr {
-        self.upvalues[index.0]
+    pub(crate) fn upvalue_at(&self, index: UpValueIndex) -> &Ptr {
+        &self.upvalues[index.0]
     }
 
     pub(crate) fn upvalues<'s>(&'s self) -> impl Iterator<Item = &Ptr> + 's {

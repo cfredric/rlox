@@ -66,8 +66,8 @@ impl Stack {
         self.stack.pop().expect("stack should not have been empty")
     }
 
-    pub(crate) fn peek(&self, offset: usize) -> Value {
-        self.stack[self.stack.len() - 1 - offset]
+    pub(crate) fn peek(&self, offset: usize) -> &Value {
+        &self.stack[self.stack.len() - 1 - offset]
     }
 
     pub(crate) fn top_slot(&self) -> Slot {

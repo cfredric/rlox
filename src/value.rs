@@ -8,7 +8,7 @@ use crate::{
     post_process_gc_sweep::{GcSweepData, PostProcessGcSweep},
 };
 
-#[derive(Copy, Clone, Debug, EnumAsInner)]
+#[derive(Clone, Debug, EnumAsInner)]
 pub(crate) enum Value {
     Nil,
     Bool(bool),
@@ -48,12 +48,12 @@ impl PostProcessGcSweep for Value {
 }
 
 pub(crate) struct ValueWithContext<'a, 'opt> {
-    val: Value,
+    val: &'a Value,
     heap: &'a Heap<'opt>,
 }
 
 impl<'a, 'opt> ValueWithContext<'a, 'opt> {
-    pub(crate) fn new(val: Value, heap: &'a Heap<'opt>) -> Self {
+    pub(crate) fn new(val: &'a Value, heap: &'a Heap<'opt>) -> Self {
         Self { val, heap }
     }
 }
