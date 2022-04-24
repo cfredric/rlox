@@ -4,11 +4,6 @@ use enum_as_inner::EnumAsInner;
 
 use crate::{chunk::Chunk, heap::Ptr, stack::Slot, value::Value};
 
-#[derive(Clone, Debug)]
-struct GcMetadata {}
-
-impl GcMetadata {}
-
 #[derive(Clone, Debug, EnumAsInner)]
 pub(crate) enum Obj {
     String(LoxString),
