@@ -2,10 +2,8 @@ use std::fmt::Display;
 use std::ops::{Add, AddAssign, Index, IndexMut, Neg, Sub, SubAssign};
 
 use crate::compiler::CompiledUpValue;
-use crate::heap::Heap;
 use crate::opcode::OpCode;
-use crate::post_process_gc_sweep::{GcSweepData, PostProcessGcSweep};
-use crate::value::{Value, ValueWithContext};
+use crate::value::Value;
 
 #[derive(Clone)]
 pub(crate) struct CodeEntry {
@@ -171,11 +169,7 @@ impl Chunk {
         Some(ConstantIndex::new(self.constants.len() - 1))
     }
 
-    pub(crate) fn constants_iter<'s>(&'s self) -> impl Iterator<Item = &Value> + 's {
-        self.constants.iter()
-    }
-
-    pub(crate) fn disassemble_chunk(&self, name: &str, heap: &Heap) {
+    pub(crate) fn disassemble_chunk(&self, name: &str) {
         println!("== {} ==", name);
 
         let mut prev_line = None;
@@ -189,17 +183,15 @@ impl Chunk {
             } else {
                 print!("{:04} ", self.line_of(index));
             }
-            self.disassemble_instruction(heap, index);
+            self.disassemble_instruction(index);
             prev_line = Some(current_line);
         }
     }
 
-    pub(crate) fn disassemble_instruction(&self, heap: &Heap, index: OpCodeIndex) {
+    pub(crate) fn disassemble_instruction(&self, index: OpCodeIndex) {
         match &self[index] {
             OpCode::Return => println!("OP_RETURN"),
-            OpCode::Constant { index } => {
-                unary_instruction("OP_CONSTANT", ValueWithContext::new(&self[*index], heap))
-            }
+            OpCode::Constant { index } => unary_instruction("OP_CONSTANT", &self[*index]),
             OpCode::Negate => println!("OP_NEGATE"),
             OpCode::Add => println!("OP_ADD"),
             OpCode::Subtract => println!("OP_SUBTRACT"),
@@ -215,27 +207,16 @@ impl Chunk {
             OpCode::Less => println!("OP_LESS"),
             OpCode::Print => println!("OP_PRINT"),
             OpCode::Pop => println!("OP_POP"),
-            OpCode::DefineGlobal(i) => {
-                unary_instruction("OP_DEFINE_GLOBAL", ValueWithContext::new(&self[*i], heap))
-            }
-            OpCode::GetGlobal(i) => {
-                unary_instruction("OP_GET_GLOBAL", ValueWithContext::new(&self[*i], heap))
-            }
-            OpCode::SetGlobal(i) => {
-                unary_instruction("OP_SET_GLOBAL", ValueWithContext::new(&self[*i], heap))
-            }
+            OpCode::DefineGlobal(i) => unary_instruction("OP_DEFINE_GLOBAL", &self[*i]),
+            OpCode::GetGlobal(i) => unary_instruction("OP_GET_GLOBAL", &self[*i]),
+            OpCode::SetGlobal(i) => unary_instruction("OP_SET_GLOBAL", &self[*i]),
             OpCode::GetLocal(i) => unary_instruction("OP_GET_LOCAL", *i),
             OpCode::SetLocal(i) => unary_instruction("OP_SET_LOCAL", *i),
             OpCode::JumpIfFalse { distance } => unary_instruction("OP_JUMP_IF_FALSE", *distance),
             OpCode::Jump { distance } => unary_instruction("OP_JUMP", *distance),
             OpCode::Call { arg_count } => unary_instruction("OP_CALL", *arg_count),
             OpCode::Closure { function, upvalues } => {
-                println!(
-                    "{:16} {} {}",
-                    "OP_CLOSURE",
-                    function.0,
-                    ValueWithContext::new(&self[*function], heap)
-                );
+                println!("{:16} {} {}", "OP_CLOSURE", function.0, &self[*function]);
 
                 for upvalue in upvalues {
                     let (ty, index) = match upvalue {
@@ -248,26 +229,16 @@ impl Chunk {
             OpCode::GetUpvalue(index) => unary_instruction("OP_GET_UPVALUE", index),
             OpCode::SetUpvalue(index) => unary_instruction("OP_SET_UPVALUE", index),
             OpCode::CloseUpvalue => println!("OP_CLOSE_UPVALUE"),
-            OpCode::Class { name } => {
-                unary_instruction("OP_CLASS", ValueWithContext::new(&self[*name], heap))
-            }
-            OpCode::GetProperty { name } => {
-                unary_instruction("OP_GET_PROPERTY", ValueWithContext::new(&self[*name], heap))
-            }
-            OpCode::SetProperty { name } => {
-                unary_instruction("OP_SET_PROPERTY", ValueWithContext::new(&self[*name], heap))
-            }
-            OpCode::Method { name } => {
-                unary_instruction("OP_METHOD", ValueWithContext::new(&self[*name], heap))
-            }
+            OpCode::Class { name } => unary_instruction("OP_CLASS", &self[*name]),
+            OpCode::GetProperty { name } => unary_instruction("OP_GET_PROPERTY", &self[*name]),
+            OpCode::SetProperty { name } => unary_instruction("OP_SET_PROPERTY", &self[*name]),
+            OpCode::Method { name } => unary_instruction("OP_METHOD", &self[*name]),
             OpCode::Invoke {
                 method_name,
                 arg_count,
             } => invoke_instruction("OP_INVOKE", *method_name, *arg_count),
             OpCode::Inherit => println!("OP_INHERIT"),
-            OpCode::GetSuper { method } => {
-                unary_instruction("OP_GET_SUPER", ValueWithContext::new(&self[*method], heap))
-            }
+            OpCode::GetSuper { method } => unary_instruction("OP_GET_SUPER", &self[*method]),
             OpCode::SuperInvoke { method, arg_count } => {
                 invoke_instruction("OP_SUPER_INVOKE", *method, *arg_count);
             }
@@ -302,10 +273,4 @@ fn unary_instruction<D: Display>(name: &str, d: D) {
 }
 fn invoke_instruction(name: &str, constant: ConstantIndex, arg_count: usize) {
     println!("{:16} ({} args) {}", name, arg_count, constant)
-}
-
-impl PostProcessGcSweep for Chunk {
-    fn process(&mut self, sweep_data: &GcSweepData) {
-        self.constants.process(sweep_data);
-    }
 }
