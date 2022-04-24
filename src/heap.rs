@@ -44,46 +44,48 @@ pub(crate) fn allocate(obj: Obj) -> Ptr {
     Ptr(Rc::new(RefCell::new(obj)))
 }
 
-pub(crate) fn as_string(ptr: &Ptr) -> Ref<LoxString> {
-    Ref::map(ptr.0.borrow(), |r| {
-        r.as_string().expect("expected a LoxString")
-    })
-}
-pub(crate) fn as_function(ptr: &Ptr) -> Ref<Function> {
-    Ref::map(ptr.0.borrow(), |r| {
-        r.as_function().expect("expected a Function")
-    })
-}
-pub(crate) fn as_closure(ptr: &Ptr) -> Ref<Closure> {
-    Ref::map(ptr.0.borrow(), |r| {
-        r.as_closure().expect("expected a Closure")
-    })
-}
-pub(crate) fn as_class(ptr: &Ptr) -> Ref<Class> {
-    Ref::map(ptr.0.borrow(), |r| r.as_class().expect("expected a Class"))
-}
-pub(crate) fn as_class_mut(ptr: &Ptr) -> RefMut<Class> {
-    RefMut::map(ptr.0.borrow_mut(), |r| {
-        r.as_class_mut().expect("expected a Class")
-    })
-}
-pub(crate) fn as_instance(ptr: &Ptr) -> Ref<Instance> {
-    Ref::map(ptr.0.borrow(), |r| {
-        r.as_instance().expect("expected an Instance")
-    })
-}
-pub(crate) fn as_instance_mut(ptr: &Ptr) -> RefMut<Instance> {
-    RefMut::map(ptr.0.borrow_mut(), |r| {
-        r.as_instance_mut().expect("expected an Instance")
-    })
-}
-pub(crate) fn as_open_up_value(ptr: &Ptr) -> Ref<Open> {
-    Ref::map(ptr.0.borrow(), |r| {
-        r.as_open_up_value().expect("expected an OpenUpValue")
-    })
-}
-pub(crate) fn as_open_up_value_mut(ptr: &Ptr) -> RefMut<Open> {
-    RefMut::map(ptr.0.borrow_mut(), |r| {
-        r.as_open_up_value_mut().expect("expected an OpenUpValue")
-    })
+impl Ptr {
+    pub(crate) fn as_string(&self) -> Ref<LoxString> {
+        Ref::map(self.0.borrow(), |r| {
+            r.as_string().expect("expected a LoxString")
+        })
+    }
+    pub(crate) fn as_function(&self) -> Ref<Function> {
+        Ref::map(self.0.borrow(), |r| {
+            r.as_function().expect("expected a Function")
+        })
+    }
+    pub(crate) fn as_closure(&self) -> Ref<Closure> {
+        Ref::map(self.0.borrow(), |r| {
+            r.as_closure().expect("expected a Closure")
+        })
+    }
+    pub(crate) fn as_class(&self) -> Ref<Class> {
+        Ref::map(self.0.borrow(), |r| r.as_class().expect("expected a Class"))
+    }
+    pub(crate) fn as_class_mut(&self) -> RefMut<Class> {
+        RefMut::map(self.0.borrow_mut(), |r| {
+            r.as_class_mut().expect("expected a Class")
+        })
+    }
+    pub(crate) fn as_instance(&self) -> Ref<Instance> {
+        Ref::map(self.0.borrow(), |r| {
+            r.as_instance().expect("expected an Instance")
+        })
+    }
+    pub(crate) fn as_instance_mut(&self) -> RefMut<Instance> {
+        RefMut::map(self.0.borrow_mut(), |r| {
+            r.as_instance_mut().expect("expected an Instance")
+        })
+    }
+    pub(crate) fn as_open_up_value(&self) -> Ref<Open> {
+        Ref::map(self.0.borrow(), |r| {
+            r.as_open_up_value().expect("expected an OpenUpValue")
+        })
+    }
+    pub(crate) fn as_open_up_value_mut(&self) -> RefMut<Open> {
+        RefMut::map(self.0.borrow_mut(), |r| {
+            r.as_open_up_value_mut().expect("expected an OpenUpValue")
+        })
+    }
 }

@@ -151,7 +151,7 @@ impl<'opt> VM<'opt> {
     }
 
     fn function<'a>(&self, closure: &'a Closure) -> Ref<'a, Function> {
-        heap::as_function(&closure.function)
+        closure.function.as_function()
     }
 
     fn frame(&self) -> &CallFrame {
@@ -165,7 +165,7 @@ impl<'opt> VM<'opt> {
     }
 
     fn closure(&self) -> Ref<Closure> {
-        heap::as_closure(&self.frame().closure)
+        self.frame().closure.as_closure()
     }
 
     fn read_byte(&mut self) -> OpCode {
@@ -186,7 +186,7 @@ impl<'opt> VM<'opt> {
             .as_obj_reference()
             .expect("constant index should be a string reference")
             .clone();
-        let lox_string = &*heap::as_string(&ptr);
+        let lox_string = &*ptr.as_string();
         lox_string.string.to_string()
     }
 
@@ -210,8 +210,8 @@ impl<'opt> VM<'opt> {
         eprintln!("{}", message);
 
         for frame in self.frames.iter().rev() {
-            let closure = heap::as_closure(&frame.closure);
-            let func = heap::as_function(&closure.function);
+            let closure = &frame.closure.as_closure();
+            let func = &closure.function.as_function();
             let instruction = frame.ip - 1;
             eprintln!(
                 "[line {}] in {}",
@@ -255,9 +255,8 @@ impl<'opt> VM<'opt> {
                     let instance_slot = self.stack.offset_from_top_slot(arg_count);
                     self.stack[instance_slot] = Value::ObjReference(instance);
 
-                    let x = if let Some(closure) = heap::as_class(&ptr).methods.get("init").cloned()
-                    {
-                        self.call(&closure, arg_count)
+                    let x = if let Some(closure) = &ptr.as_class().methods.get("init").cloned() {
+                        self.call(closure, arg_count)
                     } else if arg_count != 0 {
                         self.runtime_error(&format!("Expected 0 arguments but got {}.", arg_count))
                     } else {
@@ -284,7 +283,7 @@ impl<'opt> VM<'opt> {
         name: &str,
         arg_count: usize,
     ) -> Result<(), InterpretResult> {
-        match heap::as_class(class).methods.get(name) {
+        match class.as_class().methods.get(name) {
             Some(ptr) => {
                 let ptr = ptr.clone();
                 self.call(&ptr, arg_count)
@@ -320,7 +319,7 @@ impl<'opt> VM<'opt> {
     }
 
     fn bind_method(&mut self, class: &Ptr, name: &str) -> Result<(), InterpretResult> {
-        let method = match heap::as_class(class).methods.get(name) {
+        let method = match class.as_class().methods.get(name) {
             Some(ptr) => ptr.clone(),
             None => {
                 return self.runtime_error(&format!("Undefined property '{}'.", name));
@@ -346,14 +345,14 @@ impl<'opt> VM<'opt> {
     fn capture_upvalue(&mut self, slot: Slot) -> Ptr {
         let mut prev_upvalue = None;
         let mut next = self.open_upvalues.clone();
-        while matches!(next, Some(ref uv) if heap::as_open_up_value(uv).slot > slot) {
+        while matches!(next, Some(ref uv) if uv.as_open_up_value().slot > slot) {
             prev_upvalue = next.clone();
             let next_ptr = next.expect("already checked via matches!");
-            let cur = heap::as_open_up_value(&next_ptr);
+            let cur = next_ptr.as_open_up_value();
             next = cur.next.clone();
         }
 
-        if matches!(next, Some(ref ptr) if heap::as_open_up_value(ptr).slot == slot) {
+        if matches!(next, Some(ref ptr) if ptr.as_open_up_value().slot == slot) {
             return next.expect("already checked via matches!");
         }
 
@@ -361,7 +360,7 @@ impl<'opt> VM<'opt> {
         let created_upvalue = self.new_upvalue(Open::new(slot, next));
 
         if let Some(prev) = prev_upvalue {
-            heap::as_open_up_value_mut(&prev).next = Some(created_upvalue.clone());
+            prev.as_open_up_value_mut().next = Some(created_upvalue.clone());
         } else {
             self.open_upvalues = Some(created_upvalue.clone());
         }
@@ -372,7 +371,7 @@ impl<'opt> VM<'opt> {
     /// Closes upvalues that point to or above the given stack slot. This
     /// includes removing the upvalue from the open_upvalues linked list.
     fn close_upvalues(&mut self, slot: Slot) {
-        while matches!(self.open_upvalues.as_ref(), Some(ptr) if heap::as_open_up_value(ptr).slot >= slot)
+        while matches!(self.open_upvalues.as_ref(), Some(ptr) if ptr.as_open_up_value().slot >= slot)
         {
             let ptr = self
                 .open_upvalues
@@ -405,16 +404,16 @@ impl<'opt> VM<'opt> {
             .as_obj_reference()
             .expect("stack slot should have been a class reference")
             .clone();
-        let name = heap::as_string(&name_ptr).string.clone();
-        let mut class = heap::as_class_mut(&class);
+        let name = name_ptr.as_string().string.clone();
+        let mut class = class.as_class_mut();
 
         class.methods.insert(name, method.clone());
         self.stack.pop();
     }
 
     fn call(&mut self, closure_ptr: &Ptr, arg_count: usize) -> Result<(), InterpretResult> {
-        let closure = heap::as_closure(closure_ptr);
-        let arity = heap::as_function(&closure.function).arity;
+        let closure = closure_ptr.as_closure();
+        let arity = closure.function.as_function().arity;
         if arg_count != arity {
             return self.runtime_error(&format!(
                 "Expected {} arguments but got {}.",
@@ -615,9 +614,7 @@ impl<'opt> VM<'opt> {
                                     self.capture_upvalue(self.frame().start_slot.offset(*index))
                                 }
                                 CompiledUpValue::Nonlocal { index } => {
-                                    heap::as_closure(&self.frame().closure)
-                                        .upvalue_at(*index)
-                                        .clone()
+                                    self.frame().closure.as_closure().upvalue_at(*index).clone()
                                 }
                             };
                             uvs.push(new_uv_ptr);
@@ -660,7 +657,7 @@ impl<'opt> VM<'opt> {
                             if instance.borrow().as_instance().is_some() =>
                         {
                             let name = self.read_string(*name).to_string();
-                            let i = heap::as_instance(&instance);
+                            let i = instance.as_instance();
                             if let Some(v) = i.fields.get(&name) {
                                 self.stack.pop(); // Instance.
                                 self.stack.push(v.clone());
@@ -679,7 +676,8 @@ impl<'opt> VM<'opt> {
                         {
                             let name = self.read_string(*name).to_string();
                             let value = self.stack.peek(0).clone();
-                            heap::as_instance_mut(instance)
+                            instance
+                                .as_instance_mut()
                                 .fields
                                 .insert(name, value.clone());
                             self.stack.pop(); // Value.
@@ -720,14 +718,15 @@ impl<'opt> VM<'opt> {
                         Value::ObjReference(superclass)
                             if superclass.borrow().as_class().is_some() =>
                         {
-                            let superclass_methods = heap::as_class(superclass).methods.clone();
+                            let superclass_methods = superclass.as_class().methods.clone();
                             let subclass = self
                                 .stack
                                 .peek(0)
                                 .as_obj_reference()
                                 .expect("stack top should have been a subclass reference")
                                 .clone();
-                            heap::as_class_mut(&subclass)
+                            subclass
+                                .as_class_mut()
                                 .methods
                                 .extend(superclass_methods.into_iter());
                             self.stack.pop(); // Subclass.
@@ -806,7 +805,7 @@ impl Iterator for OpenUpValueIter {
     fn next(&mut self) -> Option<Self::Item> {
         let cur = self.it.clone();
         if let Some(ptr) = self.it.take() {
-            self.it = heap::as_open_up_value(&ptr).next.clone();
+            self.it = ptr.as_open_up_value().next.clone();
         }
         cur
     }
