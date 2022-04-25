@@ -3,7 +3,10 @@ use std::{
     ops::{Index, IndexMut},
 };
 
-use crate::value::Value;
+use crate::{
+    post_process_gc_sweep::{GcSweepData, PostProcessGcSweep},
+    value::Value,
+};
 
 #[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub(crate) struct Slot(usize);
@@ -95,6 +98,9 @@ impl Stack {
         self.stack.is_empty()
     }
 
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &Value> + '_ {
+        self.stack.iter()
+    }
     pub(crate) fn iter_from(&self, s: Slot) -> impl Iterator<Item = &Value> + '_ {
         self.stack.iter().skip(s.0)
     }
@@ -111,5 +117,11 @@ impl Index<Slot> for Stack {
 impl IndexMut<Slot> for Stack {
     fn index_mut(&mut self, slot: Slot) -> &mut Self::Output {
         &mut self.stack[slot.0]
+    }
+}
+
+impl PostProcessGcSweep for Stack {
+    fn process(&mut self, sweep_data: &GcSweepData) {
+        self.stack.process(sweep_data);
     }
 }

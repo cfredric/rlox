@@ -241,7 +241,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
             self.current_function()
                 .function
                 .chunk
-                .disassemble_chunk(&self.current_function().function.name);
+                .disassemble_chunk(&self.current_function().function.name, &self.vm.heap);
         }
         self.functions
             .pop()

@@ -6,6 +6,7 @@ mod heap;
 mod obj;
 mod opcode;
 mod opt;
+mod post_process_gc_sweep;
 mod scanner;
 mod stack;
 mod value;

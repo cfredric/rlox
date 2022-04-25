@@ -2,7 +2,11 @@ use std::fmt::Display;
 
 use enum_as_inner::EnumAsInner;
 
-use crate::heap::Ptr;
+use crate::{
+    heap::{Heap, Ptr},
+    obj::ObjWithContext,
+    post_process_gc_sweep::{GcSweepData, PostProcessGcSweep},
+};
 
 #[derive(Clone, Debug, EnumAsInner)]
 pub(crate) enum Value {
@@ -35,14 +39,33 @@ impl Value {
     }
 }
 
-impl Display for Value {
+impl PostProcessGcSweep for Value {
+    fn process(&mut self, sweep_data: &GcSweepData) {
+        if let Value::ObjReference(i) = self {
+            i.process(sweep_data);
+        }
+    }
+}
+
+pub(crate) struct ValueWithContext<'a, 'opt> {
+    val: &'a Value,
+    heap: &'a Heap<'opt>,
+}
+
+impl<'a, 'opt> ValueWithContext<'a, 'opt> {
+    pub(crate) fn new(val: &'a Value, heap: &'a Heap<'opt>) -> Self {
+        Self { val, heap }
+    }
+}
+
+impl<'a, 'opt> Display for ValueWithContext<'a, 'opt> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
+        match self.val {
             Value::Nil => write!(f, "nil"),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Double(d) => write!(f, "{}", d),
             Value::ObjReference(i) => {
-                write!(f, "{}", &i.borrow())
+                write!(f, "{}", ObjWithContext::new(&self.heap[i], self.heap))
             }
         }
     }
