@@ -412,7 +412,7 @@ impl<'opt> VM<'opt> {
         }
     }
 
-    fn define_method(&mut self, name_ptr: Ptr) {
+    fn define_method(&mut self, name_ptr: &Ptr) {
         let method = self
             .stack
             .peek(0)
@@ -423,7 +423,7 @@ impl<'opt> VM<'opt> {
             .peek(1)
             .as_obj_reference()
             .expect("stack slot should have been a class reference");
-        let name = self.heap.as_string(&name_ptr).string.clone();
+        let name = self.heap.as_string(name_ptr).string.clone();
         let class = self.heap.as_class_mut(class);
 
         class.methods.insert(name, method.clone());
@@ -825,8 +825,7 @@ impl<'opt> VM<'opt> {
                     self.define_method(
                         self.read_constant(*name)
                             .as_obj_reference()
-                            .expect("constant should have been a string reference")
-                            .clone(),
+                            .expect("constant should have been a string reference"),
                     );
                 }
                 OpCode::Invoke {
