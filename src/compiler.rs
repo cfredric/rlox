@@ -295,6 +295,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
 
         if self.class_compilers.len() > MAX_NESTED_CLASSES {
             self.error("Too many nested classes.");
+            self.advance();
             return;
         }
 
@@ -478,6 +479,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     fn block(&mut self) {
         if self.block_depth > MAX_NESTED_BLOCKS {
             self.error("Too many nested blocks.");
+            self.advance();
             return;
         }
         self.block_depth += 1;
@@ -494,6 +496,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     fn function(&mut self, ty: FunctionType, function_name: &'source str) {
         if self.functions.len() > MAX_NESTED_FUNCTIONS {
             self.error("Too many nested functions.");
+            self.advance();
             return;
         }
         self.functions.push(if ty == FunctionType::Script {
