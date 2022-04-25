@@ -35,10 +35,17 @@ var beverage = "cafe au lait (again)";
 breakfast = "beignets with " + beverage;
 print breakfast;
 var iteration = 0;
+
+class Ref {}
+
 while (true) {
   print "ITERATION:";
   print iteration;
   iteration = iteration + 1;
+  var ref1 = Ref();
+  var ref2 = Ref();
+  ref1.oops = ref2;
+  ref2.oops = ref1;
   {
     var i = 0;
     while (i < 3) {
