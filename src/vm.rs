@@ -23,7 +23,7 @@ pub(crate) struct VM<'opt> {
     pub(crate) heap: Heap<'opt>,
     stack: Stack,
     /// Values are pointers into the heap, to LoxStrings.
-    pub(crate) strings: HashMap<String, Ptr>,
+    strings: HashMap<String, Ptr>,
     /// open_upvalues is a pointer into the heap, to the head of the linked list
     /// of upvalue objects.
     open_upvalues: Option<Ptr>,
