@@ -652,7 +652,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
 
     fn string(&mut self, string: &str) {
         let len = string.len();
-        let lox_string = self.vm.copy_string(&string[1..len - 1]);
+        let lox_string = self.vm.take_string(string[1..len - 1].to_string(), ());
         self.emit_constant(Value::ObjReference(lox_string));
     }
 
@@ -796,7 +796,7 @@ impl<'opt, 'source, 'vm, I: Iterator<Item = Result<Token<'source>, ScanError>>>
     }
 
     fn identifier_constant(&mut self, name: &str) -> ConstantIndex {
-        let ptr = self.vm.copy_string(name);
+        let ptr = self.vm.take_string(name.to_string(), ());
         self.make_constant(Value::ObjReference(ptr))
     }
 

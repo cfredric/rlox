@@ -110,15 +110,7 @@ impl<'opt> VM<'opt> {
         vm
     }
 
-    pub(crate) fn copy_string(&mut self, s: &str) -> Ptr {
-        if let Some(v) = self.strings.get(s) {
-            v.clone()
-        } else {
-            self.allocate_string(s.to_string(), ())
-        }
-    }
-
-    fn take_string<R: PostProcessGcSweep>(&mut self, s: String, pending: R) -> Ptr {
+    pub(crate) fn take_string<R: PostProcessGcSweep>(&mut self, s: String, pending: R) -> Ptr {
         if let Some(v) = self.strings.get(&s) {
             v.clone()
         } else {
