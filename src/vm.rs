@@ -32,6 +32,8 @@ pub(crate) struct VM<'opt> {
     next_gc: usize,
     /// Hack: we don't do garbage collection until we start executing. Differs from the book.
     is_executing: bool,
+
+    mode: Mode,
 }
 
 const MAX_FRAMES: usize = 1024;
@@ -89,7 +91,7 @@ fn itoa_native<'opt>(vm: &mut VM<'opt>, _pending: &mut Ptr, args: &[Value]) -> V
 }
 
 impl<'opt> VM<'opt> {
-    pub(crate) fn new(opt: &'opt Opt) -> Self {
+    pub(crate) fn new(opt: &'opt Opt, mode: Mode) -> Self {
         let mut vm = Self {
             opt,
             frames: Vec::new(),
@@ -100,6 +102,7 @@ impl<'opt> VM<'opt> {
             globals: HashMap::new(),
             next_gc: 1024 * 1024,
             is_executing: false,
+            mode,
         };
         vm.define_native("clock", NativeFn::new(clock_native));
         vm.define_native("sleep", NativeFn::new(sleep_native));
@@ -599,8 +602,11 @@ impl<'opt> VM<'opt> {
                     if self.frames.is_empty() {
                         let top = self.stack.pop();
                         if !self.stack.is_empty() {
+                            debug_assert!(self.mode == Mode::Repl);
                             println!("{}", ValueWithContext::new(&top, &self.heap));
                             self.stack.pop();
+                        } else {
+                            debug_assert!(self.mode == Mode::Script);
                         }
                         if self.opt.trace_execution {
                             self.print_stack_slice("stack", Slot::bottom());
@@ -865,8 +871,13 @@ impl<'opt> VM<'opt> {
         }
     }
 
-    pub(crate) fn interpret(&mut self, source: &str, mode: Mode) -> Result<(), InterpretResult> {
-        match compile(self.opt, crate::scanner::Scanner::new(source), self, mode) {
+    pub(crate) fn interpret(&mut self, source: &str) -> Result<(), InterpretResult> {
+        match compile(
+            self.opt,
+            crate::scanner::Scanner::new(source),
+            self,
+            self.mode,
+        ) {
             Some(function) => {
                 let function = self.new_function(function);
                 self.stack.push(Value::ObjReference(function.clone()));
