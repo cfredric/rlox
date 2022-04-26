@@ -772,13 +772,14 @@ impl<'opt> VM<'opt> {
                         Value::ObjReference(instance)
                             if self.heap[instance].as_instance().is_some() =>
                         {
-                            let name = self.read_string(*name).to_string();
+                            let name = self.read_string(*name);
                             let i = self.heap.as_instance(instance);
-                            if let Some(v) = i.fields.get(&name) {
+                            if let Some(v) = i.fields.get(name) {
                                 self.stack.pop(); // Instance.
                                 self.stack.push(v.clone());
                             } else {
                                 let class = i.class.clone();
+                                let name = name.to_string();
                                 self.bind_method(&class, &name)?
                             }
                         }
