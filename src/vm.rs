@@ -392,9 +392,7 @@ impl<'opt> VM<'opt> {
 
     /// Closes upvalues that point to or above the given stack slot. This
     /// includes removing the upvalue from the open_upvalues linked list.
-    ///
-    /// Also pops from the stack and returns the value.
-    fn close_upvalues(&mut self, slot: Slot) -> Value {
+    fn close_upvalues(&mut self, slot: Slot) {
         while matches!(self.open_upvalues.as_ref(), Some(ptr) if self.heap.as_open_up_value(ptr).slot >= slot)
         {
             let ptr = self
@@ -407,7 +405,6 @@ impl<'opt> VM<'opt> {
             // since we're about to pop them anyway.
             self.heap[&ptr] = Obj::ClosedUpValue(Closed::new(self.stack[open.slot].clone()));
         }
-        self.stack.pop()
     }
 
     fn define_method(&mut self, name_ptr: &Ptr) {
@@ -601,8 +598,9 @@ impl<'opt> VM<'opt> {
                 OpCode::Return => {
                     let result = self.stack.pop();
                     let finished_frame = self.frames.pop().expect("frames cannot be empty");
-                    let top = self.close_upvalues(finished_frame.start_slot);
+                    self.close_upvalues(finished_frame.start_slot);
                     if self.frames.is_empty() {
+                        let top = self.stack.pop();
                         if !self.stack.is_empty() {
                             debug_assert!(self.mode == Mode::Repl);
                             println!("{}", ValueWithContext::new(&top, &self.heap));
@@ -768,6 +766,7 @@ impl<'opt> VM<'opt> {
                 }
                 OpCode::CloseUpvalue => {
                     self.close_upvalues(self.stack.top_slot());
+                    self.stack.pop();
                 }
                 OpCode::Class { name } => {
                     let name = self.read_string(*name).to_string();
