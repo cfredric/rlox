@@ -184,7 +184,7 @@ impl NativeFn {
 
 impl std::fmt::Debug for NativeFn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("NativeFn").finish()
+        write!(f, "NativeFn")
     }
 }
 
