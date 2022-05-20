@@ -605,8 +605,6 @@ impl<'opt> VM<'opt> {
                             debug_assert!(self.mode == Mode::Repl);
                             println!("{}", ValueWithContext::new(&top, &self.heap));
                             self.stack.pop();
-                        } else {
-                            debug_assert!(self.mode == Mode::Script);
                         }
                         if self.opt.trace_execution {
                             self.print_stack_slice("stack", Slot::bottom());
