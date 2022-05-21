@@ -15,12 +15,18 @@ use crate::value::{Value, ValueWithContext};
 
 const GC_HEAP_GROWTH_FACTOR: usize = 2;
 
+/// A bytecode Virtual Machine that can compile and interpret source code,
+/// either line-by-line as a REPL, or as a single whole script.
 pub(crate) struct VM<'opt> {
+    /// Configuration options.
     opt: &'opt Opt,
 
+    /// Stack frames.
     frames: Vec<CallFrame>,
 
+    /// The heap, for storing dynamically-allocated objects.
     pub(crate) heap: Heap<'opt>,
+    /// The value stack.
     stack: Stack,
     /// Values are pointers into the heap, to LoxStrings.
     strings: HashMap<String, Ptr>,
