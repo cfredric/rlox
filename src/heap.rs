@@ -60,15 +60,15 @@ impl<'opt> Heap<'opt> {
             eprintln!(
                 "{:3} mark object {}",
                 ptr.0,
-                ObjWithContext::new(&self.heap[ptr.0], self)
+                ObjWithContext::new(&self[ptr], self)
             );
         }
 
-        if !self.heap[ptr.0].is_eligible_for_deletion() {
+        if !self[ptr].is_eligible_for_deletion() {
             return;
         }
 
-        self.heap[ptr.0].mark_reached(true);
+        self[ptr].mark_reached(true);
 
         self.gray_stack.push(ptr.clone());
     }
@@ -84,11 +84,11 @@ impl<'opt> Heap<'opt> {
             eprintln!(
                 "{} blacken {}",
                 ptr.0,
-                ObjWithContext::new(&self.heap[ptr.0], self)
+                ObjWithContext::new(&self[ptr], self)
             );
         }
 
-        match &self.heap[ptr.0] {
+        match &self[ptr] {
             Obj::Dummy => {}
             Obj::String(_) | Obj::NativeFn(_) | Obj::OpenUpValue(_) => {}
             Obj::Function(f) => {
@@ -173,37 +173,33 @@ impl<'opt> Heap<'opt> {
     }
 
     pub(crate) fn as_string(&self, ptr: &Ptr) -> &LoxString {
-        self.heap[ptr.0].as_string().expect("expected a LoxString")
+        self[ptr].as_string().expect("expected a LoxString")
     }
     pub(crate) fn as_function(&self, ptr: &Ptr) -> &Function {
-        self.heap[ptr.0].as_function().expect("expected a Function")
+        self[ptr].as_function().expect("expected a Function")
     }
     pub(crate) fn as_closure(&self, ptr: &Ptr) -> &Closure {
-        self.heap[ptr.0].as_closure().expect("expected a Closure")
+        self[ptr].as_closure().expect("expected a Closure")
     }
     pub(crate) fn as_class(&self, ptr: &Ptr) -> &Class {
-        self.heap[ptr.0].as_class().expect("expected a Class")
+        self[ptr].as_class().expect("expected a Class")
     }
     pub(crate) fn as_class_mut(&mut self, ptr: &Ptr) -> &mut Class {
-        self.heap[ptr.0].as_class_mut().expect("expected a Class")
+        self[ptr].as_class_mut().expect("expected a Class")
     }
     pub(crate) fn as_instance(&self, ptr: &Ptr) -> &Instance {
-        self.heap[ptr.0]
-            .as_instance()
-            .expect("expected an Instance")
+        self[ptr].as_instance().expect("expected an Instance")
     }
     pub(crate) fn as_instance_mut(&mut self, ptr: &Ptr) -> &mut Instance {
-        self.heap[ptr.0]
-            .as_instance_mut()
-            .expect("expected an Instance")
+        self[ptr].as_instance_mut().expect("expected an Instance")
     }
     pub(crate) fn as_open_up_value(&self, ptr: &Ptr) -> &Open {
-        self.heap[ptr.0]
+        self[ptr]
             .as_open_up_value()
             .expect("expected an OpenUpValue")
     }
     pub(crate) fn as_open_up_value_mut(&mut self, ptr: &Ptr) -> &mut Open {
-        self.heap[ptr.0]
+        self[ptr]
             .as_open_up_value_mut()
             .expect("expected an OpenUpValue")
     }
