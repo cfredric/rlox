@@ -143,7 +143,7 @@ impl<'opt> Heap<'opt> {
             .heap
             .iter()
             .enumerate()
-            .filter_map(|(i, obj)| obj.is_eligible_for_deletion().not().then(|| i))
+            .filter_map(|(i, obj)| obj.is_eligible_for_deletion().not().then_some(i))
             .enumerate()
             .map(|(post, pre)| (Ptr::new(pre), Ptr::new(((post as i32) + delta) as usize)))
             .collect::<HashMap<Ptr, Ptr>>();
