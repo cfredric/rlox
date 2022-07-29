@@ -12,7 +12,7 @@ fn is_alphabetic(c: char) -> bool {
 }
 
 fn is_numeric(c: char) -> bool {
-    c.is_digit(10)
+    c.is_ascii_digit()
 }
 
 fn is_alphanumeric(c: char) -> bool {
